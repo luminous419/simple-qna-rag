@@ -18,6 +18,7 @@ from langchain_ollama import OllamaLLM
 from config import (
     EMBEDDING_MODEL_NAME,
     VECTORSTORE_PATH,
+    OLLAMA_BASE_URL,
     OLLAMA_MODEL,
     RETRIEVAL_K,
     USE_MMR,
@@ -225,11 +226,13 @@ def setup_qa_chain(vectorstore: FAISS, bm25_retriever=None):
     """
     print(f"🔧 LLM 초기화 중: {OLLAMA_MODEL}")
     print(f"ℹ️  Ollama가 실행 중이고 {OLLAMA_MODEL} 모델이 설치되어 있어야 합니다.")
+    print(f"ℹ️  OLLAMA_BASE_URL: {OLLAMA_BASE_URL}")
 
     # Ollama LLM 초기화
     try:
         llm = OllamaLLM(
             model=OLLAMA_MODEL,
+            base_url=OLLAMA_BASE_URL,
             temperature=0.1,  # 낮은 temperature로 일관성 있는 답변 생성
         )
         # 간단한 테스트

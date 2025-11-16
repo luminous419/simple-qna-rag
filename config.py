@@ -31,6 +31,8 @@ CHUNK_SIZE = 1000  # 문서 청크 크기
 CHUNK_OVERLAP = 200  # 청크 간 오버랩
 
 # LLM 설정 (Ollama)
+OLLAMA_BASE_URL = "http://localhost:11434"
+
 # gpt-oss:20b:
 # - 오픈소스 GPT 스타일 모델
 # - 20B 파라미터로 높은 성능
@@ -64,12 +66,14 @@ MMR_LAMBDA = 0.5  # 다양성 vs 관련성 밸런스 (0=최대 다양성, 1=최�
 
 # 벡터 정규화 설정
 NORMALIZE_EMBEDDINGS = True  # L2 정규화 사용 (Cosine 유사도 최적화)
+# NORMALIZE_EMBEDDINGS = False
 
 # 하이브리드 검색 설정 (Sparse + Dense Retrieval)
 # - Sparse: BM25 (키워드 기반)
 # - Dense: FAISS (의미 기반)
 # - Fusion: RRF (Reciprocal Rank Fusion)
 USE_HYBRID_SEARCH = True  # 하이브리드 검색 사용 여부
+# USE_HYBRID_SEARCH = False
 BM25_TOP_K = 50  # BM25에서 검색할 문서 개수
 DENSE_TOP_K = 50  # FAISS에서 검색할 문서 개수
 RRF_TOP_K = 20  # RRF 융합 후 최종 선택할 문서 개수
@@ -80,11 +84,13 @@ RRF_CONSTANT = 60  # RRF 상수 k (일반적으로 60 사용)
 # - 2단계: MMR로 다양성 확보 (선택적)
 # - 3단계: Cross-Encoder로 정밀 재정렬 후 상위 N개 선택
 USE_RERANKER = True  # Re-ranker 사용 여부
+# USE_RERANKER = False
 RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"  # Cross-Encoder 모델
 # 대안 모델:
 # "BAAI/bge-reranker-v2-m3" - 멀티언어, 8192 토큰, 높은 정확도
 # "cross-encoder/ms-marco-MiniLM-L-6-v2" - 영어 특화, 빠른 속도
-RERANKER_TOP_K = 5  # Re-ranking 후 최종 반환할 문서 개수
+# RERANKER_TOP_K = 5  # Re-ranking 후 최종 반환할 문서 개수
+RERANKER_TOP_K = 10
 
 # 프롬프트 템플릿 설정
 PROMPT_TEMPLATE = """당신은 주어진 문서 내용을 바탕으로 정확하게 답변하는 AI 어시스턴트입니다.
