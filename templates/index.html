@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Q&A RAG System</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+            margin-top: 60px;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            font-size: 3em;
+            font-weight: 700;
+            margin-bottom: 40px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .search-box {
+            background: white;
+            border-radius: 50px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 10px 25px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+        }
+
+        .search-box:focus-within {
+            box-shadow: 0 15px 50px rgba(0,0,0,0.3);
+            transform: translateY(-2px);
+        }
+
+        #questionInput {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 1.1em;
+            padding: 15px;
+            color: #333;
+        }
+
+        #questionInput::placeholder {
+            color: #aaa;
+        }
+
+        #searchButton {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 12px 30px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #searchButton:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        #searchButton:active {
+            transform: scale(0.98);
+        }
+
+        #searchButton:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+            margin-top: 30px;
+            display: none;
+        }
+
+        .result-container.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .answer-section {
+            margin-bottom: 30px;
+        }
+
+        .answer-section h2 {
+            color: #667eea;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .answer-section h2::before {
+            content: "📝";
+            margin-right: 10px;
+        }
+
+        .answer-content {
+            color: #333;
+            line-height: 1.8;
+            font-size: 1.05em;
+        }
+
+        .answer-content p {
+            margin-bottom: 12px;
+        }
+
+        .answer-content code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .answer-content pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        .sources-section {
+            border-top: 2px solid #f0f0f0;
+            padding-top: 20px;
+        }
+
+        .sources-section h2 {
+            color: #764ba2;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .sources-section h2::before {
+            content: "📚";
+            margin-right: 10px;
+        }
+
+        .source-item {
+            background: #f9f9f9;
+            border-left: 4px solid #667eea;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            transition: all 0.2s ease;
+        }
+
+        .source-item:hover {
+            background: #f0f0f0;
+            transform: translateX(5px);
+        }
+
+        .source-header {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .source-content {
+            font-size: 0.9em;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .error-message {
+            background: #fee;
+            border-left: 4px solid #f44;
+            color: #c33;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .container {
+                margin-top: 30px;
+            }
+
+            .search-box {
+                padding: 8px 15px;
+            }
+
+            #questionInput {
+                font-size: 1em;
+                padding: 10px;
+            }
+
+            #searchButton {
+                padding: 10px 20px;
+                font-size: 0.9em;
+            }
+
+            .result-container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>오늘은 무슨 이야기를 할까요?</h1>
+
+        <div class="search-box">
+            <input
+                type="text"
+                id="questionInput"
+                placeholder="무엇이든 물어보세요"
+                autocomplete="off"
+            >
+            <button id="searchButton">검색</button>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>답변을 생성하고 있습니다...</p>
+        </div>
+
+        <div class="result-container" id="resultContainer">
+            <div class="answer-section">
+                <h2>답변</h2>
+                <div class="answer-content" id="answerContent"></div>
+            </div>
+
+            <div class="sources-section" id="sourcesSection">
+                <h2>참고 문서</h2>
+                <div id="sourcesContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const questionInput = document.getElementById('questionInput');
+        const searchButton = document.getElementById('searchButton');
+        const loading = document.getElementById('loading');
+        const resultContainer = document.getElementById('resultContainer');
+        const answerContent = document.getElementById('answerContent');
+        const sourcesSection = document.getElementById('sourcesSection');
+        const sourcesContent = document.getElementById('sourcesContent');
+
+        // Enter 키 이벤트
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleSearch();
+            }
+        });
+
+        // 검색 버튼 클릭
+        searchButton.addEventListener('click', handleSearch);
+
+        async function handleSearch() {
+            const question = questionInput.value.trim();
+
+            if (!question) {
+                alert('질문을 입력해주세요.');
+                return;
+            }
+
+            // UI 상태 변경
+            searchButton.disabled = true;
+            loading.classList.add('active');
+            resultContainer.classList.remove('active');
+
+            try {
+                // API 호출
+                const response = await fetch('/rag', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // 답변 표시 (Markdown 렌더링)
+                    answerContent.innerHTML = marked.parse(data.answer);
+
+                    // 출처 표시
+                    if (data.sources && data.sources.length > 0) {
+                        sourcesContent.innerHTML = data.sources.map(source => {
+                            const pageInfo = source.page ? ` (페이지 ${source.page})` : '';
+                            return `
+                                <div class="source-item">
+                                    <div class="source-header">[${source.index}] ${source.source}${pageInfo}</div>
+                                    <div class="source-content">${source.content}...</div>
+                                </div>
+                            `;
+                        }).join('');
+                        sourcesSection.style.display = 'block';
+                    } else {
+                        sourcesSection.style.display = 'none';
+                    }
+
+                    resultContainer.classList.add('active');
+                } else {
+                    // 오류 표시
+                    answerContent.innerHTML = `
+                        <div class="error-message">
+                            <strong>오류 발생:</strong> ${data.answer}
+                        </div>
+                    `;
+                    sourcesSection.style.display = 'none';
+                    resultContainer.classList.add('active');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                answerContent.innerHTML = `
+                    <div class="error-message">
+                        <strong>서버 오류:</strong> ${error.message}
+                    </div>
+                `;
+                sourcesSection.style.display = 'none';
+                resultContainer.classList.add('active');
+            } finally {
+                // UI 상태 복원
+                searchButton.disabled = false;
+                loading.classList.remove('active');
+            }
+        }
+    </script>
+</body>
+</html>
