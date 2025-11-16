@@ -1,0 +1,24 @@
+# LangChain 관련 패키지
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0
+langchain-text-splitters>=0.3.0
+langchain-huggingface>=0.1.0
+langchain-ollama>=0.2.0
+
+# HuggingFace 임베딩 및 Re-ranking을 위한 패키지
+sentence-transformers>=2.6.0
+transformers>=4.39.0
+
+# 벡터 데이터베이스
+faiss-cpu>=1.7.4
+
+# Sparse Retrieval (BM25)
+rank-bm25>=0.2.2
+
+# PDF 및 문서 처리
+pypdf>=3.17.0
+
+# 기타 필수 패키지
+torch>=2.1.0
+numpy>=1.25.0
