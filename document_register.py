@@ -7,15 +7,14 @@ data 디렉토리의 PDF 및 텍스트 문서를 벡터스토어에 저장하는
 
 import os
 import sys
-import time
 import threading
-from pathlib import Path
+import time
 from typing import List
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, DirectoryLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config import (
     EMBEDDING_MODEL_NAME,
