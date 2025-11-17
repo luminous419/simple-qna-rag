@@ -190,11 +190,12 @@
         .sources-section {
             border-top: 2px solid #f0f0f0;
             padding-top: 20px;
+            font-size: 0.9em;  /* 전체 섹션 폰트 크기 축소 */
         }
 
         .sources-section h2 {
             color: #764ba2;
-            font-size: 1.3em;
+            font-size: 1.3em;  /* 상대적 크기 유지 */
             margin-bottom: 15px;
             display: flex;
             align-items: center;
@@ -217,6 +218,46 @@
         .source-item:hover {
             background: #f0f0f0;
             transform: translateX(5px);
+        }
+
+        .source-item.hidden {
+            display: none;
+        }
+
+        .show-more-container {
+            text-align: right;
+            margin-top: 10px;
+        }
+
+        .show-more-btn {
+            background: none;
+            border: none;
+            color: #667eea;
+            font-size: 0.9em;
+            cursor: pointer;
+            padding: 5px 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s ease;
+        }
+
+        .show-more-btn:hover {
+            color: #764ba2;
+            transform: scale(1.05);
+        }
+
+        .show-more-btn .icon {
+            font-size: 1.2em;
+            transition: transform 0.3s ease;
+        }
+
+        .show-more-btn.expanded .icon {
+            transform: rotate(45deg);
+        }
+
+        .show-more-container.hidden {
+            display: none;
         }
 
         .source-header {
@@ -297,6 +338,12 @@
             <div class="sources-section" id="sourcesSection">
                 <h2>참고 문서</h2>
                 <div id="sourcesContent"></div>
+                <div class="show-more-container hidden" id="showMoreContainer">
+                    <button class="show-more-btn" id="showMoreBtn">
+                        <span class="icon">+</span>
+                        <span class="text">더보기</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -309,6 +356,12 @@
         const answerContent = document.getElementById('answerContent');
         const sourcesSection = document.getElementById('sourcesSection');
         const sourcesContent = document.getElementById('sourcesContent');
+        const showMoreContainer = document.getElementById('showMoreContainer');
+        const showMoreBtn = document.getElementById('showMoreBtn');
+
+        let allSources = [];
+        let isExpanded = false;
+        const MAX_INITIAL_SOURCES = 3;
 
         // Enter 키 이벤트
         questionInput.addEventListener('keypress', (e) => {
@@ -319,6 +372,61 @@
 
         // 검색 버튼 클릭
         searchButton.addEventListener('click', handleSearch);
+
+        // 더보기 버튼 클릭
+        showMoreBtn.addEventListener('click', toggleSources);
+
+        function toggleSources() {
+            isExpanded = !isExpanded;
+            renderSources(allSources);
+
+            // 버튼 텍스트 및 아이콘 변경
+            const icon = showMoreBtn.querySelector('.icon');
+            const text = showMoreBtn.querySelector('.text');
+
+            if (isExpanded) {
+                icon.textContent = '−';
+                text.textContent = '접기';
+                showMoreBtn.classList.add('expanded');
+            } else {
+                icon.textContent = '+';
+                text.textContent = '더보기';
+                showMoreBtn.classList.remove('expanded');
+            }
+        }
+
+        function renderSources(sources) {
+            if (!sources || sources.length === 0) {
+                sourcesSection.style.display = 'none';
+                return;
+            }
+
+            allSources = sources;
+
+            // 표시할 소스 개수 결정
+            const displayCount = isExpanded ? sources.length : Math.min(MAX_INITIAL_SOURCES, sources.length);
+
+            // 소스 렌더링
+            sourcesContent.innerHTML = sources.map((source, index) => {
+                const pageInfo = source.page ? ` (페이지 ${source.page})` : '';
+                const isHidden = index >= displayCount ? 'hidden' : '';
+                return `
+                    <div class="source-item ${isHidden}">
+                        <div class="source-header">[${source.index}] ${source.source}${pageInfo}</div>
+                        <div class="source-content">${source.content}...</div>
+                    </div>
+                `;
+            }).join('');
+
+            // 더보기 버튼 표시 여부
+            if (sources.length > MAX_INITIAL_SOURCES) {
+                showMoreContainer.classList.remove('hidden');
+            } else {
+                showMoreContainer.classList.add('hidden');
+            }
+
+            sourcesSection.style.display = 'block';
+        }
 
         async function handleSearch() {
             const question = questionInput.value.trim();
@@ -349,20 +457,13 @@
                     // 답변 표시 (Markdown 렌더링)
                     answerContent.innerHTML = marked.parse(data.answer);
 
-                    // 출처 표시
+                    // 출처 표시 (초기 상태로 리셋)
+                    isExpanded = false;
                     if (data.sources && data.sources.length > 0) {
-                        sourcesContent.innerHTML = data.sources.map(source => {
-                            const pageInfo = source.page ? ` (페이지 ${source.page})` : '';
-                            return `
-                                <div class="source-item">
-                                    <div class="source-header">[${source.index}] ${source.source}${pageInfo}</div>
-                                    <div class="source-content">${source.content}...</div>
-                                </div>
-                            `;
-                        }).join('');
-                        sourcesSection.style.display = 'block';
+                        renderSources(data.sources);
                     } else {
                         sourcesSection.style.display = 'none';
+                        showMoreContainer.classList.add('hidden');
                     }
 
                     resultContainer.classList.add('active');

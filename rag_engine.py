@@ -338,7 +338,7 @@ class RAGEngine:
             else:
                 source_docs = self.dense_retriever.invoke(question)
 
-            # 출처 정보 포맷
+            # 출처 정보 포맷 (전체 반환, UI에서 제어)
             sources = []
             for i, doc in enumerate(source_docs, 1):
                 source = doc.metadata.get('source', '알 수 없음')
