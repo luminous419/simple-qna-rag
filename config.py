@@ -76,13 +76,13 @@ USE_HYBRID_SEARCH = True  # 하이브리드 검색 사용 여부
 # USE_HYBRID_SEARCH = False
 BM25_TOP_K = 50  # BM25에서 검색할 문서 개수
 DENSE_TOP_K = 50  # FAISS에서 검색할 문서 개수
-RRF_TOP_K = 20  # RRF 융합 후 최종 선택할 문서 개수
+RRF_TOP_K = 50  # RRF 융합 후 선택할 문서 개수 (MMR 입력)
 RRF_CONSTANT = 60  # RRF 상수 k (일반적으로 60 사용)
 
 # Re-ranker 설정 (3-Stage Retrieval)
-# - 1단계: Hybrid Search (BM25 + FAISS) → RRF로 20개
-# - 2단계: MMR로 다양성 확보 (선택적)
-# - 3단계: Cross-Encoder로 정밀 재정렬 후 상위 N개 선택
+# - 1단계: Hybrid Search (BM25 + FAISS) → RRF로 50개
+# - 2단계: MMR로 다양성 확보 → 20개
+# - 3단계: Cross-Encoder로 정밀 재정렬 후 상위 10개 선택
 USE_RERANKER = True  # Re-ranker 사용 여부
 # USE_RERANKER = False
 RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"  # Cross-Encoder 모델

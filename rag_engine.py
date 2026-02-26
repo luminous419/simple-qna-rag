@@ -12,7 +12,7 @@ from typing import Optional, Dict, List
 
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.runnables import RunnablePassthrough
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
@@ -36,8 +36,9 @@ from config import (
     USE_RERANKER,
     RERANKER_MODEL,
     RERANKER_TOP_K,
-    PROMPT_TEMPLATE,
 )
+from intent_classifier import classify_intent
+from prompt_templates import get_template_by_intent
 
 
 class RAGEngine:
@@ -58,7 +59,8 @@ class RAGEngine:
             self.bm25_retriever = None
             self.dense_retriever = None
             self.llm = None
-            self.qa_chain = None
+            # Intent Classifier는 첫 쿼리 시 lazy loading
+            self.intent_classifier_loaded = False
             RAGEngine._initialized = True
 
     def initialize(self) -> bool:
@@ -84,8 +86,8 @@ class RAGEngine:
             # 3. LLM 초기화
             self.llm = self._initialize_llm()
 
-            # 4. QA 체인 설정
-            self.dense_retriever, self.qa_chain = self._setup_qa_chain()
+            # 4. Dense Retriever 설정
+            self.dense_retriever = self._setup_retriever()
 
             print("\n" + "=" * 60)
             print("✅ RAG 엔진 초기화 완료")
@@ -165,27 +167,41 @@ class RAGEngine:
 
         return llm
 
-    def _setup_qa_chain(self):
-        """QA 체인 설정"""
-        # 프롬프트 템플릿
-        prompt = PromptTemplate(
-            template=PROMPT_TEMPLATE,
-            input_variables=["context", "question"]
-        )
-
-        # Dense Retriever 설정
+    def _setup_retriever(self):
+        """Dense Retriever 설정"""
         if USE_HYBRID_SEARCH:
-            print(f"🔍 Stage 1 - Hybrid Search 설정")
-            print(f"   - Dense (FAISS): {DENSE_TOP_K}개")
-            print(f"   - Sparse (BM25): {BM25_TOP_K}개")
-            print(f"   - RRF 융합 후: {RRF_TOP_K}개")
+            print(f"🔍 3-Stage Retrieval 파이프라인 설정")
+            print(f"   Stage 1 - Hybrid Search:")
+            print(f"      - Dense (FAISS): {DENSE_TOP_K}개")
+            print(f"      - Sparse (BM25): {BM25_TOP_K}개")
+            print(f"      - RRF 융합 후: {RRF_TOP_K}개")
 
             dense_retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
                 search_kwargs={"k": DENSE_TOP_K}
             )
+
+            if USE_MMR:
+                print(f"   Stage 2 - MMR (다양성 확보):")
+                print(f"      - lambda={MMR_LAMBDA} (0=최대 다양성, 1=최대 관련성)")
+                print(f"      - 출력: {MMR_K}개")
+
+            if USE_RERANKER:
+                stage_num = 3 if USE_MMR else 2
+                print(f"   Stage {stage_num} - Re-ranker:")
+                print(f"      - 모델: {RERANKER_MODEL}")
+                print(f"      - 최종 출력: {RERANKER_TOP_K}개")
+
+            # 전체 파이프라인 요약
+            pipeline_parts = [f"Hybrid({BM25_TOP_K}+{DENSE_TOP_K})", f"RRF({RRF_TOP_K})"]
+            if USE_MMR:
+                pipeline_parts.append(f"MMR({MMR_K})")
+            if USE_RERANKER:
+                pipeline_parts.append(f"Re-rank({RERANKER_TOP_K})")
+            print(f"   파이프라인: {' → '.join(pipeline_parts)}")
+
         elif USE_MMR:
-            print(f"🔍 Stage 1 - Retriever 설정: MMR (다양성 확보)")
+            print(f"🔍 Retriever 설정: MMR (다양성 확보)")
             print(f"   - k={MMR_K}, fetch_k={MMR_FETCH_K}, lambda={MMR_LAMBDA}")
             dense_retriever = self.vectorstore.as_retriever(
                 search_type="mmr",
@@ -195,70 +211,26 @@ class RAGEngine:
                     "lambda_mult": MMR_LAMBDA
                 }
             )
+
+            if USE_RERANKER:
+                print(f"🔍 Re-ranker 활성화:")
+                print(f"   - 모델: {RERANKER_MODEL}")
+                print(f"   - 최종 문서 수: {RERANKER_TOP_K}")
         else:
-            print(f"🔍 Stage 1 - Retriever 설정: Similarity (유사도)")
+            print(f"🔍 Retriever 설정: Similarity (유사도)")
             print(f"   - k={RETRIEVAL_K}")
             dense_retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
                 search_kwargs={"k": RETRIEVAL_K}
             )
 
-        # Re-ranker 설정
-        if USE_RERANKER:
-            print(f"🔍 Stage 2 - Re-ranker 활성화")
-            print(f"   - 모델: {RERANKER_MODEL}")
-            print(f"   - 최종 문서 수: {RERANKER_TOP_K}")
-            if USE_HYBRID_SEARCH:
-                print(f"   - 파이프라인: BM25+FAISS({BM25_TOP_K}+{DENSE_TOP_K}개) → RRF({RRF_TOP_K}개) → Re-rank({RERANKER_TOP_K}개)")
-            else:
-                print(f"   - 파이프라인: FAISS({MMR_K if USE_MMR else RETRIEVAL_K}개) → Re-rank({RERANKER_TOP_K}개)")
+            if USE_RERANKER:
+                print(f"🔍 Re-ranker 활성화:")
+                print(f"   - 모델: {RERANKER_MODEL}")
+                print(f"   - 최종 문서 수: {RERANKER_TOP_K}")
 
-        # QA 체인 생성
-        def format_docs(docs):
-            return "\n\n".join(doc.page_content for doc in docs)
-
-        if USE_HYBRID_SEARCH:
-            def hybrid_retrieve_and_rerank(query: str):
-                bm25_docs = self.bm25_retriever.invoke(query, top_k=BM25_TOP_K)
-                dense_docs = dense_retriever.invoke(query)
-                fused_docs = self._reciprocal_rank_fusion(
-                    bm25_docs, dense_docs,
-                    top_k=RRF_TOP_K,
-                    k=RRF_CONSTANT
-                )
-                if USE_RERANKER:
-                    return self._rerank_documents(query, fused_docs, top_k=RERANKER_TOP_K)
-                return fused_docs
-
-            qa_chain = (
-                {"context": RunnableLambda(hybrid_retrieve_and_rerank) | RunnableLambda(format_docs), "question": RunnablePassthrough()}
-                | prompt
-                | self.llm
-                | StrOutputParser()
-            )
-
-        elif USE_RERANKER:
-            def retrieve_and_rerank(query: str):
-                docs = dense_retriever.invoke(query)
-                return self._rerank_documents(query, docs, top_k=RERANKER_TOP_K)
-
-            qa_chain = (
-                {"context": RunnableLambda(retrieve_and_rerank) | RunnableLambda(format_docs), "question": RunnablePassthrough()}
-                | prompt
-                | self.llm
-                | StrOutputParser()
-            )
-
-        else:
-            qa_chain = (
-                {"context": dense_retriever | RunnableLambda(format_docs), "question": RunnablePassthrough()}
-                | prompt
-                | self.llm
-                | StrOutputParser()
-            )
-
-        print(f"✅ QA 체인 설정 완료")
-        return dense_retriever, qa_chain
+        print(f"✅ Retriever 설정 완료")
+        return dense_retriever
 
     def _reciprocal_rank_fusion(self, bm25_docs, dense_docs, top_k: int = 20, k: int = 60):
         """RRF 융합"""
@@ -300,9 +272,128 @@ class RAGEngine:
 
         return [doc for doc, score in scored_docs[:top_k]]
 
+    def _apply_mmr(self, query: str, documents, top_k: int = 20, lambda_mult: float = 0.5):
+        """
+        MMR (Maximal Marginal Relevance) 적용
+
+        이미 검색된 문서들에 대해 다양성을 확보하면서 관련성 높은 문서를 선택합니다.
+
+        Args:
+            query: 검색 쿼리
+            documents: RRF 등으로 선별된 문서 리스트
+            top_k: 최종 선택할 문서 수
+            lambda_mult: 관련성 vs 다양성 밸런스 (0=최대 다양성, 1=최대 관련성)
+
+        Returns:
+            다양성이 확보된 문서 리스트
+        """
+        import numpy as np
+
+        if len(documents) <= top_k:
+            return documents
+
+        # 임베딩 모델 가져오기
+        embeddings_model = self.vectorstore.embeddings
+
+        # 쿼리 임베딩
+        query_embedding = np.array(embeddings_model.embed_query(query))
+
+        # 문서 임베딩
+        doc_embeddings = np.array([
+            embeddings_model.embed_query(doc.page_content) for doc in documents
+        ])
+
+        # 코사인 유사도 계산 (정규화된 벡터이므로 내적 = 코사인 유사도)
+        query_similarities = np.dot(doc_embeddings, query_embedding)
+
+        selected_indices = []
+        remaining_indices = list(range(len(documents)))
+
+        # 첫 번째 문서: 쿼리와 가장 유사한 문서 선택
+        first_idx = np.argmax(query_similarities)
+        selected_indices.append(first_idx)
+        remaining_indices.remove(first_idx)
+
+        # 나머지 문서 선택 (MMR 알고리즘)
+        while len(selected_indices) < top_k and remaining_indices:
+            mmr_scores = []
+
+            for idx in remaining_indices:
+                # 쿼리와의 유사도
+                relevance = query_similarities[idx]
+
+                # 이미 선택된 문서들과의 최대 유사도 (중복성)
+                if selected_indices:
+                    similarities_to_selected = [
+                        np.dot(doc_embeddings[idx], doc_embeddings[sel_idx])
+                        for sel_idx in selected_indices
+                    ]
+                    max_similarity = max(similarities_to_selected)
+                else:
+                    max_similarity = 0
+
+                # MMR 점수: lambda * 관련성 - (1 - lambda) * 중복성
+                mmr_score = lambda_mult * relevance - (1 - lambda_mult) * max_similarity
+                mmr_scores.append((idx, mmr_score))
+
+            # 가장 높은 MMR 점수를 가진 문서 선택
+            best_idx = max(mmr_scores, key=lambda x: x[1])[0]
+            selected_indices.append(best_idx)
+            remaining_indices.remove(best_idx)
+
+        return [documents[i] for i in selected_indices]
+
+    def _retrieve_documents(self, question: str):
+        """
+        문서 검색 (3-Stage Retrieval 파이프라인)
+
+        Hybrid Search 사용 시:
+            Stage 1: Hybrid Search (BM25 + FAISS) → RRF 융합
+            Stage 2: MMR (다양성 확보) - USE_MMR=True일 때
+            Stage 3: Re-ranking (Cross-Encoder) - USE_RERANKER=True일 때
+        """
+        if USE_HYBRID_SEARCH:
+            # Stage 1: Hybrid Search + RRF
+            bm25_docs = self.bm25_retriever.invoke(question, top_k=BM25_TOP_K)
+            dense_docs = self.dense_retriever.invoke(question) if self.dense_retriever else []
+            docs = self._reciprocal_rank_fusion(
+                bm25_docs, dense_docs,
+                top_k=RRF_TOP_K,
+                k=RRF_CONSTANT
+            )
+
+            # Stage 2: MMR (다양성 확보)
+            if USE_MMR:
+                docs = self._apply_mmr(
+                    question, docs,
+                    top_k=MMR_K,
+                    lambda_mult=MMR_LAMBDA
+                )
+
+            # Stage 3: Re-ranking
+            if USE_RERANKER:
+                docs = self._rerank_documents(question, docs, top_k=RERANKER_TOP_K)
+
+        elif USE_MMR:
+            # MMR만 사용 (Hybrid Search 비활성화 시)
+            docs = self.dense_retriever.invoke(question)
+            if USE_RERANKER:
+                docs = self._rerank_documents(question, docs, top_k=RERANKER_TOP_K)
+
+        elif USE_RERANKER:
+            # Re-ranking만 사용
+            docs = self.dense_retriever.invoke(question)
+            docs = self._rerank_documents(question, docs, top_k=RERANKER_TOP_K)
+
+        else:
+            # 기본 Similarity 검색
+            docs = self.dense_retriever.invoke(question)
+
+        return docs
+
     def query(self, question: str) -> Dict[str, any]:
         """
-        질문에 대한 답변 생성
+        질문에 대한 답변 생성 (Intent 분류 → 템플릿 선택 → 답변 생성)
 
         Args:
             question: 사용자 질문
@@ -311,36 +402,59 @@ class RAGEngine:
             dict: {
                 "answer": str,  # 답변
                 "sources": List[Dict],  # 출처 문서
-                "success": bool
+                "success": bool,
+                "intent": str  # 분류된 의도
             }
         """
         try:
-            if not self.qa_chain:
+            if not self.llm:
                 raise RuntimeError("RAG 엔진이 초기화되지 않았습니다.")
 
+            # Intent Classifier 첫 로딩 메시지 (한 번만)
+            if not self.intent_classifier_loaded:
+                print("\n🔧 Intent Classifier 로딩 중...")
+                self.intent_classifier_loaded = True
+
+            # 1. Intent 분류
+            try:
+                intent = classify_intent(question)
+                print(f"🎯 Intent 분류 결과: {intent}")
+            except FileNotFoundError:
+                # Intent Classifier 모델이 없으면 기본 템플릿 사용
+                print("⚠️  Intent Classifier 모델을 찾을 수 없습니다. 기본 템플릿을 사용합니다.")
+                print("   train_intent_classifier.py를 실행하여 모델을 학습하세요.")
+                intent = "other"
+            except Exception as e:
+                print(f"⚠️  Intent 분류 실패: {e}. 기본 템플릿을 사용합니다.")
+                intent = "other"
+
+            # 2. Intent에 맞는 템플릿 선택
+            template_str = get_template_by_intent(intent)
+            prompt = PromptTemplate(
+                template=template_str,
+                input_variables=["context", "question"]
+            )
+
+            # 3. 문서 검색
+            retrieved_docs = self._retrieve_documents(question)
+
+            # 4. 컨텍스트 생성
+            context = "\n\n".join(doc.page_content for doc in retrieved_docs)
+
+            # 5. QA 체인 동적 생성 및 실행
+            qa_chain = (
+                {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
+                | prompt
+                | self.llm
+                | StrOutputParser()
+            )
+
             # 답변 생성
-            answer = self.qa_chain.invoke(question)
+            answer = qa_chain.invoke({"context": context, "question": question})
 
-            # 출처 문서 검색
-            if USE_HYBRID_SEARCH:
-                bm25_docs = self.bm25_retriever.invoke(question, top_k=BM25_TOP_K)
-                dense_docs = self.dense_retriever.invoke(question) if self.dense_retriever else []
-                source_docs = self._reciprocal_rank_fusion(
-                    bm25_docs, dense_docs,
-                    top_k=RRF_TOP_K,
-                    k=RRF_CONSTANT
-                )
-                if USE_RERANKER:
-                    source_docs = self._rerank_documents(question, source_docs, top_k=RERANKER_TOP_K)
-            elif USE_RERANKER:
-                source_docs = self.dense_retriever.invoke(question)
-                source_docs = self._rerank_documents(question, source_docs, top_k=RERANKER_TOP_K)
-            else:
-                source_docs = self.dense_retriever.invoke(question)
-
-            # 출처 정보 포맷 (전체 반환, UI에서 제어)
+            # 6. 출처 정보 포맷 (전체 반환, UI에서 제어)
             sources = []
-            for i, doc in enumerate(source_docs, 1):
+            for i, doc in enumerate(retrieved_docs, 1):
                 source = doc.metadata.get('source', '알 수 없음')
                 page = doc.metadata.get('page', None)
                 sources.append({
@@ -353,7 +467,8 @@ class RAGEngine:
             return {
                 "answer": answer,
                 "sources": sources,
-                "success": True
+                "success": True,
+                "intent": intent
             }
 
         except Exception as e:
@@ -363,7 +478,8 @@ class RAGEngine:
             return {
                 "answer": f"오류가 발생했습니다: {str(e)}",
                 "sources": [],
-                "success": False
+                "success": False,
+                "intent": "error"
             }
 
 
