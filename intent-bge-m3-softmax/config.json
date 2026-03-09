@@ -1,0 +1,29 @@
+{
+  "labels": [
+    "explanation",
+    "comparison",
+    "procedure",
+    "yesno",
+    "other",
+    "uncertain"
+  ],
+  "label_to_id": {
+    "explanation": 0,
+    "comparison": 1,
+    "procedure": 2,
+    "yesno": 3,
+    "other": 4,
+    "uncertain": 5
+  },
+  "id_to_label": {
+    "0": "explanation",
+    "1": "comparison",
+    "2": "procedure",
+    "3": "yesno",
+    "4": "other",
+    "5": "uncertain"
+  },
+  "embedding_dim": 1024,
+  "num_labels": 6,
+  "embedding_model_name": "BAAI/bge-m3"
+}
