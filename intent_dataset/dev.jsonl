@@ -1,0 +1,1000 @@
+{"text": "AWS와 GCP 비교해줘", "label": "comparison"}
+{"text": "앞에서 말한 표를 다시 그려주세요", "label": "other"}
+{"text": "그 절차 다시 한번만 알려줘", "label": "other"}
+{"text": "아까 말한 거 다시 정리해주세요", "label": "other"}
+{"text": "DBA팀 무엇을 하는지 알려줘", "label": "explanation"}
+{"text": "테스트 서버 직접 재시작 가능한가요", "label": "yesno"}
+{"text": "연차와 월차 비교해줘", "label": "comparison"}
+{"text": "도메인 등록 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "이전에 설명한 내용 정리해줘", "label": "other"}
+{"text": "Nginx와 Apache의 차이를 알려주세요", "label": "comparison"}
+{"text": "CDN 설정 절차를 설명해줘", "label": "procedure"}
+{"text": "USB-C와 USB 3.0을 비교해줘", "label": "comparison"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "백업 복구 절차를 설명해주세요", "label": "procedure"}
+{"text": "담당자가 누구라고 했어요", "label": "other"}
+{"text": "AWS와 GCP 비교해줘", "label": "comparison"}
+{"text": "그 내용을 불릿 포인트로 정리해줘", "label": "other"}
+{"text": "프록시 서버 뭔지 알고 싶어요", "label": "explanation"}
+{"text": "Replication 무엇인지 설명해주세요", "label": "explanation"}
+{"text": "퇴직금 조회 절차를 설명해줘", "label": "procedure"}
+{"text": "노트북 수리 신청 절차를 설명해주세요", "label": "procedure"}
+{"text": "반차 사용할 때 사유 작성 필요한가요", "label": "yesno"}
+{"text": "프로덕션 서버에 배포 권한 ", "label": "yesno"}
+{"text": "그 내용을 불릿 포인트로 정리해주세요", "label": "other"}
+{"text": "육아휴직 남자도 쓸 수 있어", "label": "yesno"}
+{"text": "운영 DB 직접 접속 가능해", "label": "yesno"}
+{"text": "VPN과 원격 데스크톱를 비교해주세요", "label": "comparison"}
+{"text": "경조사비 청구 방법을 알려줘", "label": "procedure"}
+{"text": "위 내용을 마크다운으로 변환해주세요", "label": "other"}
+{"text": "그때 언급한 기준이 뭐였나요", "label": "other"}
+{"text": "성과급 뭔지 설명해주세요", "label": "explanation"}
+{"text": "모니터 추가 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "연차와 월차 비교해주세요", "label": "comparison"}
+{"text": "인사 평가의 방식을 알려주세요", "label": "explanation"}
+{"text": "경조사 휴가와 병가 비교해주세요", "label": "comparison"}
+{"text": "개인 클라우드 스토리지 사용 가능한가요", "label": "yesno"}
+{"text": "데스크톱과 노트북를 비교해서 설명해주세요", "label": "comparison"}
+{"text": "VPN과 원격 데스크톱를 비교해주세요", "label": "comparison"}
+{"text": "메일 서명 설정하는 방법을 알려줘", "label": "procedure"}
+{"text": "그 절차 다시 한번만 알려줘", "label": "other"}
+{"text": "소프트웨어 설치 요청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "그 설명 간단하게 정리해줘", "label": "other"}
+{"text": "경조사 휴가와 병가 비교해주세요", "label": "comparison"}
+{"text": "S3 버킷의 개념을 알려주세요", "label": "explanation"}
+{"text": "그거 뭐였는지", "label": "other"}
+{"text": "블루투스와 WiFi의 장단점을 ", "label": "comparison"}
+{"text": "HTTP와 HTTPS의 장단점을 알려주세요", "label": "comparison"}
+{"text": "경조사 휴가 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "Replication 무엇인지 설명해줘", "label": "explanation"}
+{"text": "DMZ 구역의 개념을 설명해줘", "label": "explanation"}
+{"text": "백업 복구 절차를 설명해주세요", "label": "procedure"}
+{"text": "키보드/마우스 교체 요청 절차를 설명해줘", "label": "procedure"}
+{"text": "AWS와 GCP 비교해주세요", "label": "comparison"}
+{"text": "데이터베이스 마이그레이션 절차를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "Docker와 VM을 비교해줘", "label": "comparison"}
+{"text": "처음 말한 거 다시 한번 설명해줘", "label": "other"}
+{"text": "그룹 정책 무엇인지 알려줘", "label": "explanation"}
+{"text": "처음 말한 거 다시 한번 설명해줘", "label": "other"}
+{"text": "VPN 없이 사내망 접속 되나요", "label": "yesno"}
+{"text": "Windows와 Mac을 비교해서 설명해줘", "label": "comparison"}
+{"text": "도메인 등록 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "데스크톱과 노트북을 비교해서 설명해줘", "label": "comparison"}
+{"text": "아까 말한 거 다시 정리해주세요", "label": "other"}
+{"text": "MAC 주소 뭔지 설명해주세요", "label": "explanation"}
+{"text": "승진 기준 대해 설명해줘", "label": "explanation"}
+{"text": "HTTP와 HTTPS의 장단점을 알려주세요", "label": "comparison"}
+{"text": "방금 전 내용을 표로 바꿔주세요", "label": "other"}
+{"text": "백업 복구 절차를 설명해주세요", "label": "procedure"}
+{"text": "경조사비 지원의 기준을 알려줘", "label": "explanation"}
+{"text": "위 내용을 마크다운으로 변환해줘", "label": "other"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "사내 인터넷이 안될 때 해결 방법을 알려줘", "label": "procedure"}
+{"text": "HTTP와 HTTPS의 장단점을 알려줘", "label": "comparison"}
+{"text": "회의실 예약은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "IPv4와 IPv6의 차이를 ", "label": "comparison"}
+{"text": "경조사 휴가 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "긴급 배포 승인 없이 가능해", "label": "yesno"}
+{"text": "방화벽 오픈 신청 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "Sharding의 개념을 알려줘", "label": "explanation"}
+{"text": "Sharding의 개념을 알려주세요", "label": "explanation"}
+{"text": "서버 로그 실시간 조회 가능한가요", "label": "yesno"}
+{"text": "전일 연차와 반일 연차 비교해주세요", "label": "comparison"}
+{"text": "MySQL과 PostgreSQL의 장단점을 ", "label": "comparison"}
+{"text": "공용 폴더 권한 신청 절차를 설명해주세요", "label": "procedure"}
+{"text": "HTTP와 HTTPS의 장단점을 알려주세요", "label": "comparison"}
+{"text": "인센티브 제도 알려주세요", "label": "explanation"}
+{"text": "VPC의 개념을 알려주세요", "label": "explanation"}
+{"text": "MySQL과 PostgreSQL의 장단점을 ", "label": "comparison"}
+{"text": "이중인증 뭔지 설명해줘", "label": "explanation"}
+{"text": "경조사 휴가 신청 절차를 단계별로 설명해주세요", "label": "procedure"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "사내 대출 신청할 수 있어", "label": "yesno"}
+{"text": "소프트웨어 설치 요청은 어떻게 하나요", "label": "procedure"}
+{"text": "성과급과 인센티브 비교해서 설명해주세요", "label": "comparison"}
+{"text": "아까 말한 거 다시 정리해줘", "label": "other"}
+{"text": "블루스크린 왜 뜨는지 알려주세요", "label": "explanation"}
+{"text": "경조사 휴가와 병가 비교해줘", "label": "comparison"}
+{"text": "위 내용을 마크다운으로 변환해줘", "label": "other"}
+{"text": "육아휴직과 출산휴가 비교해서 설명해줘", "label": "comparison"}
+{"text": "좀 전에 준 예시 다시 보여주세요", "label": "other"}
+{"text": "사내 WiFi가 5GHz를 ", "label": "yesno"}
+{"text": "긴급 배포 절차는 어떻게 되나요", "label": "procedure"}
+{"text": "이전에 설명한 내용 정리해줘", "label": "other"}
+{"text": "TCP와 UDP 비교해줘", "label": "comparison"}
+{"text": "전에 말한 조건 뭐였나", "label": "other"}
+{"text": "Nginx와 Apache의 차이를 알려줘", "label": "comparison"}
+{"text": "사내 대출 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "DevOps 뭔지 알려주세요", "label": "explanation"}
+{"text": "연차와 월차 비교해줘", "label": "comparison"}
+{"text": "경조사비 지원의 기준을 알려줘", "label": "explanation"}
+{"text": "방금 준 링크 다시 보여줘", "label": "other"}
+{"text": "사무실에 무선 충전기 있나요", "label": "yesno"}
+{"text": "그 내용을 불릿 포인트로 정리해주세요", "label": "other"}
+{"text": "Active Directory 뭔지 설명해줘", "label": "explanation"}
+{"text": "방화벽 오픈 신청 절차를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "공인IP와 사설IP의 개념을 알려주세요", "label": "explanation"}
+{"text": "처음 말한 거 다시 한번 설명해줘", "label": "other"}
+{"text": "DBA팀 무엇을 하는지 알려줘", "label": "explanation"}
+{"text": "Kubernetes 무엇인지 설명해주세요", "label": "explanation"}
+{"text": "Docker와 VM을 비교해줘", "label": "comparison"}
+{"text": "DMZ 구역의 개념을 설명해주세요", "label": "explanation"}
+{"text": "병가 사용할 때 진단서 필요해", "label": "yesno"}
+{"text": "앞에서 말한 표를 다시 그려주세요", "label": "other"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "공유기와 스위치의 차이를 알려줘", "label": "comparison"}
+{"text": "앞에서 말한 표를 다시 그려주세요", "label": "other"}
+{"text": "재택근무와 사무실 근무의 장단점을 알려주세요", "label": "comparison"}
+{"text": "그 절차 다시 한번만 알려주실 수 있나요", "label": "other"}
+{"text": "MAC 주소 뭔지 설명해줘", "label": "explanation"}
+{"text": "성과급과 인센티브 비교해서 설명해주세요", "label": "comparison"}
+{"text": "IPv4와 IPv6의 차이를 ", "label": "comparison"}
+{"text": "Nginx와 Apache의 차이를 알려주세요", "label": "comparison"}
+{"text": "도메인 등록 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "주말에도 IT 지원 가능한가요", "label": "yesno"}
+{"text": "도메인 등록 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "긴급 배포 승인 없이 가능한가요", "label": "yesno"}
+{"text": "출산휴가의 기간을 알려줘", "label": "explanation"}
+{"text": "위에 설명한 거 다시 보여줘", "label": "other"}
+{"text": "경조사비 당일 신청 가능한가요", "label": "yesno"}
+{"text": "출장 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "이전 답변을 요약해주세요", "label": "other"}
+{"text": "담당자가 누구라고 했어요", "label": "other"}
+{"text": "이중인증 뭔지 설명해줘", "label": "explanation"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "경조사비 당일 신청 가능한가요", "label": "yesno"}
+{"text": "점심시간에 외출 가능한가요", "label": "yesno"}
+{"text": "보상휴가와 대체휴가의 장단점을 ", "label": "comparison"}
+{"text": "모니터 추가 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "로그 수집의 원리를 알려줘", "label": "explanation"}
+{"text": "앞에서 말한 표를 다시 그려주세요", "label": "other"}
+{"text": "학자금 지원 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "그룹 정책 무엇인지 알려주세요", "label": "explanation"}
+{"text": "백업 데이터 다운로드 가능한가요", "label": "yesno"}
+{"text": "VPN 재연결 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "로드밸런서의 역할을 알려주세요", "label": "explanation"}
+{"text": "Nginx와 Apache의 차이를 알려주세요", "label": "comparison"}
+{"text": "공유기와 스위치의 차이를 알려주세요", "label": "comparison"}
+{"text": "메일 서명 설정하는 방법을 알려주실 수 있나요", "label": "procedure"}
+{"text": "트랜잭션 뭔지 설명해주세요", "label": "explanation"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "DBA팀 무엇을 하는지 알려줘", "label": "explanation"}
+{"text": "그룹 정책 무엇인지 알려줘", "label": "explanation"}
+{"text": "병가 사용할 때 진단서 필요해", "label": "yesno"}
+{"text": "4대보험 가입 증명서 발급은 어떻게 하나요", "label": "procedure"}
+{"text": "개발 서버에서 외부 API 호출 가능해", "label": "yesno"}
+{"text": "육아휴직과 출산휴가 비교해서 설명해줘", "label": "comparison"}
+{"text": "개인 클라우드 스토리지 사용 가능해", "label": "yesno"}
+{"text": "변경관리 프로세스 설명해주세요", "label": "explanation"}
+{"text": "사내 대출 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "방화벽 오픈 신청 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "그 설명 간단하게 정리해주세요", "label": "other"}
+{"text": "그때 언급한 기준이 뭐였나요", "label": "other"}
+{"text": "RAM과 ROM의 차이를 설명해줘", "label": "explanation"}
+{"text": "로그 수집의 원리를 알려줘", "label": "explanation"}
+{"text": "방금 준 링크 다시 보여줘", "label": "other"}
+{"text": "TCP와 UDP 비교해주세요", "label": "comparison"}
+{"text": "위에 설명한 거 다시 보여줘", "label": "other"}
+{"text": "Nginx와 Apache의 차이를 알려줘", "label": "comparison"}
+{"text": "아까 말한 거 다시 정리해주세요", "label": "other"}
+{"text": "그 내용을 불릿 포인트로 정리해줘", "label": "other"}
+{"text": "서버 증설 신청 방법을 알려주세요", "label": "procedure"}
+{"text": "SRE의 역할을 설명해주세요", "label": "explanation"}
+{"text": "방화벽 오픈 신청 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "Nginx와 Apache의 차이를 알려주세요", "label": "comparison"}
+{"text": "주말에도 IT 지원 가능해", "label": "yesno"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "출장 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "그거 뭐였지", "label": "other"}
+{"text": "시간외 근무와 휴일 근무의 차이를 ", "label": "comparison"}
+{"text": "로컬에서 VPN으로 DB 접속 되나요", "label": "yesno"}
+{"text": "방금 전 내용을 표로 바꿔줘", "label": "other"}
+{"text": "인센티브 제도 알려주세요", "label": "explanation"}
+{"text": "경조사비 당일 신청 가능해", "label": "yesno"}
+{"text": "그 절차 다시 한번만 알려줘", "label": "other"}
+{"text": "개발 서버에서 외부 API 호출 가능해", "label": "yesno"}
+{"text": "위 내용을 마크다운으로 변환해줘", "label": "other"}
+{"text": "로컬에서 VPN으로 DB 접속 가능한가요", "label": "yesno"}
+{"text": "DHCP 어떻게 작동하는지 설명해주세요", "label": "explanation"}
+{"text": "프로덕션 서버에 배포 권한 ", "label": "yesno"}
+{"text": "프린터 연결하는 절차를 단계별로 설명해주세요", "label": "procedure"}
+{"text": "연차와 월차 비교해줘", "label": "comparison"}
+{"text": "그 절차 다시 한번만 알려주실 수 있나요", "label": "other"}
+{"text": "좀 전에 준 예시 다시 보여주세요", "label": "other"}
+{"text": "출장 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "처음 말한 거 다시 한번 설명해줘", "label": "other"}
+{"text": "연차를 시간 단위로 쓸 수 ", "label": "yesno"}
+{"text": "육아휴직 남자도 쓸 수 있나요", "label": "yesno"}
+{"text": "DMZ 구역의 개념을 설명해줘", "label": "explanation"}
+{"text": "장애 대응 프로세스를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "모니터링 알람 설정 방법을 알려주세요", "label": "procedure"}
+{"text": "CloudFront의 개념을 알려줘", "label": "explanation"}
+{"text": "블루투스와 WiFi의 장단점을 ", "label": "comparison"}
+{"text": "APM 뭔지 설명해주세요", "label": "explanation"}
+{"text": "공유기와 스위치의 차이를 알려줘", "label": "comparison"}
+{"text": "학자금 지원 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "비밀번호 초기화는 어떻게 하는 건가요", "label": "procedure"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있나요", "label": "yesno"}
+{"text": "테스트 서버 직접 재시작 가능해", "label": "yesno"}
+{"text": "이전에 설명한 내용 정리해주세요", "label": "other"}
+{"text": "CloudFront의 개념을 알려줘", "label": "explanation"}
+{"text": "SSD와 HDD 비교해줘", "label": "comparison"}
+{"text": "이메일 계정 추가 방법을 알려줘", "label": "procedure"}
+{"text": "AWS와 GCP 비교해주세요", "label": "comparison"}
+{"text": "그때 언급한 기준이 뭐였나요", "label": "other"}
+{"text": "이직 추천서 요청은 어떻게 하나요", "label": "procedure"}
+{"text": "주말에도 IT 지원 가능해", "label": "yesno"}
+{"text": "징계 절차 어떻게 되는지 설명해주세요", "label": "explanation"}
+{"text": "사내 WiFi 연결 방법을 알려줘", "label": "procedure"}
+{"text": "이전에 설명한 내용 정리해줘", "label": "other"}
+{"text": "그 절차 다시 한번만 알려주실 수 있나요", "label": "other"}
+{"text": "그 내용을 불릿 포인트로 정리해주세요", "label": "other"}
+{"text": "연차와 월차 비교해주세요", "label": "comparison"}
+{"text": "MySQL과 PostgreSQL의 장단점을 ", "label": "comparison"}
+{"text": "반차와 시간연차의 차이를 알려주세요", "label": "comparison"}
+{"text": "게이트웨이 뭔지 ", "label": "explanation"}
+{"text": "그거 뭐였지", "label": "other"}
+{"text": "TCP와 UDP 비교해줘", "label": "comparison"}
+{"text": "Docker와 VM을 비교해줘", "label": "comparison"}
+{"text": "이직 추천서 요청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "어디 팀이라고 했지", "label": "other"}
+{"text": "이전 답변을 요약해줘", "label": "other"}
+{"text": "성과급 뭔지 설명해주세요", "label": "explanation"}
+{"text": "그 절차 다시 한번만 알려줘", "label": "other"}
+{"text": "Nginx와 Apache의 차이를 알려주세요", "label": "comparison"}
+{"text": "CDN 설정 절차를 설명해줘", "label": "procedure"}
+{"text": "코드를 JSON으로 변환해줘", "label": "other"}
+{"text": "아까 말한 거 다시 정리해주세요", "label": "other"}
+{"text": "RAM 8GB와 16GB의 차이를 ", "label": "comparison"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "위에 설명한 거 다시 보여줘", "label": "other"}
+{"text": "테스트 서버 직접 재시작 가능한가요", "label": "yesno"}
+{"text": "메트릭 무엇인지 설명해줘", "label": "explanation"}
+{"text": "모니터링 알람 설정 방법을 알려주세요", "label": "procedure"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "Docker와 VM를 비교해주세요", "label": "comparison"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있나요", "label": "yesno"}
+{"text": "CloudFront의 개념을 알려줘", "label": "explanation"}
+{"text": "징계 절차 어떻게 되는지 설명해줘", "label": "explanation"}
+{"text": "SSD와 HDD 비교해줘", "label": "comparison"}
+{"text": "Chrome과 Edge의 차이점을 알려줘", "label": "comparison"}
+{"text": "방화벽 규칙 수정 권한 ", "label": "yesno"}
+{"text": "휴가 취소 가능한가요", "label": "yesno"}
+{"text": "모니터 추가 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "연차를 시간 단위로 쓸 수 ", "label": "yesno"}
+{"text": "개발팀과 인프라팀의 협업 방식을 설명해주세요", "label": "explanation"}
+{"text": "RAM 8GB와 16GB의 차이를 ", "label": "comparison"}
+{"text": "Redis와 Memcached 비교해서 설명해줘", "label": "comparison"}
+{"text": "장애 대응 절차 설명해주세요", "label": "explanation"}
+{"text": "긴급 배포 승인 없이 가능한가요", "label": "yesno"}
+{"text": "맥북 지급 되나요", "label": "yesno"}
+{"text": "USB-C와 USB 3.0을 비교해줘", "label": "comparison"}
+{"text": "이전에 설명한 내용 정리해주세요", "label": "other"}
+{"text": "재직증명서 발급 방법을 알려줘", "label": "procedure"}
+{"text": "라우팅 뭔지 설명해주세요", "label": "explanation"}
+{"text": "그때 언급한 기준이 뭐였죠", "label": "other"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있나요", "label": "yesno"}
+{"text": "점심시간에 외출 가능한가요", "label": "yesno"}
+{"text": "서버 계정 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "SSD와 HDD 비교해주세요", "label": "comparison"}
+{"text": "VPN이 뭔지 설명해줘", "label": "explanation"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있어", "label": "yesno"}
+{"text": "위 내용을 마크다운으로 변환해줘", "label": "other"}
+{"text": "RDS 무엇인지 설명해줘", "label": "explanation"}
+{"text": "노트북 초기화 방법을 알려줘", "label": "procedure"}
+{"text": "트랜잭션 뭔지 설명해주세요", "label": "explanation"}
+{"text": "육아휴직과 출산휴가 비교해서 설명해줘", "label": "comparison"}
+{"text": "개인 노트북 사용 되나요", "label": "yesno"}
+{"text": "보상휴가와 대체휴가의 장단점을 ", "label": "comparison"}
+{"text": "육아휴직과 출산휴가 비교해서 설명해줘", "label": "comparison"}
+{"text": "비밀번호 초기화는 어떻게 하는 건가요", "label": "procedure"}
+{"text": "듀얼 모니터 설치 가능한가요", "label": "yesno"}
+{"text": "월차와 연차의 차이를 알려줘", "label": "explanation"}
+{"text": "어디 팀이라고 했는지", "label": "other"}
+{"text": "듀얼 모니터 설치 되나요", "label": "yesno"}
+{"text": "노트북 수리 신청 절차를 설명해줘", "label": "procedure"}
+{"text": "담당자가 누구라고 했나요", "label": "other"}
+{"text": "Chrome과 Edge의 차이점을 알려주세요", "label": "comparison"}
+{"text": "성과급과 인센티브 비교해서 설명해주세요", "label": "comparison"}
+{"text": "운영 DB 직접 접속 가능해", "label": "yesno"}
+{"text": "데스크톱과 노트북을 비교해서 설명해줘", "label": "comparison"}
+{"text": "MySQL과 PostgreSQL의 장단점을 ", "label": "comparison"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "전에 말한 조건 뭐였나", "label": "other"}
+{"text": "반차와 시간연차의 차이를 알려줘", "label": "comparison"}
+{"text": "방금 전 내용을 표로 바꿔주세요", "label": "other"}
+{"text": "육아휴직 남자도 쓸 수 있나요", "label": "yesno"}
+{"text": "반차와 시간연차의 차이를 알려주세요", "label": "comparison"}
+{"text": "서버 로그 실시간 조회 되나요", "label": "yesno"}
+{"text": "출장 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "처음 말한 거 다시 한번 설명해주세요", "label": "other"}
+{"text": "위 내용을 마크다운으로 변환해주세요", "label": "other"}
+{"text": "그거 뭐였는지", "label": "other"}
+{"text": "로컬에서 VPN으로 DB 접속 가능한가요", "label": "yesno"}
+{"text": "프록시 서버 뭔지 알고 싶어요", "label": "explanation"}
+{"text": "Redis와 Memcached 비교해서 설명해줘", "label": "comparison"}
+{"text": "QA팀 무슨 일을 하는지 알려줘", "label": "explanation"}
+{"text": "어디 팀이라고 했는지", "label": "other"}
+{"text": "DB 접근 권한 요청 방법을 알려줘", "label": "procedure"}
+{"text": "Lambda 뭔지 설명해주세요", "label": "explanation"}
+{"text": "맥북 지급 되나요", "label": "yesno"}
+{"text": "개인 클라우드 스토리지 사용 가능한가요", "label": "yesno"}
+{"text": "그 설명 간단하게 정리해줘", "label": "other"}
+{"text": "Chrome과 Edge의 차이점을 알려주세요", "label": "comparison"}
+{"text": "Primary-Replica 뭔지 설명해주세요", "label": "explanation"}
+{"text": "방화벽 규칙 수정 권한 ", "label": "yesno"}
+{"text": "코드 리뷰의 목적을 설명해줘", "label": "explanation"}
+{"text": "인프라 팀 무슨 일을 하는지 알려줘", "label": "explanation"}
+{"text": "이직 추천서 요청은 어떻게 하나요", "label": "procedure"}
+{"text": "이전 답변을 요약해주세요", "label": "other"}
+{"text": "VPN 연결하는 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "SSD와 HDD 비교해줘", "label": "comparison"}
+{"text": "4대보험 뭔지 알려주세요", "label": "explanation"}
+{"text": "데이터베이스 마이그레이션 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "사내 대출 신청할 수 있어", "label": "yesno"}
+{"text": "주말에도 IT 지원 가능해", "label": "yesno"}
+{"text": "보상휴가와 대체휴가의 장단점을 ", "label": "comparison"}
+{"text": "성과급 뭔지 설명해주세요", "label": "explanation"}
+{"text": "전일 연차와 반일 연차 비교해주세요", "label": "comparison"}
+{"text": "메트릭 무엇인지 설명해줘", "label": "explanation"}
+{"text": "코드를 JSON으로 변환해주세요", "label": "other"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "사고 보고서 뭔지 알려줘", "label": "explanation"}
+{"text": "맥북 지급 되나요", "label": "yesno"}
+{"text": "경조사비 청구 방법을 알려줘", "label": "procedure"}
+{"text": "Ingress 뭔지 설명해주세요", "label": "explanation"}
+{"text": "운영 DB 직접 접속 가능해", "label": "yesno"}
+{"text": "긴급 배포 승인 없이 가능해", "label": "yesno"}
+{"text": "위에 설명한 거 다시 보여주세요", "label": "other"}
+{"text": "증명서 발급 절차를 설명해줘", "label": "procedure"}
+{"text": "처음 말한 거 다시 한번 설명해줘", "label": "other"}
+{"text": "방금 전 내용을 표로 바꿔줘", "label": "other"}
+{"text": "서버 로그 실시간 조회 되나요", "label": "yesno"}
+{"text": "경조사 휴가 신청 절차를 단계별로 설명해주세요", "label": "procedure"}
+{"text": "육아휴직과 출산휴가 비교해서 설명해줘", "label": "comparison"}
+{"text": "휴가 취소 되나요", "label": "yesno"}
+{"text": "연차를 시간 단위로 쓸 수 ", "label": "yesno"}
+{"text": "VPN과 원격 데스크톱를 비교해주세요", "label": "comparison"}
+{"text": "원격 데스크톱의 원리를 알려주세요", "label": "explanation"}
+{"text": "Service의 개념을 알려줘", "label": "explanation"}
+{"text": "보상휴가의 의미를 알려줘", "label": "explanation"}
+{"text": "앞에서 말한 표를 다시 그려주세요", "label": "other"}
+{"text": "육아휴직 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "보상휴가와 대체휴가의 장단점을 ", "label": "comparison"}
+{"text": "그거 뭐였는지", "label": "other"}
+{"text": "정규화의 개념을 알려줘", "label": "explanation"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있어", "label": "yesno"}
+{"text": "방금 전 내용을 표로 바꿔줘", "label": "other"}
+{"text": "휴가 취소 가능한가요", "label": "yesno"}
+{"text": "이전 답변을 요약해줘", "label": "other"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있어", "label": "yesno"}
+{"text": "아까 말한 거 다시 정리해줘", "label": "other"}
+{"text": "이전 답변을 요약해줘", "label": "other"}
+{"text": "인프라 팀 무슨 일을 하는지 알려줘", "label": "explanation"}
+{"text": "원격으로 프린터 사용할 수 ", "label": "yesno"}
+{"text": "Primary-Replica 뭔지 설명해주세요", "label": "explanation"}
+{"text": "경조사 휴가와 병가 비교해줘", "label": "comparison"}
+{"text": "사내 대출 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "위 내용을 마크다운으로 변환해주세요", "label": "other"}
+{"text": "연차 신청하는 방법을 알려줘", "label": "procedure"}
+{"text": "시간외 근무와 휴일 근무의 차이를 ", "label": "comparison"}
+{"text": "개발 서버에서 외부 API 호출 가능해", "label": "yesno"}
+{"text": "이메일 계정 추가 방법을 알려줘", "label": "procedure"}
+{"text": "징계 절차 어떻게 되는지 설명해주세요", "label": "explanation"}
+{"text": "코드를 JSON으로 변환해주세요", "label": "other"}
+{"text": "원격으로 프린터 사용할 수 ", "label": "yesno"}
+{"text": "사내 WiFi 연결 방법을 알려줘", "label": "procedure"}
+{"text": "회의실 예약은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "Nginx와 Apache의 차이를 알려주세요", "label": "comparison"}
+{"text": "릴리스 프로세스의 절차를 알려줘", "label": "explanation"}
+{"text": "건강검진 신청 방법을 알려주세요", "label": "procedure"}
+{"text": "회의실 예약은 어떻게 하나요", "label": "procedure"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "모니터 추가 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "사고 보고서 뭔지 알려줘", "label": "explanation"}
+{"text": "클라우드 비용 조회 가능한가요", "label": "yesno"}
+{"text": "원격으로 프린터 사용할 수 ", "label": "yesno"}
+{"text": "그때 언급한 기준이 뭐였나요", "label": "other"}
+{"text": "메일 서명 설정하는 방법을 알려주실 수 있나요", "label": "procedure"}
+{"text": "이전에 설명한 내용 정리해주세요", "label": "other"}
+{"text": "사내 WiFi 연결 방법을 알려주세요", "label": "procedure"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있어", "label": "yesno"}
+{"text": "보상휴가와 대체휴가의 장단점을 ", "label": "comparison"}
+{"text": "블루투스와 WiFi의 장단점을 ", "label": "comparison"}
+{"text": "사내 대출의 조건을 알려줘", "label": "explanation"}
+{"text": "그때 언급한 기준이 뭐였죠", "label": "other"}
+{"text": "RDS 무엇인지 설명해줘", "label": "explanation"}
+{"text": "데이터베이스 마이그레이션 절차를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "백업 데이터 다운로드 가능해", "label": "yesno"}
+{"text": "TCP와 UDP 비교해주세요", "label": "comparison"}
+{"text": "긴급 배포 절차는 어떻게 되나요", "label": "procedure"}
+{"text": "재택근무와 사무실 근무의 장단점을 알려줘", "label": "comparison"}
+{"text": "소프트웨어 설치 요청은 어떻게 하나요", "label": "procedure"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "VPN 연결하는 절차를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "모니터링 알람 설정 방법을 알려줘", "label": "procedure"}
+{"text": "그 내용을 불릿 포인트로 정리해주세요", "label": "other"}
+{"text": "이중인증 뭔지 설명해주세요", "label": "explanation"}
+{"text": "사내 WiFi가 5GHz를 ", "label": "yesno"}
+{"text": "변경관리 프로세스 설명해줘", "label": "explanation"}
+{"text": "HTTP와 HTTPS의 장단점을 알려줘", "label": "comparison"}
+{"text": "Kubernetes 무엇인지 설명해줘", "label": "explanation"}
+{"text": "Nginx와 Apache의 차이를 알려주세요", "label": "comparison"}
+{"text": "시간외 근무와 휴일 근무의 차이를 ", "label": "comparison"}
+{"text": "Ingress 뭔지 설명해주세요", "label": "explanation"}
+{"text": "연차를 시간 단위로 쓸 수 ", "label": "yesno"}
+{"text": "정규화의 개념을 알려주세요", "label": "explanation"}
+{"text": "위 내용을 마크다운으로 변환해줘", "label": "other"}
+{"text": "시간외 근무와 휴일 근무의 차이를 ", "label": "comparison"}
+{"text": "시간외 근무와 휴일 근무의 차이를 ", "label": "comparison"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "모니터링 알람 설정 방법을 알려줘", "label": "procedure"}
+{"text": "이전 답변을 요약해줘", "label": "other"}
+{"text": "테스트 서버 직접 재시작 가능해", "label": "yesno"}
+{"text": "Sharding의 개념을 알려주세요", "label": "explanation"}
+{"text": "경조사비 청구 방법을 알려줘", "label": "procedure"}
+{"text": "듀얼 모니터 설치 가능한가요", "label": "yesno"}
+{"text": "Windows와 Mac을 비교해서 설명해줘", "label": "comparison"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "프로덕션 서버에 배포 권한 ", "label": "yesno"}
+{"text": "도메인 가입 뭔지 설명해주세요", "label": "explanation"}
+{"text": "전에 말한 조건 뭐였나", "label": "other"}
+{"text": "코드 리뷰의 목적을 설명해주세요", "label": "explanation"}
+{"text": "백업 데이터 다운로드 가능해", "label": "yesno"}
+{"text": "주말에도 IT 지원 가능해", "label": "yesno"}
+{"text": "아까 말한 거 다시 정리해주세요", "label": "other"}
+{"text": "S3 버킷의 개념을 알려주세요", "label": "explanation"}
+{"text": "Primary-Replica 뭔지 설명해주세요", "label": "explanation"}
+{"text": "개발 서버에서 외부 API 호출 가능한가요", "label": "yesno"}
+{"text": "소프트웨어 설치 요청은 어떻게 하나요", "label": "procedure"}
+{"text": "위 내용을 마크다운으로 변환해주세요", "label": "other"}
+{"text": "개발 서버에서 외부 API 호출 가능해", "label": "yesno"}
+{"text": "컨테이너의 개념을 알려주세요", "label": "explanation"}
+{"text": "듀얼 모니터 설치 가능한가요", "label": "yesno"}
+{"text": "서버 증설 신청 방법을 알려줘", "label": "procedure"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "재직증명서 발급 방법을 알려줘", "label": "procedure"}
+{"text": "개인 노트북 사용 되나요", "label": "yesno"}
+{"text": "정규직 전환 절차 알려줘", "label": "explanation"}
+{"text": "데이터베이스 마이그레이션 절차를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "전에 말한 조건 뭐였나", "label": "other"}
+{"text": "Security Group의 역할을 알려줘", "label": "explanation"}
+{"text": "USB-C와 USB 3.0를 비교해주세요", "label": "comparison"}
+{"text": "로컬에서 VPN으로 DB 접속 가능한가요", "label": "yesno"}
+{"text": "휴가 취소 되나요", "label": "yesno"}
+{"text": "담당자가 누구라고 했나요", "label": "other"}
+{"text": "사내 인터넷이 안될 때 해결 방법을 알려주세요", "label": "procedure"}
+{"text": "VPN 없이 사내망 접속 되나요", "label": "yesno"}
+{"text": "로컬에서 VPN으로 DB 접속 되나요", "label": "yesno"}
+{"text": "회의실 예약은 어떻게 하나요", "label": "procedure"}
+{"text": "출산휴가는 유급인가요", "label": "yesno"}
+{"text": "TCP와 UDP 비교해주세요", "label": "comparison"}
+{"text": "방금 전 내용을 표로 바꿔주세요", "label": "other"}
+{"text": "서버 로그 실시간 조회 가능한가요", "label": "yesno"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있어", "label": "yesno"}
+{"text": "개인 노트북 사용 되나요", "label": "yesno"}
+{"text": "연차를 시간 단위로 쓸 수 ", "label": "yesno"}
+{"text": "그거 뭐였는지", "label": "other"}
+{"text": "Deployment 뭔지 설명해줘", "label": "explanation"}
+{"text": "테스트 서버 직접 재시작 가능해", "label": "yesno"}
+{"text": "로컬에서 VPN으로 DB 접속 가능한가요", "label": "yesno"}
+{"text": "방금 준 링크 다시 보여주세요", "label": "other"}
+{"text": "긴급 배포 승인 없이 가능한가요", "label": "yesno"}
+{"text": "클라우드 비용 조회 가능한가요", "label": "yesno"}
+{"text": "건강검진 신청 방법을 알려줘", "label": "procedure"}
+{"text": "재택근무 신청 되나요", "label": "yesno"}
+{"text": "로드밸런서의 역할을 알려줘", "label": "explanation"}
+{"text": "IPv4와 IPv6의 차이를 ", "label": "comparison"}
+{"text": "담당자가 누구라고 했나요", "label": "other"}
+{"text": "TCP와 UDP 비교해줘", "label": "comparison"}
+{"text": "클라우드 비용 조회 되나요", "label": "yesno"}
+{"text": "백업 데이터 다운로드 가능한가요", "label": "yesno"}
+{"text": "이메일 계정 추가 방법을 알려주세요", "label": "procedure"}
+{"text": "연차의 개념을 설명해주세요", "label": "explanation"}
+{"text": "인사평가 입력 절차를 단계별로 설명해주세요", "label": "procedure"}
+{"text": "그 설명 간단하게 정리해주세요", "label": "other"}
+{"text": "반차 사용할 때 사유 작성 필요해", "label": "yesno"}
+{"text": "SSD와 HDD 비교해주세요", "label": "comparison"}
+{"text": "USB-C와 USB 3.0를 비교해주세요", "label": "comparison"}
+{"text": "그거 뭐였지", "label": "other"}
+{"text": "Windows와 Mac을 비교해서 설명해줘", "label": "comparison"}
+{"text": "경조사비 청구 방법을 알려주세요", "label": "procedure"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "담당자가 누구라고 했어요", "label": "other"}
+{"text": "경조사 휴가와 병가 비교해주세요", "label": "comparison"}
+{"text": "출산휴가는 유급인지", "label": "yesno"}
+{"text": "테스트 서버 직접 재시작 가능한가요", "label": "yesno"}
+{"text": "키보드/마우스 교체 요청 절차를 설명해주세요", "label": "procedure"}
+{"text": "경조사 휴가와 병가 비교해주세요", "label": "comparison"}
+{"text": "사내 WiFi 연결 방법을 알려줘", "label": "procedure"}
+{"text": "그 절차 다시 한번만 알려줘", "label": "other"}
+{"text": "가족돌봄휴가 뭔지 설명해주세요", "label": "explanation"}
+{"text": "TCP와 UDP 비교해줘", "label": "comparison"}
+{"text": "경조사 휴가와 병가 비교해줘", "label": "comparison"}
+{"text": "사내 인터넷이 안될 때 해결 방법을 알려주세요", "label": "procedure"}
+{"text": "DNS의 역할을 알려주세요", "label": "explanation"}
+{"text": "개인 클라우드 스토리지 사용 가능해", "label": "yesno"}
+{"text": "방화벽 무슨 역할을 하는지 알려주세요", "label": "explanation"}
+{"text": "메트릭 무엇인지 설명해줘", "label": "explanation"}
+{"text": "Pod의 역할을 알려주세요", "label": "explanation"}
+{"text": "이직 추천서 요청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "급여명세서 조회 방법을 알려주세요", "label": "procedure"}
+{"text": "로컬에서 VPN으로 DB 접속 가능한가요", "label": "yesno"}
+{"text": "HTTP와 HTTPS의 장단점을 알려줘", "label": "comparison"}
+{"text": "아까 말한 거 다시 정리해주세요", "label": "other"}
+{"text": "로그 조회 권한 요청은 어떻게 하나요", "label": "procedure"}
+{"text": "이전에 설명한 내용 정리해주세요", "label": "other"}
+{"text": "위에 설명한 거 다시 보여줘", "label": "other"}
+{"text": "개인 노트북 사용 가능한가요", "label": "yesno"}
+{"text": "MAC 주소 뭔지 설명해주세요", "label": "explanation"}
+{"text": "긴급 배포 절차는 어떻게 되나요", "label": "procedure"}
+{"text": "시간외 근무와 휴일 근무의 차이를 ", "label": "comparison"}
+{"text": "RAM과 ROM의 차이를 설명해줘", "label": "explanation"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "이메일 계정 추가 방법을 알려주세요", "label": "procedure"}
+{"text": "처음 말한 거 다시 한번 설명해주세요", "label": "other"}
+{"text": "휴가 취소 가능한가요", "label": "yesno"}
+{"text": "재택근무 신청 되나요", "label": "yesno"}
+{"text": "아까 말한 거 다시 정리해줘", "label": "other"}
+{"text": "재택근무와 사무실 근무의 장단점을 알려주세요", "label": "comparison"}
+{"text": "휴가 취소 가능한가요", "label": "yesno"}
+{"text": "징계 절차 어떻게 되는지 설명해주세요", "label": "explanation"}
+{"text": "이메일 계정 추가 방법을 알려주세요", "label": "procedure"}
+{"text": "서버 증설 신청 방법을 알려줘", "label": "procedure"}
+{"text": "처음 말한 거 다시 한번 설명해주세요", "label": "other"}
+{"text": "방화벽 규칙 수정 권한 ", "label": "yesno"}
+{"text": "SSL 인증서 발급 방법을 알려주세요", "label": "procedure"}
+{"text": "DNS의 역할을 알려줘", "label": "explanation"}
+{"text": "담당자가 누구라고 했어요", "label": "other"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "모니터링 알람 설정 방법을 알려주세요", "label": "procedure"}
+{"text": "공유기와 스위치의 차이를 알려주세요", "label": "comparison"}
+{"text": "사무실에 무선 충전기 있어", "label": "yesno"}
+{"text": "방화벽 오픈 신청 절차를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "릴리스 프로세스의 절차를 알려주세요", "label": "explanation"}
+{"text": "장애 대응 절차 설명해주세요", "label": "explanation"}
+{"text": "Docker와 VM을 비교해줘", "label": "comparison"}
+{"text": "점심시간에 외출 가능한가요", "label": "yesno"}
+{"text": "성과급과 인센티브 비교해서 설명해줘", "label": "comparison"}
+{"text": "MySQL과 PostgreSQL의 장단점을 ", "label": "comparison"}
+{"text": "MAC 주소 뭔지 설명해주세요", "label": "explanation"}
+{"text": "EC2 뭔지 설명해주세요", "label": "explanation"}
+{"text": "듀얼 모니터 설치 가능한가요", "label": "yesno"}
+{"text": "사내 인터넷이 안될 때 해결 방법을 알려줘", "label": "procedure"}
+{"text": "Docker와 VM를 비교해주세요", "label": "comparison"}
+{"text": "듀얼 모니터 설치 가능한가요", "label": "yesno"}
+{"text": "컨테이너의 개념을 알려줘", "label": "explanation"}
+{"text": "증명서 발급 절차를 설명해줘", "label": "procedure"}
+{"text": "APM 뭔지 설명해주세요", "label": "explanation"}
+{"text": "블루스크린 왜 뜨는지 알려줘", "label": "explanation"}
+{"text": "사고 보고서 뭔지 알려주세요", "label": "explanation"}
+{"text": "이전 답변을 요약해주세요", "label": "other"}
+{"text": "방화벽 무슨 역할을 하는지 알려줘", "label": "explanation"}
+{"text": "사내 대출 신청할 수 있나요", "label": "yesno"}
+{"text": "재택근무와 사무실 근무의 장단점을 알려주세요", "label": "comparison"}
+{"text": "블루스크린 왜 뜨는지 알려줘", "label": "explanation"}
+{"text": "아까 말한 거 다시 정리해줘", "label": "other"}
+{"text": "육아휴직과 출산휴가 비교해서 설명해주세요", "label": "comparison"}
+{"text": "Docker 뭔지 설명해주세요", "label": "explanation"}
+{"text": "방금 전 내용을 표로 바꿔줘", "label": "other"}
+{"text": "서버 로그 실시간 조회 되나요", "label": "yesno"}
+{"text": "방금 준 링크 다시 보여줘", "label": "other"}
+{"text": "출산휴가의 기간을 알려줘", "label": "explanation"}
+{"text": "그거 뭐였지", "label": "other"}
+{"text": "연차와 월차 비교해줘", "label": "comparison"}
+{"text": "RAM 8GB와 16GB의 차이를 ", "label": "comparison"}
+{"text": "VPN과 원격 데스크톱를 비교해주세요", "label": "comparison"}
+{"text": "좀 전에 준 예시 다시 보여줘", "label": "other"}
+{"text": "Helm의 역할을 알려줘", "label": "explanation"}
+{"text": "NAT 무엇인지 알려줘", "label": "explanation"}
+{"text": "보상휴가와 대체휴가의 장단점을 ", "label": "comparison"}
+{"text": "병가 뭔지 설명해줘", "label": "explanation"}
+{"text": "QA팀 무슨 일을 하는지 알려줘", "label": "explanation"}
+{"text": "서버 로그 실시간 조회 되나요", "label": "yesno"}
+{"text": "사내 대출 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "트랜잭션 뭔지 설명해주세요", "label": "explanation"}
+{"text": "좀 전에 준 예시 다시 보여주세요", "label": "other"}
+{"text": "장애 대응 절차 설명해줘", "label": "explanation"}
+{"text": "전에 말한 조건 뭐였어", "label": "other"}
+{"text": "서버 증설 신청 방법을 알려줘", "label": "procedure"}
+{"text": "휴가 취소 되나요", "label": "yesno"}
+{"text": "위에 설명한 거 다시 보여줘", "label": "other"}
+{"text": "메일 서명 설정하는 방법을 알려주실 수 있나요", "label": "procedure"}
+{"text": "키보드/마우스 교체 요청 절차를 설명해주세요", "label": "procedure"}
+{"text": "증명서 발급 절차를 설명해줘", "label": "procedure"}
+{"text": "연차 신청하는 방법을 알려주실 수 있나요", "label": "procedure"}
+{"text": "VPN 재연결 절차를 단계별로 알려주세요", "label": "procedure"}
+{"text": "처음 말한 거 다시 한번 설명해줘", "label": "other"}
+{"text": "인사평가 입력 절차를 단계별로 설명해주세요", "label": "procedure"}
+{"text": "서버 로그 실시간 조회 되나요", "label": "yesno"}
+{"text": "원격으로 프린터 사용할 수 ", "label": "yesno"}
+{"text": "이메일 계정 추가 방법을 알려주세요", "label": "procedure"}
+{"text": "출산휴가는 유급인가요", "label": "yesno"}
+{"text": "HTTP와 HTTPS의 장단점을 알려줘", "label": "comparison"}
+{"text": "앞에서 말한 표를 다시 그려줘", "label": "other"}
+{"text": "경조사 휴가의 범위를 알려줘", "label": "explanation"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "긴급 배포 승인 없이 가능해", "label": "yesno"}
+{"text": "DBA팀 무엇을 하는지 알려주세요", "label": "explanation"}
+{"text": "건강검진 신청 방법을 알려주세요", "label": "procedure"}
+{"text": "그 설명 간단하게 정리해줘", "label": "other"}
+{"text": "회의실 예약은 어떻게 하나요", "label": "procedure"}
+{"text": "경조사비 당일 신청 가능한가요", "label": "yesno"}
+{"text": "방금 전 내용을 표로 바꿔주세요", "label": "other"}
+{"text": "경조사 휴가와 병가 비교해주세요", "label": "comparison"}
+{"text": "Ingress 뭔지 설명해주세요", "label": "explanation"}
+{"text": "퇴사 절차 알려주세요", "label": "explanation"}
+{"text": "노트북 수리 신청 절차를 설명해주세요", "label": "procedure"}
+{"text": "TCP와 UDP 비교해줘", "label": "comparison"}
+{"text": "사고 보고서 뭔지 알려줘", "label": "explanation"}
+{"text": "데스크톱과 노트북를 비교해서 설명해주세요", "label": "comparison"}
+{"text": "테스트 서버 직접 재시작 가능한가요", "label": "yesno"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "연차와 월차 비교해주세요", "label": "comparison"}
+{"text": "DHCP 어떻게 작동하는지 설명해주세요", "label": "explanation"}
+{"text": "방화벽 규칙 수정 권한 ", "label": "yesno"}
+{"text": "휴가 취소 되나요", "label": "yesno"}
+{"text": "증명서 발급 절차를 설명해주세요", "label": "procedure"}
+{"text": "재택근무 신청 되나요", "label": "yesno"}
+{"text": "앞에서 말한 표를 다시 그려줘", "label": "other"}
+{"text": "연차와 월차 비교해줘", "label": "comparison"}
+{"text": "APM 뭔지 설명해주세요", "label": "explanation"}
+{"text": "처음 말한 거 다시 한번 설명해주세요", "label": "other"}
+{"text": "개발 서버에서 외부 API 호출 가능해", "label": "yesno"}
+{"text": "긴급 배포 절차는 어떻게 되나요", "label": "procedure"}
+{"text": "4대보험 뭔지 알려주세요", "label": "explanation"}
+{"text": "그때 언급한 기준이 뭐였죠", "label": "other"}
+{"text": "포트 포워딩 뭔지 알려줘", "label": "explanation"}
+{"text": "육아휴직과 출산휴가 비교해서 설명해주세요", "label": "comparison"}
+{"text": "공유기와 스위치의 차이를 알려주세요", "label": "comparison"}
+{"text": "암호화의 원리를 설명해주세요", "label": "explanation"}
+{"text": "인사평가 입력 절차를 단계별로 설명해주세요", "label": "procedure"}
+{"text": "VPN 없이 사내망 접속 가능한가요", "label": "yesno"}
+{"text": "클라우드 비용 조회 가능한가요", "label": "yesno"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있나요", "label": "yesno"}
+{"text": "이전에 설명한 내용 정리해줘", "label": "other"}
+{"text": "출장 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "방금 준 링크 다시 보여줘", "label": "other"}
+{"text": "아까 말한 거 다시 정리해줘", "label": "other"}
+{"text": "듀얼 모니터 설치 가능한가요", "label": "yesno"}
+{"text": "VPN 재연결 절차를 단계별로 알려주세요", "label": "procedure"}
+{"text": "앞에서 말한 표를 다시 그려주세요", "label": "other"}
+{"text": "회의실 예약은 어떻게 하나요", "label": "procedure"}
+{"text": "아까 말한 거 다시 정리해줘", "label": "other"}
+{"text": "학자금 지원 뭔지 설명해줘", "label": "explanation"}
+{"text": "백업 데이터 다운로드 가능해", "label": "yesno"}
+{"text": "처음 말한 거 다시 한번 설명해줘", "label": "other"}
+{"text": "사내 WiFi 연결 방법을 알려줘", "label": "procedure"}
+{"text": "퇴직금의 계산법을 설명해줘", "label": "explanation"}
+{"text": "Docker와 VM를 비교해주세요", "label": "comparison"}
+{"text": "긴급 배포 승인 없이 가능한가요", "label": "yesno"}
+{"text": "그때 언급한 기준이 뭐였죠", "label": "other"}
+{"text": "Windows와 Mac을 비교해서 설명해줘", "label": "comparison"}
+{"text": "휴가 취소 가능한가요", "label": "yesno"}
+{"text": "경조사 휴가의 범위를 알려주세요", "label": "explanation"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "방화벽 규칙 수정 권한 ", "label": "yesno"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "Docker와 VM를 비교해주세요", "label": "comparison"}
+{"text": "그 절차 다시 한번만 알려주실 수 있나요", "label": "other"}
+{"text": "담당자가 누구라고 했어요", "label": "other"}
+{"text": "사내 대출의 조건을 알려주세요", "label": "explanation"}
+{"text": "노트북 수리 신청 절차를 설명해줘", "label": "procedure"}
+{"text": "TCP와 UDP 비교해주세요", "label": "comparison"}
+{"text": "서버 계정 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "개인 노트북 사용 가능한가요", "label": "yesno"}
+{"text": "위에 설명한 거 다시 보여줘", "label": "other"}
+{"text": "긴급 배포 승인 없이 가능한가요", "label": "yesno"}
+{"text": "Docker와 VM을 비교해줘", "label": "comparison"}
+{"text": "백업 복구 절차를 설명해주세요", "label": "procedure"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "아까 말한 거 다시 정리해주세요", "label": "other"}
+{"text": "개인 노트북 사용 가능한가요", "label": "yesno"}
+{"text": "사내 대출 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "방금 전 내용을 표로 바꿔줘", "label": "other"}
+{"text": "사내 대출 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "운영 DB 직접 접속 가능해", "label": "yesno"}
+{"text": "비밀번호 초기화는 어떻게 하나요", "label": "procedure"}
+{"text": "VPN 연결하는 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "경조사비 당일 신청 가능한가요", "label": "yesno"}
+{"text": "사내 WiFi가 5GHz를 ", "label": "yesno"}
+{"text": "그룹 정책 무엇인지 알려주세요", "label": "explanation"}
+{"text": "출산휴가는 유급인가요", "label": "yesno"}
+{"text": "경조사 휴가 신청 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "그 절차 다시 한번만 알려줘", "label": "other"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "VPN과 원격 데스크톱을 비교해줘", "label": "comparison"}
+{"text": "경조사비 청구 방법을 알려줘", "label": "procedure"}
+{"text": "Chrome과 Edge의 차이점을 알려주세요", "label": "comparison"}
+{"text": "SSD와 HDD 비교해줘", "label": "comparison"}
+{"text": "정규화의 개념을 알려주세요", "label": "explanation"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "보상휴가의 의미를 알려주세요", "label": "explanation"}
+{"text": "코드를 JSON으로 변환해주세요", "label": "other"}
+{"text": "병가 사용할 때 진단서 필요한가요", "label": "yesno"}
+{"text": "시간외 근무와 휴일 근무의 차이를 ", "label": "comparison"}
+{"text": "클라우드 비용 조회 되나요", "label": "yesno"}
+{"text": "재택근무와 사무실 근무의 장단점을 알려주세요", "label": "comparison"}
+{"text": "Sharding의 개념을 알려줘", "label": "explanation"}
+{"text": "개인 클라우드 스토리지 사용 가능한가요", "label": "yesno"}
+{"text": "이전 답변을 요약해주세요", "label": "other"}
+{"text": "데스크톱과 노트북을 비교해서 설명해줘", "label": "comparison"}
+{"text": "재직증명서 발급 방법을 알려주세요", "label": "procedure"}
+{"text": "퇴직금의 계산법을 설명해주세요", "label": "explanation"}
+{"text": "재택근무와 사무실 근무의 장단점을 알려주세요", "label": "comparison"}
+{"text": "RAM 8GB와 16GB의 차이를 ", "label": "comparison"}
+{"text": "반차 사용할 때 사유 작성 필요한가요", "label": "yesno"}
+{"text": "모니터링 알람 설정 방법을 알려줘", "label": "procedure"}
+{"text": "보상휴가와 대체휴가의 장단점을 ", "label": "comparison"}
+{"text": "블루투스와 WiFi의 장단점을 ", "label": "comparison"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "인사 평가의 방식을 알려줘", "label": "explanation"}
+{"text": "위 내용을 마크다운으로 변환해줘", "label": "other"}
+{"text": "프록시 서버 뭔지 알고 싶어요", "label": "explanation"}
+{"text": "그 내용을 불릿 포인트로 정리해줘", "label": "other"}
+{"text": "DB 접근 권한 요청 방법을 알려주세요", "label": "procedure"}
+{"text": "도메인 등록 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "경조사비 청구 방법을 알려주세요", "label": "procedure"}
+{"text": "연차 신청하는 방법을 알려주실 수 있나요", "label": "procedure"}
+{"text": "USB-C와 USB 3.0을 비교해줘", "label": "comparison"}
+{"text": "원격 데스크톱의 원리를 알려주세요", "label": "explanation"}
+{"text": "위에 설명한 거 다시 보여줘", "label": "other"}
+{"text": "데이터베이스 마이그레이션 절차를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "위에 설명한 거 다시 보여줘", "label": "other"}
+{"text": "라우팅 뭔지 설명해주세요", "label": "explanation"}
+{"text": "인사 평가의 방식을 알려주세요", "label": "explanation"}
+{"text": "백업 복구 절차를 설명해줘", "label": "procedure"}
+{"text": "육아휴직 남자도 쓸 수 있나요", "label": "yesno"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "장애 대응 절차 설명해줘", "label": "explanation"}
+{"text": "DNS의 역할을 알려줘", "label": "explanation"}
+{"text": "DevOps 뭔지 알려주세요", "label": "explanation"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "블루투스와 WiFi의 장단점을 ", "label": "comparison"}
+{"text": "Lambda 뭔지 설명해주세요", "label": "explanation"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "그때 언급한 기준이 뭐였죠", "label": "other"}
+{"text": "처음 말한 거 다시 한번 설명해주세요", "label": "other"}
+{"text": "방금 준 링크 다시 보여주세요", "label": "other"}
+{"text": "도메인 등록 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "그때 언급한 기준이 뭐였나요", "label": "other"}
+{"text": "학자금 지원 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "반차 사용할 때 사유 작성 필요한가요", "label": "yesno"}
+{"text": "방화벽 규칙 수정 권한 ", "label": "yesno"}
+{"text": "재택근무 신청 가능한가요", "label": "yesno"}
+{"text": "어디 팀이라고 했는지", "label": "other"}
+{"text": "노트북 수리 신청 절차를 설명해줘", "label": "procedure"}
+{"text": "공유기와 스위치의 차이를 알려줘", "label": "comparison"}
+{"text": "VPN 연결하는 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "노트북 초기화 방법을 알려줘", "label": "procedure"}
+{"text": "어디 팀이라고 했지", "label": "other"}
+{"text": "공용 폴더 권한 신청 절차를 설명해줘", "label": "procedure"}
+{"text": "코드를 JSON으로 변환해주세요", "label": "other"}
+{"text": "로그 조회 권한 요청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "처음 말한 거 다시 한번 설명해줘", "label": "other"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "근태 관리의 원칙을 알려줘", "label": "explanation"}
+{"text": "소프트웨어 설치 요청은 어떻게 하나요", "label": "procedure"}
+{"text": "HTTP와 HTTPS의 장단점을 알려줘", "label": "comparison"}
+{"text": "로그 수집의 원리를 알려줘", "label": "explanation"}
+{"text": "코드를 JSON으로 변환해줘", "label": "other"}
+{"text": "경조사 휴가와 병가 비교해줘", "label": "comparison"}
+{"text": "앞에서 말한 표를 다시 그려주세요", "label": "other"}
+{"text": "좀 전에 준 예시 다시 보여주세요", "label": "other"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "개발 서버에서 외부 API 호출 가능한가요", "label": "yesno"}
+{"text": "대체휴가 뭔지 설명해줘", "label": "explanation"}
+{"text": "Docker와 VM를 비교해주세요", "label": "comparison"}
+{"text": "전에 말한 조건 뭐였나", "label": "other"}
+{"text": "Docker와 VM를 비교해주세요", "label": "comparison"}
+{"text": "전일 연차와 반일 연차 비교해주세요", "label": "comparison"}
+{"text": "사내 WiFi 연결 방법을 알려줘", "label": "procedure"}
+{"text": "그 내용을 불릿 포인트로 정리해줘", "label": "other"}
+{"text": "모니터링 알람 설정 방법을 알려주세요", "label": "procedure"}
+{"text": "점심시간에 외출 되나요", "label": "yesno"}
+{"text": "퇴직금 조회 절차를 설명해주세요", "label": "procedure"}
+{"text": "코드를 JSON으로 변환해주세요", "label": "other"}
+{"text": "전에 말한 조건 뭐였나", "label": "other"}
+{"text": "Pod의 역할을 알려줘", "label": "explanation"}
+{"text": "수습 기간 뭔지 설명해줘", "label": "explanation"}
+{"text": "USB-C와 USB 3.0를 비교해주세요", "label": "comparison"}
+{"text": "IPv4와 IPv6의 차이를 ", "label": "comparison"}
+{"text": "이메일 계정 추가 방법을 알려줘", "label": "procedure"}
+{"text": "프로덕션 서버에 배포 권한 ", "label": "yesno"}
+{"text": "클라우드 비용 조회 되나요", "label": "yesno"}
+{"text": "그거 뭐였는지", "label": "other"}
+{"text": "병가 뭔지 설명해줘", "label": "explanation"}
+{"text": "Replication 무엇인지 설명해줘", "label": "explanation"}
+{"text": "전일 연차와 반일 연차 비교해주세요", "label": "comparison"}
+{"text": "코드를 JSON으로 변환해주세요", "label": "other"}
+{"text": "이직 추천서 요청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "사내 인터넷이 안될 때 해결 방법을 알려줘", "label": "procedure"}
+{"text": "이전 답변을 요약해주세요", "label": "other"}
+{"text": "경조사비 당일 신청 가능한가요", "label": "yesno"}
+{"text": "출장 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "HTTP와 HTTPS의 장단점을 알려줘", "label": "comparison"}
+{"text": "방금 전 내용을 표로 바꿔주세요", "label": "other"}
+{"text": "이메일 계정 추가 방법을 알려주세요", "label": "procedure"}
+{"text": "연차와 월차 비교해주세요", "label": "comparison"}
+{"text": "로드밸런서의 역할을 알려주세요", "label": "explanation"}
+{"text": "사내 WiFi 연결 방법을 알려줘", "label": "procedure"}
+{"text": "HTTP와 HTTPS의 장단점을 알려주세요", "label": "comparison"}
+{"text": "출산휴가는 유급인지", "label": "yesno"}
+{"text": "반차 사용할 때 사유 작성 필요해", "label": "yesno"}
+{"text": "Docker와 VM을 비교해줘", "label": "comparison"}
+{"text": "학자금 지원 뭔지 설명해주세요", "label": "explanation"}
+{"text": "연차를 시간 단위로 쓸 수 ", "label": "yesno"}
+{"text": "그 내용을 불릿 포인트로 정리해주세요", "label": "other"}
+{"text": "월차와 연차의 차이를 알려주세요", "label": "explanation"}
+{"text": "DNS의 역할을 알려주세요", "label": "explanation"}
+{"text": "모니터링 알람 설정 방법을 알려줘", "label": "procedure"}
+{"text": "육아휴직과 출산휴가 비교해서 설명해주세요", "label": "comparison"}
+{"text": "로컬에서 VPN으로 DB 접속 가능한가요", "label": "yesno"}
+{"text": "도메인 등록 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "메일 서명 설정하는 방법을 알려주실 수 있나요", "label": "procedure"}
+{"text": "방금 전 내용을 표로 바꿔줘", "label": "other"}
+{"text": "좀 전에 준 예시 다시 보여주세요", "label": "other"}
+{"text": "서버 계정 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "RAM 8GB와 16GB의 차이를 ", "label": "comparison"}
+{"text": "경조사비 청구 방법을 알려줘", "label": "procedure"}
+{"text": "대체휴가 뭔지 설명해줘", "label": "explanation"}
+{"text": "개인 클라우드 스토리지 사용 가능해", "label": "yesno"}
+{"text": "성과급 뭔지 설명해줘", "label": "explanation"}
+{"text": "사내 대출 신청할 수 있어", "label": "yesno"}
+{"text": "HTTP와 HTTPS의 장단점을 알려주세요", "label": "comparison"}
+{"text": "보상휴가와 대체휴가의 장단점을 ", "label": "comparison"}
+{"text": "휴가 취소 되나요", "label": "yesno"}
+{"text": "맥북 지급 되나요", "label": "yesno"}
+{"text": "클라우드 비용 조회 되나요", "label": "yesno"}
+{"text": "AWS와 GCP 비교해주세요", "label": "comparison"}
+{"text": "경조사 휴가 신청 절차를 단계별로 설명해주세요", "label": "procedure"}
+{"text": "경조사 휴가의 범위를 알려주세요", "label": "explanation"}
+{"text": "출산휴가의 기간을 알려줘", "label": "explanation"}
+{"text": "그 내용을 불릿 포인트로 정리해줘", "label": "other"}
+{"text": "노트북 수리 신청 절차를 설명해줘", "label": "procedure"}
+{"text": "프록시 서버 뭔지 알고 싶어요", "label": "explanation"}
+{"text": "어디 팀이라고 했는지", "label": "other"}
+{"text": "그 설명 간단하게 정리해줘", "label": "other"}
+{"text": "4대보험 가입 증명서 발급은 어떻게 하나요", "label": "procedure"}
+{"text": "Auto Scaling 뭔지 설명해주세요", "label": "explanation"}
+{"text": "학자금 지원 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "VPN이 뭔지 설명해줘", "label": "explanation"}
+{"text": "앞에서 말한 표를 다시 그려줘", "label": "other"}
+{"text": "반차와 시간연차의 차이를 알려줘", "label": "comparison"}
+{"text": "코드를 JSON으로 변환해줘", "label": "other"}
+{"text": "이전 답변을 요약해줘", "label": "other"}
+{"text": "DHCP 어떻게 작동하는지 설명해줘", "label": "explanation"}
+{"text": "점심시간에 외출 되나요", "label": "yesno"}
+{"text": "백업 데이터 다운로드 가능해", "label": "yesno"}
+{"text": "연차와 월차 비교해주세요", "label": "comparison"}
+{"text": "서버 증설 신청 방법을 알려줘", "label": "procedure"}
+{"text": "변경관리 프로세스 설명해주세요", "label": "explanation"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있나요", "label": "yesno"}
+{"text": "육아휴직 남자도 쓸 수 있나요", "label": "yesno"}
+{"text": "VPN과 원격 데스크톱를 비교해주세요", "label": "comparison"}
+{"text": "그때 언급한 기준이 뭐였나요", "label": "other"}
+{"text": "VPN 재연결 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "휴가 취소 가능한가요", "label": "yesno"}
+{"text": "앞에서 말한 표를 다시 그려줘", "label": "other"}
+{"text": "퇴직금 조회 절차를 설명해줘", "label": "procedure"}
+{"text": "코드 리뷰의 목적을 설명해주세요", "label": "explanation"}
+{"text": "Ingress 뭔지 설명해줘", "label": "explanation"}
+{"text": "사내 대출 신청할 수 있나요", "label": "yesno"}
+{"text": "키보드/마우스 교체 요청 절차를 설명해줘", "label": "procedure"}
+{"text": "사내 대출 신청할 수 있나요", "label": "yesno"}
+{"text": "퇴직금 조회 절차를 설명해줘", "label": "procedure"}
+{"text": "병가 사용할 때 진단서 필요해", "label": "yesno"}
+{"text": "수습 기간 뭔지 설명해주세요", "label": "explanation"}
+{"text": "암호화의 원리를 설명해주세요", "label": "explanation"}
+{"text": "방금 준 링크 다시 보여주세요", "label": "other"}
+{"text": "인프라 팀 무슨 일을 하는지 알려줘", "label": "explanation"}
+{"text": "이전 답변을 요약해줘", "label": "other"}
+{"text": "긴급 배포 절차는 어떻게 되나요", "label": "procedure"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "IPv4와 IPv6의 차이를 ", "label": "comparison"}
+{"text": "경조사 휴가의 범위를 알려줘", "label": "explanation"}
+{"text": "정규화의 개념을 알려줘", "label": "explanation"}
+{"text": "Service의 개념을 알려줘", "label": "explanation"}
+{"text": "그 내용을 불릿 포인트로 정리해줘", "label": "other"}
+{"text": "개발 서버에서 외부 API 호출 가능해", "label": "yesno"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "서버 증설 신청 방법을 알려줘", "label": "procedure"}
+{"text": "근태 관리의 원칙을 알려줘", "label": "explanation"}
+{"text": "전일 연차와 반일 연차 비교해줘", "label": "comparison"}
+{"text": "운영 DB 직접 접속 가능해", "label": "yesno"}
+{"text": "IPv4와 IPv6의 차이를 ", "label": "comparison"}
+{"text": "퇴직금 조회 절차를 설명해주세요", "label": "procedure"}
+{"text": "사내 대출 신청할 수 있어", "label": "yesno"}
+{"text": "이직 추천서 요청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "데스크톱과 노트북을 비교해서 설명해줘", "label": "comparison"}
+{"text": "4대보험 가입 증명서 발급은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "건강검진 지원의 내용을 설명해주세요", "label": "explanation"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "프린터 연결하는 절차를 단계별로 설명해줘", "label": "procedure"}
+{"text": "도메인 등록 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "SSD와 HDD 비교해줘", "label": "comparison"}
+{"text": "DevOps 뭔지 알려주세요", "label": "explanation"}
+{"text": "공유기와 스위치의 차이를 알려줘", "label": "comparison"}
+{"text": "육아휴직 남자도 쓸 수 있어", "label": "yesno"}
+{"text": "데스크톱과 노트북를 비교해서 설명해주세요", "label": "comparison"}
+{"text": "반차와 시간연차의 차이를 알려줘", "label": "comparison"}
+{"text": "주말에도 IT 지원 가능해", "label": "yesno"}
+{"text": "회사 이메일을 개인 폰에서 볼 수 있나요", "label": "yesno"}
+{"text": "근태 관리의 원칙을 알려줘", "label": "explanation"}
+{"text": "휴가 취소 가능한가요", "label": "yesno"}
+{"text": "개발팀과 인프라팀의 협업 방식을 설명해주세요", "label": "explanation"}
+{"text": "휴가 취소 되나요", "label": "yesno"}
+{"text": "소프트웨어 설치 요청은 어떻게 하나요", "label": "procedure"}
+{"text": "DBA팀 무엇을 하는지 알려줘", "label": "explanation"}
+{"text": "개발 서버에서 외부 API 호출 가능해", "label": "yesno"}
+{"text": "장애 대응 프로세스를 단계별로 알려주실 수 있나요", "label": "procedure"}
+{"text": "코드 리뷰의 목적을 설명해줘", "label": "explanation"}
+{"text": "앞에서 말한 표를 다시 그려줘", "label": "other"}
+{"text": "성과급 뭔지 설명해주세요", "label": "explanation"}
+{"text": "도메인 가입 뭔지 설명해줘", "label": "explanation"}
+{"text": "휴가 취소 가능한가요", "label": "yesno"}
+{"text": "백업 데이터 다운로드 가능해", "label": "yesno"}
+{"text": "긴급 배포 승인 없이 가능해", "label": "yesno"}
+{"text": "모니터 추가 신청은 어떻게 하는 건가요", "label": "procedure"}
+{"text": "반차와 시간연차의 차이를 알려주세요", "label": "comparison"}
+{"text": "아까 그 항목들 다시 ", "label": "other"}
+{"text": "아까 말한 거 다시 정리해줘", "label": "other"}
+{"text": "방화벽 오픈 신청 절차를 단계별로 알려줘", "label": "procedure"}
+{"text": "Docker와 VM를 비교해주세요", "label": "comparison"}
+{"text": "배포 권한 신청 절차를 단계별로 설명해주세요", "label": "procedure"}
+{"text": "운영 DB 직접 접속 가능한가요", "label": "yesno"}
+{"text": "보안 팀의 업무를 설명해줘", "label": "explanation"}
+{"text": "노트북 수리 신청 절차를 설명해주세요", "label": "procedure"}
+{"text": "알람 설정의 방법을 알려줘", "label": "explanation"}
+{"text": "Chrome과 Edge의 차이점을 알려줘", "label": "comparison"}
+{"text": "WiFi와 유선의 장단점을 ", "label": "comparison"}
+{"text": "개발팀과 인프라팀의 협업 방식을 설명해줘", "label": "explanation"}
+{"text": "Redis와 Memcached 비교해서 설명해줘", "label": "comparison"}
+{"text": "CI/CD 무엇인지 알려주세요", "label": "explanation"}
+{"text": "서버 계정 신청은 어떻게 하나요", "label": "procedure"}
+{"text": "라우팅 뭔지 설명해주세요", "label": "explanation"}
+{"text": "회의실 예약은 어떻게 하나요", "label": "procedure"}
+{"text": "백업 데이터 다운로드 가능해", "label": "yesno"}
+{"text": "긴급 배포 절차는 어떻게 가능한가요", "label": "procedure"}
+{"text": "보상휴가의 의미를 알려줘", "label": "explanation"}
+{"text": "병가 뭔지 설명해줘", "label": "explanation"}
+{"text": "정규직과 계약직의 차이를 ", "label": "comparison"}
+{"text": "방금 준 링크 다시 보여줘", "label": "other"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "트랜잭션 뭔지 설명해줘", "label": "explanation"}
+{"text": "건강검진 신청 방법을 알려주세요", "label": "procedure"}
+{"text": "운영 DB 직접 접속 가능한가요", "label": "yesno"}
+{"text": "그 절차 다시 한번만 알려주실 수 있나요", "label": "other"}
+{"text": "코드를 JSON으로 변환해주세요", "label": "other"}
+{"text": "출산휴가는 유급인지", "label": "yesno"}
+{"text": "반차 사용할 때 사유 작성 필요한가요", "label": "yesno"}
+{"text": "그 설명 간단하게 정리해줘", "label": "other"}
+{"text": "Chrome과 Edge의 차이점을 알려줘", "label": "comparison"}
+{"text": "원격으로 프린터 사용할 수 ", "label": "yesno"}
+{"text": "그때 언급한 기준이 뭐였나요", "label": "other"}
+{"text": "주말에도 IT 지원 가능한가요", "label": "yesno"}
+{"text": "Chrome과 Edge의 차이점을 알려주세요", "label": "comparison"}
+{"text": "연차와 월차 비교해줘", "label": "comparison"}
+{"text": "IPv4와 IPv6의 차이를 ", "label": "comparison"}
+{"text": "VPN과 원격 데스크톱를 비교해주세요", "label": "comparison"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "가족돌봄휴가 뭔지 설명해줘", "label": "explanation"}
+{"text": "방금 전 내용을 표로 바꿔줘", "label": "other"}
+{"text": "맥북 지급 가능한가요", "label": "yesno"}
+{"text": "노트북 수리 신청 절차를 설명해줘", "label": "procedure"}
+{"text": "코드를 JSON으로 변환해줘", "label": "other"}
+{"text": "Kubernetes와 Docker Swarm의 차이를 ", "label": "comparison"}
+{"text": "위 내용을 마크다운으로 변환해줘", "label": "other"}
+{"text": "담당자가 누구라고 했어요", "label": "other"}
+{"text": "REST API와 GraphQL을 비교해서 설명해줘", "label": "comparison"}
+{"text": "이전 답변을 요약해주세요", "label": "other"}
