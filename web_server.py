@@ -5,6 +5,8 @@ FastAPI 기반 웹 서버
 RAG 엔진을 백엔드로 사용하는 웹 인터페이스 제공
 """
 
+from typing import Optional
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +15,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from rag_engine import get_rag_engine
+from agent import route_query
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -50,6 +53,8 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list
     success: bool
+    search_type: str = "unknown"
+    intent: Optional[str] = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -85,10 +90,10 @@ async def rag_query(request: QueryRequest):
 
     print(f"\n📝 질문 수신: {request.question}")
 
-    # RAG 엔진 호출
-    result = rag_engine.query(request.question)
+    # Agent 기반 라우팅 (웹검색 또는 문서 QA를 LLM이 선택)
+    result = route_query(request.question)
 
-    print(f"✅ 답변 생성 완료")
+    print(f"✅ 답변 생성 완료 (타입: {result.get('search_type', 'unknown')})")
 
     return QueryResponse(**result)
 
