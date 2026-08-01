@@ -104,3 +104,61 @@ class TestRouteQueryFallback:
 
         mock_fallback.assert_called_once_with("아무 질문")
         assert result["search_type"] == "web_search"
+
+
+class TestRouteQueryFallbackDocumentQaRetry:
+    """
+    agent.py가 키워드 라우터로 폴백한 뒤, 그 키워드 라우터가 고른 웹검색마저 실패하는
+    이중 장애 조합에서도 document_qa로 최종 복구되는지 검증한다. keyword_fallback_route를
+    mock으로 대체하지 않고 query_router.py의 실제 재시도 로직까지 통과시킨다.
+    """
+
+    def test_decide_tool_exception_with_keyword_web_search_failure_retries_document_qa(self):
+        mock_engine = MagicMock()
+        mock_engine.query.return_value = _rag_result()
+        with patch("agent.USE_WEB_SEARCH", True), patch(
+            "query_router.USE_WEB_SEARCH", True
+        ), patch(
+            "agent._decide_tool", side_effect=RuntimeError("ollama down")
+        ), patch(
+            "query_router.search_and_format",
+            return_value={
+                "answer": "실패",
+                "sources": [],
+                "success": False,
+                "search_type": "web_search",
+            },
+        ) as mock_search, patch(
+            "query_router.get_rag_engine", return_value=mock_engine
+        ):
+            result = agent.route_query("오늘 날씨 웹에서 찾아줘")
+
+        mock_search.assert_called_once()
+        mock_engine.query.assert_called_once_with("오늘 날씨 웹에서 찾아줘")
+        assert result["search_type"] == "document_qa"
+        assert result["success"] is True
+
+    def test_no_tool_selected_with_keyword_web_search_failure_retries_document_qa(self):
+        mock_engine = MagicMock()
+        mock_engine.query.return_value = _rag_result()
+        with patch("agent.USE_WEB_SEARCH", True), patch(
+            "query_router.USE_WEB_SEARCH", True
+        ), patch(
+            "agent._decide_tool", return_value=(None, None)
+        ), patch(
+            "query_router.search_and_format",
+            return_value={
+                "answer": "실패",
+                "sources": [],
+                "success": False,
+                "search_type": "web_search",
+            },
+        ) as mock_search, patch(
+            "query_router.get_rag_engine", return_value=mock_engine
+        ):
+            result = agent.route_query("웹검색으로 아무거나 찾아줘")
+
+        mock_search.assert_called_once()
+        mock_engine.query.assert_called_once_with("웹검색으로 아무거나 찾아줘")
+        assert result["search_type"] == "document_qa"
+        assert result["success"] is True

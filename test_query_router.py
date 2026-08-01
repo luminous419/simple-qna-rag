@@ -69,6 +69,30 @@ class TestRouteQueryKeywordDetection:
         assert result["search_type"] == "web_search"
 
 
+class TestRouteQueryWebSearchFailureFallback:
+    def test_web_search_failure_falls_back_to_document_qa(self):
+        mock_engine = MagicMock()
+        mock_engine.query.return_value = _mock_rag_result()
+        with patch(
+            "query_router.search_and_format",
+            return_value={
+                "answer": "실패",
+                "sources": [],
+                "success": False,
+                "search_type": "web_search",
+            },
+        ) as mock_search, patch(
+            "query_router.get_rag_engine", return_value=mock_engine
+        ) as mock_get_engine:
+            result = query_router.route_query("웹검색으로 Python을 찾아줘")
+
+        mock_search.assert_called_once()
+        # document_qa 재시도는 정제된 검색어가 아니라 원본 질문을 그대로 써야 함
+        mock_engine.query.assert_called_once_with("웹검색으로 Python을 찾아줘")
+        mock_get_engine.assert_called_once()
+        assert result["search_type"] == "document_qa"
+
+
 class TestRouteQueryFeatureFlag:
     def test_web_search_disabled_ignores_keywords(self):
         mock_engine = MagicMock()

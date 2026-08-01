@@ -71,7 +71,13 @@ def route_query(question: str) -> Dict[str, Any]:
         search_query = ' '.join(search_query.split())
 
         print(f"   추출된 검색어: '{search_query}'")
-        return search_and_format(search_query)
+        result = search_and_format(search_query)
+        if not result.get("success"):
+            print("⚠️  웹검색 실패, document_qa로 재시도")
+            rag_engine = get_rag_engine()
+            result = rag_engine.query(question)
+            result["search_type"] = "document_qa"
+        return result
     else:
         print("\n📚 문서 QA 모드 선택")
         rag_engine = get_rag_engine()
