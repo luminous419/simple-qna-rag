@@ -280,7 +280,7 @@ def main():
         print(f"  - 총 청크 수: {len(chunks)}")
         print(f"  - 저장 위치: {VECTORSTORE_PATH}")
         print(f"  - 임베딩 모델: {EMBEDDING_MODEL_NAME}")
-        print("\n💡 이제 document_query.py를 실행하여 질의할 수 있습니다.")
+        print("\n💡 이제 document_query_cli.py 또는 web_server.py를 실행하여 질의할 수 있습니다.")
 
     except Exception as e:
         print(f"\n❌ 오류 발생: {e}")

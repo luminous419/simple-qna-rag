@@ -10,6 +10,7 @@ Python 기반 고급 RAG(Retrieval-Augmented Generation) 문서 질의응답 시
 - 3-Stage Retrieval (Hybrid Search + Re-ranking)
 - Intent Classification (질문 의도 분류)
 - Intent-based Prompt Template (의도별 맞춤 프롬프트)
+- LLM 기반 Agent Router (웹검색 vs 문서 QA 자동 라우팅)
 - Web UI 및 CLI 인터페이스
 
 ## 주요 특징
@@ -60,6 +61,17 @@ Python 기반 고급 RAG(Retrieval-Augmented Generation) 문서 질의응답 시
 | `procedure` | 단계별 번호 매기기, 필수 요소/주의사항 포함 |
 | `yesno` | "예/아니오" 명확한 답변 + 간략한 설명 |
 | `other/uncertain` | 기본 템플릿 (유연한 답변 형식) |
+
+### 🌐 Agent 기반 Query Router (웹검색 vs 문서 QA)
+
+사용자 질문의 의미를 LLM이 직접 판단하여 웹검색과 문서 QA 중 적절한 경로로 자동 라우팅합니다 (`agent.py`).
+
+- **LLM 기반 도구 선택**: `ChatOllama.bind_tools()`로 `web_search`/`document_qa` 두 도구를 바인딩하고, LLM이 질문의 의미를 보고 도구를 선택. 키워드가 전혀 없는 질문("FAISS와 Elasticsearch를 비교해줘")도 올바르게 문서 QA로, 명시적 웹검색 요청은 정제된 검색어와 함께 웹검색으로 라우팅됨
+- **단발성 라우팅 방식**: 표준 LangChain `AgentExecutor`(ReAct 루프)를 쓰지 않고, LLM에게는 "어느 도구를 쓸지 + (웹검색 시) 정제된 검색어"만 맡김. 두 도구가 이미 완결된 최종 답변(sources 포함)을 반환하므로, Agent가 도구 결과를 다시 요약하면 포맷이 깨지고 LLM 호출이 중복되기 때문
+- **웹검색 (`web_search.py`)**: DuckDuckGo(`ddgs`)를 통해 검색을 수행하고 결과(URL/제목/요약)를 RAG 응답과 동일한 형식(`answer`, `sources`, `success`)으로 포맷팅
+- **폴백**: Agent 호출이 실패하거나 도구를 선택하지 못하면 키워드 기반 라우터(`query_router.py`)로, 웹검색이 실패하면 문서 QA로 자동 재시도
+- `config.py`의 `USE_WEB_SEARCH`로 기능 전체를 켜고 끌 수 있음
+- `tools.py`는 `agent.py`가 사용하는 도구 정의(이름/설명/실행 함수)를 제공
 
 ### 🤖 모델 선정
 
@@ -171,12 +183,6 @@ python web_server.py
 python document_query_cli.py
 ```
 
-또는
-
-```bash
-python document_query.py
-```
-
 **CLI 특징:**
 - 터미널에서 대화형 질의
 - 상세한 검색 과정 로그 출력
@@ -195,12 +201,18 @@ simple-qna-rag/
 ├── config.py                  # 설정 파일 (모델, 경로, 검색 파라미터)
 ├── rag_engine.py              # RAG 코어 엔진 (싱글톤)
 ├── document_register.py       # 문서 등록 (임베딩 + 벡터스토어 생성)
-├── document_query.py          # 문서 질의 (기존 버전)
 ├── document_query_cli.py      # 문서 질의 CLI (rag_engine 사용)
 ├── web_server.py              # FastAPI 웹 서버
+├── agent.py                   # LLM 기반 Agent 라우터 (웹검색/문서 QA 자동 선택)
+├── query_router.py            # 키워드 기반 라우터 (Agent 실패 시 폴백)
+├── web_search.py              # DuckDuckGo 웹검색 모듈
+├── tools.py                   # LangChain Tool 정의 (agent.py가 사용)
 ├── prompt_templates.py        # Intent별 프롬프트 템플릿
 ├── intent_classifier.py       # Intent 분류 추론 모듈
 ├── train_intent_classifier.py # Intent Classifier 학습
+├── generate_intent_dataset.py # Intent 학습 데이터 생성 스크립트
+├── test_web_search_simple.py       # 웹검색 모듈 단위 테스트
+├── test_web_search_integration.py  # Query Router 통합 테스트
 ├── requirements.txt           # Python 패키지 의존성
 ├── README.md                  # 이 파일
 ├── .gitignore                 # Git 무시 파일 설정
@@ -255,6 +267,8 @@ simple-qna-rag/
 }
 ```
 
+> **참고**: 내부적으로 `/rag`는 `agent.route_query()`를 호출하여 LLM이 질문의 의미를 보고 문서 QA 또는 웹검색(DuckDuckGo) 중 하나를 선택하도록 라우팅합니다. 웹검색으로 라우팅된 경우 `sources`의 `source` 필드에는 문서 파일명 대신 검색 결과 URL이 담깁니다.
+
 ## 설정 커스터마이징
 
 `config.py` 파일에서 다음 설정을 변경할 수 있습니다:
@@ -298,6 +312,14 @@ USE_MMR = True           # MMR 활성화 (하이브리드 검색 비활성화 �
 MMR_FETCH_K = 100        # 초기 후보 수
 MMR_K = 20               # MMR 선택 수
 MMR_LAMBDA = 0.5         # 다양성 vs 관련성 밸런스
+```
+
+### 웹검색 (Query Router)
+```python
+USE_WEB_SEARCH = True        # 웹검색 기능 활성화 여부 (false 시 항상 문서 QA만 사용)
+WEB_SEARCH_MAX_RESULTS = 3   # 최대 검색 결과 수
+WEB_SEARCH_TIMEOUT = 10      # 검색 타임아웃 (초)
+WEB_SEARCH_REGION = "kr-kr"  # 검색 지역 (kr-kr: 한국)
 ```
 
 ## Intent Classifier 학습
@@ -441,21 +463,29 @@ python train_intent_classifier.py
                          │                 │
                          ▼                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        RAG Engine                                    │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐           │
-│  │    Intent     │  │   Retrieval   │  │      LLM      │           │
-│  │  Classifier   │  │   Pipeline    │  │   (Ollama)    │           │
-│  │  (BGE-M3)     │  │               │  │               │           │
-│  └───────┬───────┘  └───────┬───────┘  └───────┬───────┘           │
-│          │                  │                  │                    │
-│          ▼                  ▼                  ▼                    │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐           │
-│  │   Template    │  │ BM25 + FAISS  │  │   Response    │           │
-│  │   Selector    │  │  + Re-ranker  │  │   Generator   │           │
-│  └───────────────┘  └───────────────┘  └───────────────┘           │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
+│              Agent Router (LLM 기반, gpt-oss:20b tool calling)       │
+│         질문 의미 판단 → document_qa / web_search 도구 선택           │
+│         (Agent 실패 시 키워드 기반 query_router.py로 폴백)             │
+└────────────────────────┬─────────────────────┬──────────────────────┘
+                         │                      │
+                document_qa 선택           web_search 선택
+                         │                      │
+                         ▼                      ▼
+┌─────────────────────────────────────┐   ┌──────────────────────────┐
+│              RAG Engine             │   │  Web Search (DuckDuckGo) │
+│  ┌───────────┐  ┌───────────┐  ┌───┐│   │   ddgs                   │
+│  │  Intent   │  │ Retrieval │  │LLM││   │   (URL/제목/요약 반환)     │
+│  │Classifier │  │ Pipeline  │  │   ││   └──────────────────────────┘
+│  │ (BGE-M3)  │  │           │  │   ││
+│  └─────┬─────┘  └─────┬─────┘  └─┬─┘│
+│        │              │          │  │
+│        ▼              ▼          ▼  │
+│  ┌───────────┐ ┌───────────────┐┌──┐│
+│  │  Template │ │ BM25 + FAISS  ││Re││
+│  │  Selector │ │  + RRF Fusion ││sp││
+│  └───────────┘ └───────┬───────┘└──┘│
+└────────────────────────┼────────────┘
+                         ▼
                     ┌───────────────────────┐
                     │   FAISS VectorStore   │
                     │   + BM25 Index        │
@@ -472,6 +502,7 @@ python train_intent_classifier.py
 - **HuggingFace**: 임베딩 모델
 - **FastAPI**: 웹 서버
 - **PyTorch**: Intent Classifier 학습
+- **ddgs**: 웹검색 (Agent Router)
 
 ## 라이선스
 

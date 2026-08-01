@@ -176,11 +176,16 @@ def evaluate(model, dataloader, criterion, device, id_to_label):
             all_labels.extend(labels.cpu().numpy())
 
     avg_loss = total_loss / len(dataloader)
-    f1 = f1_score(all_labels, all_preds, average='macro')
+    all_label_ids = list(range(len(id_to_label)))
+    f1 = f1_score(all_labels, all_preds, average='macro', labels=all_label_ids)
 
     # Classification Report
-    label_names = [id_to_label[i] for i in range(len(id_to_label))]
-    report = classification_report(all_labels, all_preds, target_names=label_names)
+    # labels=all_label_ids를 명시해야 함: 데이터셋에 아예 등장하지 않는 라벨(예: uncertain)이
+    # 있으면 target_names 길이와 실제 등장한 클래스 수가 달라 ValueError가 발생함.
+    label_names = [id_to_label[i] for i in all_label_ids]
+    report = classification_report(
+        all_labels, all_preds, labels=all_label_ids, target_names=label_names, zero_division=0
+    )
 
     return avg_loss, f1, report
 

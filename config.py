@@ -92,6 +92,12 @@ RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"  # Cross-Encoder 모델
 # RERANKER_TOP_K = 5  # Re-ranking 후 최종 반환할 문서 개수
 RERANKER_TOP_K = 10
 
+# 웹검색 설정
+USE_WEB_SEARCH = True  # 웹검색 기능 활성화 여부
+WEB_SEARCH_MAX_RESULTS = 3  # 최대 검색 결과 수
+WEB_SEARCH_TIMEOUT = 10  # 검색 타임아웃 (초)
+WEB_SEARCH_REGION = "kr-kr"  # 검색 지역 (kr-kr: 한국)
+
 # 프롬프트 템플릿 설정
 # PROMPT_TEMPLATE = """당신은 주어진 문서 내용을 바탕으로 정확하게 답변하는 AI 어시스턴트입니다.
 #
