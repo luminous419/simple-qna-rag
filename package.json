@@ -1,0 +1,17 @@
+{
+  "name": "simple-qna-rag-frontend",
+  "private": true,
+  "type": "module",
+  "description": "정적 프론트엔드(static/*.js)에 대한 회귀 테스트 (Vitest + jsdom)",
+  "scripts": {
+    "test": "vitest run",
+    "sync-vendor": "node scripts/sync-vendor.js",
+    "postinstall": "node scripts/sync-vendor.js"
+  },
+  "devDependencies": {
+    "dompurify": "^3.4.12",
+    "jsdom": "^30.0.1",
+    "marked": "^18.0.7",
+    "vitest": "^4.1.10"
+  }
+}

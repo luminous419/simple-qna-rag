@@ -27,6 +27,9 @@ app = FastAPI(
 # 템플릿 설정
 templates = Jinja2Templates(directory="templates")
 
+# 정적 파일(프론트엔드 JS) 서빙
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # RAG 엔진 초기화 (앱 시작 시 한 번만)
 rag_engine = None
 
