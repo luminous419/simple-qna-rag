@@ -7,7 +7,7 @@ DuckDuckGo를 사용하여 웹 검색을 수행하고 결과를 포맷팅합니�
 
 import traceback
 from typing import List, Dict, Optional
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 from config import (
     WEB_SEARCH_MAX_RESULTS,
@@ -47,7 +47,7 @@ def search_web(query: str, max_results: Optional[int] = None) -> List[Dict[str, 
         # 아님. 실제 HTTP 요청 타임아웃은 DDGS() 생성자의 timeout 인자로 설정한다.
         with DDGS(timeout=WEB_SEARCH_TIMEOUT) as ddgs:
             results = list(ddgs.text(
-                keywords=query,
+                query=query,
                 region=WEB_SEARCH_REGION,
                 max_results=max_results,
                 timelimit=None  # 결과 최신성 필터 없음 (요청 타임아웃과는 무관)

@@ -110,7 +110,21 @@ Phase 0~2를 마치면 이번 브랜치("Agent 적용")의 본래 목표가 완�
 **최종 산출물**: `agent.py`(신규), `tools.py`(수정 — dict 반환), `web_server.py`(agent.py 사용 + API 필드 추가), `query_router.py`(폴백으로 격하, 그대로 유지), `document_query.py`(삭제), `LICENSE`(신규), `intent-bge-m3-softmax/classifier_head.pt`(커밋), `test_web_search.py`/`test_query_router.py`/`test_agent_routing.py`(신규 pytest 스위트, 기존 print 테스트 대체).
 
 **남은 후속 작업 (이번 범위 밖, Phase 3 로드맵 참고)**:
-- `duckduckgo-search` → `ddgs` 패키지 마이그레이션 (Deprecation 경고 발생 중)
+- ~~`duckduckgo-search` → `ddgs` 패키지 마이그레이션~~ ✅ 완료 (2026-08-01): `web_search.py`의 import를 `ddgs`로 교체하고 `.text()` 호출도 deprecated `keywords=` 대신 `query=`로 변경. 결과 스키마(`title`/`href`/`body`)는 동일해 나머지 코드는 무수정. 구 패키지 제거 후 실제 검색으로 재검증 완료, deprecation 경고 사라짐.
 - DuckDuckGo 검색 결과 자체의 관련성 편차 (일부 쿼리에서 뉴스/스팸성 사이트 반환) — Agent 라우팅과 무관한 별도 이슈
-- Intent Classifier가 "RAG에서 MMR이 뭐야?", "FAISS와 Elasticsearch를 비교해줘" 같은 명확한 질문에도 `uncertain`으로 분류하는 것을 실측으로 확인 — README가 기대하는 explanation/comparison 분류와 어긋남. 기존 로드맵의 "Intent Classifier Fine-tuning" 항목으로 연결
+- ~~Intent Classifier가 명확한 질문도 `uncertain`으로 분류하는 문제~~ ✅ 근본 원인 파악 및 수정 (2026-08-01), 아래 상세 참고
 - 라우팅 회귀 테스트셋을 16개에서 필요에 따라 확장
+
+### Intent Classifier `uncertain` 오분류 — 근본 원인 및 수정 (2026-08-01)
+
+**근본 원인**: 도메인 불일치가 아니라 **모델-데이터셋 버전 불일치**였음.
+- `intent-bge-m3-softmax/classifier_head.pt`/`config.json`의 파일 수정일은 2025-11-17, 반면 `intent_dataset/train.jsonl`/`dev.jsonl`은 2025-12-06(19일 뒤)로 확인됨.
+- 즉 커밋된 분류기는 지금 리포에 있는 데이터셋이 아니라 그 이전 버전(README가 설명하는 "1,200개, 라벨당 200개, uncertain 포함" 버전 — 지금은 존재하지 않음)으로 학습된 것이고, 이후 데이터셋이 `generate_intent_dataset.py`로 10,000개(explanation/comparison/procedure/yesno/other 5개 라벨만 생성, uncertain 템플릿 자체가 없음)로 교체됐는데 **재학습이 한 번도 수행되지 않은 채 커밋됨**.
+- 실측: 이 상태의 모델은 자기 자신의 dev.jsonl(학습 도메인 내부 데이터)에 대해서도 정확도 10%(무작위 이하), 모든 입력에 대해 신뢰도가 ~0.17(1/6, 즉 완전 무작위 수준)로 균일 — 사실상 이 데이터셋에 대해 전혀 학습되지 않은 것과 같은 상태였음.
+
+**수정**:
+1. `train_intent_classifier.py`를 현재 데이터셋으로 재실행했으나 `evaluate()`의 `classification_report()`가 `ValueError: Number of classes, 5, does not match size of target_names, 6`로 크래시. 원인은 동일한 근본 문제(uncertain 라벨이 데이터에 전혀 없어 dev 예측/정답에 5개 클래스만 등장) — `classification_report`/`f1_score` 호출에 `labels=list(range(6))`, `zero_division=0`을 명시해 6개 클래스를 모두 보고하도록 수정(uncertain은 support=0으로 정상 표시).
+2. 재학습 실행 → **Best Dev F1 0.7739, 전체 정확도 93%** (explanation/comparison/procedure/yesno/other 모두 F1 0.85 이상, uncertain은 데이터가 없어 구조적으로 0).
+3. 원래 실패 사례 재검증: "RAG에서 MMR이 뭐야?" → `explanation`(기대와 일치), "FAISS와 Elasticsearch를 비교해줘" → `comparison`(기대와 일치). 둘 다 재현되던 `uncertain` 오분류가 해소됨.
+
+**남은 잔여 이슈 (별도, 더 큰 작업)**: 학습 데이터가 사내 IT 헬프데스크/HR 도메인(VPN, DHCP, 연차, 퇴직금 등)이고 이 프로젝트의 실제 문서 도메인(RAG/LangChain/FAISS/임베딩)과 다름. 재학습 후에도 "Python에서 FAISS 설치하는 방법을 알려줘"가 `procedure` 대신 `comparison`으로 나오는 등, 도메인 밖 입력에 대한 신뢰도가 여전히 낮음(~0.17-0.19, 거의 무작위 수준)을 확인함. 완전한 해결에는 RAG/AI 도메인에 맞는 학습 예시를 `generate_intent_dataset.py`에 추가하고 재학습하는 별도 작업이 필요 — 기존 로드맵의 "Intent Classifier Fine-tuning/데이터 증강" 항목으로 연결.

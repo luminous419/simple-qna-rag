@@ -68,7 +68,7 @@ Python 기반 고급 RAG(Retrieval-Augmented Generation) 문서 질의응답 시
 
 - **LLM 기반 도구 선택**: `ChatOllama.bind_tools()`로 `web_search`/`document_qa` 두 도구를 바인딩하고, LLM이 질문의 의미를 보고 도구를 선택. 키워드가 전혀 없는 질문("FAISS와 Elasticsearch를 비교해줘")도 올바르게 문서 QA로, 명시적 웹검색 요청은 정제된 검색어와 함께 웹검색으로 라우팅됨
 - **단발성 라우팅 방식**: 표준 LangChain `AgentExecutor`(ReAct 루프)를 쓰지 않고, LLM에게는 "어느 도구를 쓸지 + (웹검색 시) 정제된 검색어"만 맡김. 두 도구가 이미 완결된 최종 답변(sources 포함)을 반환하므로, Agent가 도구 결과를 다시 요약하면 포맷이 깨지고 LLM 호출이 중복되기 때문
-- **웹검색 (`web_search.py`)**: DuckDuckGo(`duckduckgo-search`)를 통해 검색을 수행하고 결과(URL/제목/요약)를 RAG 응답과 동일한 형식(`answer`, `sources`, `success`)으로 포맷팅
+- **웹검색 (`web_search.py`)**: DuckDuckGo(`ddgs`)를 통해 검색을 수행하고 결과(URL/제목/요약)를 RAG 응답과 동일한 형식(`answer`, `sources`, `success`)으로 포맷팅
 - **폴백**: Agent 호출이 실패하거나 도구를 선택하지 못하면 키워드 기반 라우터(`query_router.py`)로, 웹검색이 실패하면 문서 QA로 자동 재시도
 - `config.py`의 `USE_WEB_SEARCH`로 기능 전체를 켜고 끌 수 있음
 - `tools.py`는 `agent.py`가 사용하는 도구 정의(이름/설명/실행 함수)를 제공
@@ -473,7 +473,7 @@ python train_intent_classifier.py
                          ▼                      ▼
 ┌─────────────────────────────────────┐   ┌──────────────────────────┐
 │              RAG Engine             │   │  Web Search (DuckDuckGo) │
-│  ┌───────────┐  ┌───────────┐  ┌───┐│   │   duckduckgo-search      │
+│  ┌───────────┐  ┌───────────┐  ┌───┐│   │   ddgs                   │
 │  │  Intent   │  │ Retrieval │  │LLM││   │   (URL/제목/요약 반환)     │
 │  │Classifier │  │ Pipeline  │  │   ││   └──────────────────────────┘
 │  │ (BGE-M3)  │  │           │  │   ││
@@ -502,7 +502,7 @@ python train_intent_classifier.py
 - **HuggingFace**: 임베딩 모델
 - **FastAPI**: 웹 서버
 - **PyTorch**: Intent Classifier 학습
-- **duckduckgo-search**: 웹검색 (Query Router)
+- **ddgs**: 웹검색 (Agent Router)
 
 ## 라이선스
 
