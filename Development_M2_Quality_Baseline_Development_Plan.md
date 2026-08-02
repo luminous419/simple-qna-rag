@@ -551,11 +551,11 @@ pytest -q
 
 커밋: `evaluation schema 및 dataset validator 추가`
 
-### Phase 2 — 골든 평가셋 작성 (§5에 상세)
+### Phase 2 — 골든 평가셋 작성 (§5에 상세, 완료)
 
-산출물: `evaluation/datasets/golden.jsonl`, `evaluation/README.md`(작성 가이드 포함, 문서 위치는 Phase 9에서 최종화하되 초안은 여기서 시작).
+산출물: `evaluation/datasets/golden.jsonl`(62개 사례), `evaluation/README.md`(작성 가이드 포함, 문서 위치는 Phase 9에서 최종화하되 초안은 여기서 시작).
 
-**사용자 승인 게이트**: 초안 작성 후 정답(카테고리 분포, source 매핑, assertion 문구, abstention 사례)에 대한 사람 검토 2회(§5)를 사용자에게 명시적으로 요청한다. 승인 전에는 Phase 2를 완료 처리하지 않는다(상위 계획 §4 Phase 2 완료 조건, §8 게이트 참고).
+**사용자 승인 게이트**: 초안 작성 후 정답(카테고리 분포, source 매핑, assertion 문구, abstention 사례)에 대한 사람 검토 2회(§5)를 사용자에게 명시적으로 요청한다. 승인 전에는 Phase 2를 완료 처리하지 않는다(상위 계획 §4 Phase 2 완료 조건, §8 게이트 참고). **완료**: M2_Phase2_code_review_result.md 리뷰에서 발견된 P1 3건(확장자 없는 경제 PDF가 `document_register.py`의 `**/*.pdf`/`**/*.txt` 글롭에 걸리지 않아 인덱싱 누락, 비교·절차형 질문의 독립적 사실이 하나의 `any_of`에 섞여 부분 답변도 통과, `evaluation/README.md` 부재)를 모두 수정한 뒤(파일명에 `.pdf` 확장자 추가 + vectorstore 재생성으로 18개 source 전부 검색 후보에 포함됨을 실제 유사도 검색으로 확인, 8개 사례의 복합 assertion을 독립 `AnswerAssertion` 객체로 분리, README 작성) source relevance·answer assertion 검토를 재요청해 승인받았다.
 
 ### Phase 3 — metric과 reporting
 
@@ -1005,15 +1005,15 @@ jobs:
 
 ## 8. 승인 게이트 체크리스트
 
-- [ ] (착수 전, 권장) PR #3 머지 후 이 문서 작성에 사용한 재구조화 변경(README/Roadmap/Problem 등)을 정리해 M2 브랜치를 깨끗하게 시작
+- [x] (착수 전, 권장) PR #3 머지 후 이 문서 작성에 사용한 재구조화 변경(README/Roadmap/Problem 등)을 정리해 M2 브랜치를 깨끗하게 시작 — PR #4/#5로 반영·병합 완료
 - [x] Phase 0: 깨끗한 venv에서 `import web_server`/`TestClient`/`pip check` 실행 완료 — 모두 통과, 저장소 자체 문제 아님으로 결론(§1). `requirements.txt` 선행 수정 불필요
-- [ ] Phase 2: 골든셋 source relevance 검토 승인 (사용자)
-- [ ] Phase 2: 골든셋 answer assertion 검토 승인 (사용자)
+- [x] Phase 2: 골든셋 source relevance 검토 승인 (사용자) — M2_Phase2_code_review_result.md P1(확장자 없는 경제 PDF 인덱싱 누락) 반영 후 재검토·승인
+- [x] Phase 2: 골든셋 answer assertion 검토 승인 (사용자) — M2_Phase2_code_review_result.md P1(복합 assertion 분리) 반영 후 재검토·승인
 - [ ] Phase 7: 최초 live baseline 결과 및 주요 실패 사례 검토·승인 (사용자)
 
 ## 9. 완료 정의 체크리스트 (요구사항 문서 §9 그대로, 진행 시 체크)
 
-- [ ] 골든 평가셋(최소 60개) schema/구성 검증 통과
+- [x] 골든 평가셋(최소 60개) schema/구성 검증 통과 — Phase 2 완료(62개 사례, 사람 검토 2회 승인)
 - [ ] Retrieval/Routing/Answer 평가 명령 + 통합 baseline 명령 제공
 - [ ] 필수 metric·경계 조건 단위 테스트 통과
 - [ ] 실제 로컬 환경 최초 baseline JSON/Markdown 생성 및 고정 경로 저장(승인 후)
