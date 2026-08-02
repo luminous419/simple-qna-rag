@@ -1,513 +1,268 @@
-# Simple Q&A RAG System
+# Simple Q&A RAG
 
-Python 기반 고급 RAG(Retrieval-Augmented Generation) 문서 질의응답 시스템
+로컬 문서와 웹 검색 결과를 기반으로 질문에 답하는 한국어 중심의 RAG(Retrieval-Augmented Generation) 애플리케이션입니다. 문서 데이터는 로컬에서 임베딩하고, Ollama로 실행되는 LLM이 답변을 생성합니다.
 
-## 개요
+프로젝트의 방향과 현재 위치는 [Roadmap.md](Roadmap.md), 알려진 미해결 문제는 [Problem.md](Problem.md)에서 관리합니다.
 
-이 시스템은 PDF 및 텍스트 문서를 벡터 데이터베이스에 저장하고, 하이브리드 검색(Sparse + Dense) 및 Re-ranking을 통해 사용자의 질문에 대해 정확한 답변을 생성합니다.
+## 목적
 
-**핵심 기능:**
-- 3-Stage Retrieval (Hybrid Search + Re-ranking)
-- Intent Classification (질문 의도 분류)
-- Intent-based Prompt Template (의도별 맞춤 프롬프트)
-- LLM 기반 Agent Router (웹검색 vs 문서 QA 자동 라우팅)
-- Web UI 및 CLI 인터페이스
+- PDF와 텍스트 문서를 검색 가능한 지식베이스로 변환합니다.
+- 키워드 검색과 의미 검색을 결합해 관련 문서를 찾습니다.
+- 질문 유형에 맞는 형식으로 문서 근거 답변을 생성합니다.
+- 최신 정보가 필요한 질문은 웹 검색으로 자동 라우팅합니다.
+- 모델과 문서를 가능한 한 로컬에서 처리해 데이터 통제권을 유지합니다.
 
-## 주요 특징
+## 주요 기능
 
-### 🔍 3-Stage Retrieval 파이프라인
+### 문서 검색과 답변
 
-#### Stage 1: Hybrid Search (Sparse + Dense)
-- **BM25 (Sparse Retrieval)**: 키워드 기반 검색, 50개 후보 추출
-- **FAISS (Dense Retrieval)**: 의미 기반 검색, 50개 후보 추출
-- **RRF (Reciprocal Rank Fusion)**: 두 결과를 융합하여 상위 50개 선택
+- PDF/TXT 문서 로딩 및 청크 분할
+- BAAI/bge-m3 임베딩과 FAISS 벡터 인덱스
+- BM25 + Dense Search + RRF 기반 Hybrid Retrieval
+- MMR 기반 검색 결과 다양화
+- BAAI/bge-reranker-v2-m3 Cross-Encoder 재정렬
+- 검색 문서와 페이지를 포함한 출처 반환
 
-#### Stage 2: MMR (Maximal Marginal Relevance)
-- 유사한 문서 중복 제거로 **다양성 확보**
-- lambda=0.5 (관련성 vs 다양성 밸런스)
-- 50개 → 20개 (중복 제거 후 다양한 문서 선택)
+### 질문 처리
 
-#### Stage 3: Re-ranking
-- **Cross-Encoder (BAAI/bge-reranker-v2-m3)**: 문서를 정밀 재정렬
-- 20개 → 최종 10개 문서만 LLM에 전달
+- explanation, comparison, procedure, yesno, other, uncertain 의도 분류
+- 질문 의도별 답변 프롬프트
+- Ollama `gpt-oss:20b` 기반 답변 생성
+- LLM tool calling을 이용한 문서 QA/웹 검색 라우팅
+- Agent 장애 시 키워드 라우터, 웹 검색 장애 시 문서 QA 폴백
 
-### 🎯 Intent Classification (질문 의도 분류)
+### 인터페이스와 안전성
 
-사용자 질문의 의도를 자동으로 분류하여 최적의 답변 형식을 제공합니다.
+- FastAPI 기반 Web UI 및 JSON API
+- 터미널 기반 문서 QA CLI
+- 웹 검색 결과의 Markdown 정화와 XSS 회귀 테스트
+- 프런트엔드 라이브러리의 로컬 vendor 및 잠금 버전 관리
 
-#### 지원 의도 유형 (6가지)
-| 의도 | 설명 | 예시 |
-|------|------|------|
-| `explanation` | 개념 설명 | "RAG에서 MMR이 뭐야?" |
-| `comparison` | 비교 | "FAISS와 Elasticsearch를 비교해줘" |
-| `procedure` | 절차 설명 | "Python에서 FAISS 설치하는 방법을 알려줘" |
-| `yesno` | 예/아니오 질문 | "LangChain은 무료인가요?" |
-| `other` | 기타 | "코드를 JSON으로 보여줘" |
-| `uncertain` | 불명확 | "그게 뭐였지?" |
+## 아키텍처
 
-#### Intent Classifier 모델
-- **임베딩**: BAAI/bge-m3 (1024차원)
-- **분류기**: Linear Classification Head (Softmax)
-- **학습 데이터**: 1,200개 한국어 예시 (라벨당 약 200개)
+```text
+사용자 질문
+    |
+    v
+Agent Router
+    |-- web_search  ---> DuckDuckGo 검색 결과
+    |
+    `-- document_qa
+            |
+            v
+       Intent 분류
+            |
+            v
+BM25 + FAISS -> RRF -> MMR -> Re-ranker
+            |
+            v
+      Ollama 답변 생성
+```
 
-### 📝 Intent-based Prompt Template
+Agent가 실패하면 키워드 라우터를 사용합니다. 웹 검색까지 실패하면 원본 질문으로 문서 QA를 재시도합니다.
 
-분류된 의도에 따라 자동으로 최적화된 프롬프트 템플릿이 선택됩니다:
+## 개발 환경 구성
 
-| 의도 | 템플릿 특징 |
-|------|-------------|
-| `explanation` | 핵심 요약 → 개념별 단락 → 결론 형식 |
-| `comparison` | Markdown 비교표 생성 |
-| `procedure` | 단계별 번호 매기기, 필수 요소/주의사항 포함 |
-| `yesno` | "예/아니오" 명확한 답변 + 간략한 설명 |
-| `other/uncertain` | 기본 템플릿 (유연한 답변 형식) |
+### 요구사항
 
-### 🌐 Agent 기반 Query Router (웹검색 vs 문서 QA)
+- Python 3.11 권장
+- Node.js 20 이상: 프런트엔드 테스트와 vendor 동기화에만 필요
+- Ollama
+- `gpt-oss:20b`를 실행할 수 있는 메모리와 디스크 공간
 
-사용자 질문의 의미를 LLM이 직접 판단하여 웹검색과 문서 QA 중 적절한 경로로 자동 라우팅합니다 (`agent.py`).
+모든 명령은 프로젝트 루트에서 실행해야 합니다. 현재 데이터, 벡터스토어, 템플릿 경로가 프로젝트 루트 기준 상대 경로로 설정되어 있습니다.
 
-- **LLM 기반 도구 선택**: `ChatOllama.bind_tools()`로 `web_search`/`document_qa` 두 도구를 바인딩하고, LLM이 질문의 의미를 보고 도구를 선택. 키워드가 전혀 없는 질문("FAISS와 Elasticsearch를 비교해줘")도 올바르게 문서 QA로, 명시적 웹검색 요청은 정제된 검색어와 함께 웹검색으로 라우팅됨
-- **단발성 라우팅 방식**: 표준 LangChain `AgentExecutor`(ReAct 루프)를 쓰지 않고, LLM에게는 "어느 도구를 쓸지 + (웹검색 시) 정제된 검색어"만 맡김. 두 도구가 이미 완결된 최종 답변(sources 포함)을 반환하므로, Agent가 도구 결과를 다시 요약하면 포맷이 깨지고 LLM 호출이 중복되기 때문
-- **웹검색 (`web_search.py`)**: DuckDuckGo(`ddgs`)를 통해 검색을 수행하고 결과(URL/제목/요약)를 RAG 응답과 동일한 형식(`answer`, `sources`, `success`)으로 포맷팅
-- **폴백**: Agent 호출이 실패하거나 도구를 선택하지 못하면 키워드 기반 라우터(`query_router.py`)로, 웹검색이 실패하면 문서 QA로 자동 재시도
-- `config.py`의 `USE_WEB_SEARCH`로 기능 전체를 켜고 끌 수 있음
-- `tools.py`는 `agent.py`가 사용하는 도구 정의(이름/설명/실행 함수)를 제공
-
-### 🤖 모델 선정
-
-#### 임베딩 모델 (BAAI/bge-m3)
-- **8192 토큰 지원**: 매우 긴 문맥 처리 가능
-- **멀티언어 지원**: 한국어, 영어 등 100+ 언어 지원
-- **높은 성능**: MTEB 벤치마크에서 우수한 성능
-- **도메인 일반화**: 법률, 금융, 기술 등 다양한 문체 대응
-
-#### LLM 모델 (gpt-oss:20b via Ollama)
-- **20B 파라미터**: 높은 추론 능력
-- **긴 컨텍스트**: 충분한 문서 처리 능력
-- **한국어 지원**: 자연스러운 한국어 답변
-- **로컬 실행**: Ollama를 통한 프라이버시 보호
-
-## 시스템 요구사항
-
-- Python 3.11+
-- Ollama (로컬 LLM 실행용)
-- 8GB+ RAM 권장
-
-## 설치
-
-### 1. Python 패키지 설치
+### 1. Python 환경
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 2. Ollama 설치 및 모델 다운로드
+Windows PowerShell에서는 다음 명령으로 가상환경을 활성화합니다.
 
-#### Ollama 설치
-```bash
-# macOS
-brew install ollama
-
-# Linux
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Windows
-# https://ollama.com/download 에서 다운로드
+```powershell
+.venv\Scripts\Activate.ps1
 ```
 
-#### LLM 모델 다운로드
+첫 실행 시 Hugging Face 모델을 다운로드하므로 시간이 걸릴 수 있습니다.
+
+### 2. 프런트엔드 테스트 환경
+
+운영 페이지에서 사용하는 `marked`와 DOMPurify 파일은 저장소의 `static/vendor/`에 포함됩니다. 라이브러리를 갱신하거나 프런트엔드 테스트를 실행하려면 다음 명령을 사용합니다.
+
+```bash
+npm ci
+```
+
+`npm ci`의 `postinstall` 단계가 잠금된 npm 패키지의 배포 파일을 `static/vendor/`에 동기화합니다. 필요하면 직접 실행할 수 있습니다.
+
+```bash
+npm run sync-vendor
+```
+
+### 3. Ollama
+
+Ollama를 설치한 다음 모델을 준비합니다.
+
 ```bash
 ollama pull gpt-oss:20b
-```
-
-#### Ollama 실행
-```bash
 ollama serve
 ```
 
-> **참고**: Ollama는 백그라운드에서 계속 실행되어야 합니다.
+기본 연결 주소와 모델은 [config.py](config.py)의 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`에서 설정합니다.
 
-### 3. Intent Classifier 학습 (선택사항)
+### 4. 문서 인덱스 생성
 
-Intent Classifier를 사용하려면 학습을 수행하세요:
-
-```bash
-python train_intent_classifier.py
-```
-
-> **참고**: 학습하지 않아도 기본 템플릿으로 동작합니다.
-
-## 사용 방법
-
-### 1. 문서 준비
-
-`data` 디렉토리에 PDF 또는 텍스트 파일을 넣습니다:
-
-```bash
-data/
-├── document1.pdf
-├── document2.pdf
-└── notes.txt
-```
-
-### 2. 문서 등록 (벡터스토어 생성)
+`data/` 디렉터리에 PDF 또는 TXT 문서를 넣고 인덱스를 생성합니다.
 
 ```bash
 python document_register.py
 ```
 
-이 프로그램은:
-- `data` 디렉토리의 모든 PDF와 텍스트 파일을 로드
-- 문서를 적절한 크기의 청크로 분할
-- 각 청크를 임베딩하여 FAISS 벡터스토어에 저장
-- **실시간 진행률 표시**: 1초마다 진행 상황과 경과 시간 출력
+생성된 FAISS 인덱스는 기본적으로 `vectorstore/`에 저장됩니다. `data/`와 `vectorstore/`는 Git에서 제외됩니다.
 
-### 3. 문서 질의
+주의: 현재 등록 명령은 기존 `vectorstore/`를 삭제하고 전체 인덱스를 다시 생성합니다. 중요한 인덱스는 실행 전에 별도로 백업하십시오.
 
-#### 방법 1: 웹 인터페이스 (권장)
+## 실행 방법
+
+### Web UI와 API
 
 ```bash
 python web_server.py
 ```
 
-브라우저에서 http://localhost:8000 접속
+브라우저에서 <http://localhost:8000>에 접속합니다.
 
-**웹 UI 특징:**
-- 깔끔한 채팅 인터페이스
-- 실시간 답변 표시
-- 참고 문서 출처 확인
+주요 API:
 
-#### 방법 2: CLI 인터페이스
+- `GET /`: Web UI
+- `POST /rag`: 질문 처리
+- `GET /health`: 애플리케이션 상태 확인
+
+요청 예시:
+
+```bash
+curl -X POST http://localhost:8000/rag \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"RAG에서 MMR이 무엇인가요?"}'
+```
+
+응답에는 `answer`, `sources`, `success`, `search_type`, `intent`가 포함됩니다.
+
+### CLI
+
+CLI는 웹 검색 Agent를 거치지 않고 문서 QA 엔진을 직접 사용합니다.
 
 ```bash
 python document_query_cli.py
 ```
 
-**CLI 특징:**
-- 터미널에서 대화형 질의
-- 상세한 검색 과정 로그 출력
+`종료`, `끝`, `stop`, `quit`, `exit`, `finish` 중 하나를 입력하면 종료합니다.
 
-### 4. 종료 명령어 (CLI)
+## 테스트 방법
 
-다음 단어 중 하나를 입력하면 프로그램이 종료됩니다:
-- `종료`, `끝`, `stop`, `quit`, `exit`, `finish`
+### 기본 Python 테스트
 
-또는 `Ctrl+C`를 눌러 종료할 수 있습니다.
+외부 네트워크와 Ollama 없이 mock 기반 라우팅, 폴백, 웹 검색 포맷을 검증합니다.
+
+```bash
+pytest -q
+```
+
+### 라이브 Agent 라우팅 테스트
+
+Ollama와 `gpt-oss:20b`가 실행 중일 때만 사용합니다.
+
+```bash
+RUN_LIVE_LLM_TESTS=1 pytest test_agent_routing.py -v
+```
+
+이 테스트는 LLM 출력의 확률적 변동을 고려해 라우팅 정확도 80% 이상을 통과 기준으로 사용합니다.
+
+### 프런트엔드 보안 테스트
+
+```bash
+npm ci
+npm test
+```
+
+Vitest와 jsdom으로 XSS 정화, 안전한 링크, 출처 렌더링을 검증합니다.
+
+### 전체 로컬 검증
+
+```bash
+pytest -q
+npm test
+git diff --check
+```
+
+현재 자동 테스트는 mock과 DOM 단위 테스트 중심입니다. 실제 문서 검색과 답변 품질을 평가하는 End-to-End 기준선은 향후 마일스톤에서 구축할 예정입니다.
+
+## 배포 방법
+
+### 현재 지원 범위
+
+현재 프로젝트는 단일 호스트의 로컬 또는 내부 데모 배포를 지원합니다. Docker 이미지, 프로세스 관리자, 자동 배포, 다중 worker 운영 구성은 아직 제공하지 않습니다.
+
+배포 호스트에서 다음 항목을 먼저 준비해야 합니다.
+
+1. Python 의존성
+2. Ollama와 `gpt-oss:20b`
+3. `data/`에서 생성한 `vectorstore/`
+4. 저장소에 포함된 `templates/`와 `static/`
+
+서버 실행:
+
+```bash
+uvicorn web_server:app --host 0.0.0.0 --port 8000
+```
+
+현재 RAG 엔진은 프로세스마다 대형 모델과 인덱스를 메모리에 로드하므로 worker 수를 무작정 늘리지 마십시오. 외부에 공개할 경우 애플리케이션 앞에 TLS를 종료하는 reverse proxy, 인증, 요청 크기 제한, rate limiting을 별도로 구성해야 합니다.
+
+프로덕션 배포 자동화와 운영 준비는 [Roadmap.md](Roadmap.md)의 Production Readiness 마일스톤에서 다룹니다.
+
+## 주요 설정
+
+[config.py](config.py)에서 다음 항목을 조정할 수 있습니다.
+
+- 임베딩, LLM, reranker 모델
+- 데이터 및 벡터스토어 경로
+- 청크 크기와 오버랩
+- BM25/Dense/RRF/MMR/Re-ranker top-k
+- 웹 검색 활성화, 결과 수, 타임아웃, 지역
+
+현재 설정은 Python 상수로 관리됩니다. 환경변수 기반 설정은 향후 운영 개선 대상입니다.
 
 ## 프로젝트 구조
 
+```text
+.
+├── agent.py                    # LLM 기반 도구 라우팅
+├── config.py                   # 애플리케이션 설정
+├── document_register.py        # 문서 인덱스 생성
+├── document_query_cli.py       # 문서 QA CLI
+├── intent_classifier.py        # 질문 의도 분류
+├── prompt_templates.py         # 의도별 답변 프롬프트
+├── query_router.py             # Agent 장애 시 키워드 폴백
+├── rag_engine.py               # 검색 및 답변 생성 파이프라인
+├── tools.py                    # Agent 도구 정의
+├── web_search.py               # DuckDuckGo 웹 검색
+├── web_server.py               # FastAPI 애플리케이션
+├── templates/                  # HTML 템플릿
+├── static/                     # 프런트엔드 코드와 vendor 파일
+├── frontend_tests/             # 프런트엔드 보안 테스트
+├── intent_dataset/             # Intent 학습/검증 데이터
+├── Roadmap.md                  # 비전, 마일스톤, 현재 위치
+├── Problem.md                  # 알려진 미해결 문제
+├── Development_M2_Quality_Baseline_Requirement.md
+│                               # M2 요구사항과 수용 기준
+└── Development_M2_Quality_Baseline_Plan.md
+                                # M2 단계별 개발 계획
 ```
-simple-qna-rag/
-├── config.py                  # 설정 파일 (모델, 경로, 검색 파라미터)
-├── rag_engine.py              # RAG 코어 엔진 (싱글톤)
-├── document_register.py       # 문서 등록 (임베딩 + 벡터스토어 생성)
-├── document_query_cli.py      # 문서 질의 CLI (rag_engine 사용)
-├── web_server.py              # FastAPI 웹 서버
-├── agent.py                   # LLM 기반 Agent 라우터 (웹검색/문서 QA 자동 선택)
-├── query_router.py            # 키워드 기반 라우터 (Agent 실패 시 폴백)
-├── web_search.py              # DuckDuckGo 웹검색 모듈
-├── tools.py                   # LangChain Tool 정의 (agent.py가 사용)
-├── prompt_templates.py        # Intent별 프롬프트 템플릿
-├── intent_classifier.py       # Intent 분류 추론 모듈
-├── train_intent_classifier.py # Intent Classifier 학습
-├── generate_intent_dataset.py # Intent 학습 데이터 생성 스크립트
-├── test_web_search_simple.py       # 웹검색 모듈 단위 테스트
-├── test_web_search_integration.py  # Query Router 통합 테스트
-├── requirements.txt           # Python 패키지 의존성
-├── README.md                  # 이 파일
-├── .gitignore                 # Git 무시 파일 설정
-├── data/                      # 문서 저장 디렉토리 (Git에서 제외)
-│   ├── *.pdf
-│   └── *.txt
-├── vectorstore/               # FAISS 벡터 데이터베이스 (Git에서 제외)
-│   ├── index.faiss
-│   └── index.pkl
-├── intent_dataset/            # Intent 분류 학습 데이터
-│   ├── train.jsonl            # 학습 데이터 (1,200개)
-│   └── dev.jsonl              # 검증 데이터 (42개)
-├── intent-bge-m3-softmax/     # 학습된 Intent Classifier
-│   ├── classifier_head.pt     # 분류기 헤드 가중치 (~26KB)
-│   └── config.json            # 모델 설정
-└── templates/                 # 웹 UI 템플릿
-    └── index.html
-```
-
-## API 엔드포인트
-
-### 웹 서버 API
-
-| 엔드포인트 | 메소드 | 설명 |
-|-----------|--------|------|
-| `/` | GET | 메인 웹 UI |
-| `/rag` | POST | RAG 질의 API |
-| `/health` | GET | 헬스 체크 |
-
-#### POST /rag
-
-**Request:**
-```json
-{
-  "question": "RAG 시스템이 뭔가요?"
-}
-```
-
-**Response:**
-```json
-{
-  "answer": "RAG(Retrieval-Augmented Generation)은...",
-  "sources": [
-    {
-      "index": 1,
-      "source": "document1.pdf",
-      "page": 3,
-      "content": "..."
-    }
-  ],
-  "success": true
-}
-```
-
-> **참고**: 내부적으로 `/rag`는 `agent.route_query()`를 호출하여 LLM이 질문의 의미를 보고 문서 QA 또는 웹검색(DuckDuckGo) 중 하나를 선택하도록 라우팅합니다. 웹검색으로 라우팅된 경우 `sources`의 `source` 필드에는 문서 파일명 대신 검색 결과 URL이 담깁니다.
-
-## 설정 커스터마이징
-
-`config.py` 파일에서 다음 설정을 변경할 수 있습니다:
-
-### 임베딩 모델
-```python
-EMBEDDING_MODEL_NAME = "BAAI/bge-m3"  # 또는 다른 HuggingFace 모델
-NORMALIZE_EMBEDDINGS = True  # L2 정규화 (Cosine 유사도 최적화)
-```
-
-### LLM 모델
-```python
-OLLAMA_MODEL = "gpt-oss:20b"  # 또는 qwen2.5:7b, llama3.1:8b 등
-```
-
-### 문서 처리
-```python
-CHUNK_SIZE = 1000      # 문서 청크 크기
-CHUNK_OVERLAP = 200    # 청크 간 오버랩
-```
-
-### 하이브리드 검색
-```python
-USE_HYBRID_SEARCH = True  # 하이브리드 검색 활성화
-BM25_TOP_K = 50          # BM25 검색 결과 수
-DENSE_TOP_K = 50         # FAISS 검색 결과 수
-RRF_TOP_K = 20           # RRF 융합 후 선택 수
-RRF_CONSTANT = 60        # RRF 상수
-```
-
-### Re-ranking
-```python
-USE_RERANKER = True      # Re-ranker 활성화
-RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
-RERANKER_TOP_K = 10      # 최종 문서 수
-```
-
-### MMR (다양성 확보)
-```python
-USE_MMR = True           # MMR 활성화 (하이브리드 검색 비활성화 시)
-MMR_FETCH_K = 100        # 초기 후보 수
-MMR_K = 20               # MMR 선택 수
-MMR_LAMBDA = 0.5         # 다양성 vs 관련성 밸런스
-```
-
-### 웹검색 (Query Router)
-```python
-USE_WEB_SEARCH = True        # 웹검색 기능 활성화 여부 (false 시 항상 문서 QA만 사용)
-WEB_SEARCH_MAX_RESULTS = 3   # 최대 검색 결과 수
-WEB_SEARCH_TIMEOUT = 10      # 검색 타임아웃 (초)
-WEB_SEARCH_REGION = "kr-kr"  # 검색 지역 (kr-kr: 한국)
-```
-
-## Intent Classifier 학습
-
-### 학습 데이터 형식
-
-`intent_dataset/train.jsonl`:
-```json
-{"text": "RAG에서 MMR이 뭐야?", "label": "explanation"}
-{"text": "FAISS와 Elasticsearch를 비교해줘", "label": "comparison"}
-{"text": "Python에서 FAISS 설치하는 방법을 알려줘", "label": "procedure"}
-```
-
-### 학습 실행
-
-```bash
-python train_intent_classifier.py
-```
-
-**출력:**
-```
-============================================================
-Intent Classifier 학습 시작
-============================================================
-모델: BAAI/bge-m3
-디바이스: cpu (또는 cuda)
-배치 크기: 32
-에폭: 3
-...
-✅ 학습 완료!
-Best Dev F1: 0.95+
-모델 저장 위치: intent-bge-m3-softmax
-============================================================
-```
-
-### 모델 저장 구조
-
-학습 완료 후 `intent-bge-m3-softmax/` 디렉토리에 저장:
-- `classifier_head.pt`: 분류기 가중치 (~26KB)
-- `config.json`: 라벨 매핑, 임베딩 모델 이름 등
-
-> **참고**: 임베딩 모델(BAAI/bge-m3)은 HuggingFace Hub에서 로드하므로 로컬에 저장하지 않습니다.
-
-## 대안 모델
-
-### 임베딩 모델
-- `intfloat/multilingual-e5-large`: 512 토큰, 멀티언어
-- `jhgan/ko-sroberta-multitask`: 한국어 특화
-
-### LLM 모델
-- `qwen2.5:7b`: 128K 컨텍스트, 뛰어난 한국어 지원
-- `llama3.1:8b`: 128K 컨텍스트, 좋은 한국어 지원
-- `gemma2:9b`: 효율적, 빠른 응답
-- `mistral:7b`: 균형잡힌 성능
-
-다른 모델 설치:
-```bash
-ollama pull qwen2.5:7b
-ollama pull llama3.1:8b
-ollama pull gemma2:9b
-```
-
-### Re-ranker 모델
-- `BAAI/bge-reranker-v2-m3`: 멀티언어, 8192 토큰 (기본값)
-- `cross-encoder/ms-marco-MiniLM-L-6-v2`: 영어 특화, 빠른 속도
-
-## 문제 해결
-
-### 1. Ollama 연결 실패
-```
-❌ LLM 초기화 실패: Connection refused
-```
-
-**해결 방법:**
-```bash
-# Ollama 서비스 시작
-ollama serve
-```
-
-### 2. 모델이 없음
-```
-Error: model 'gpt-oss:20b' not found
-```
-
-**해결 방법:**
-```bash
-ollama pull gpt-oss:20b
-```
-
-### 3. 메모리 부족
-큰 모델 사용 시 메모리가 부족한 경우, 더 작은 모델 사용:
-```bash
-ollama pull qwen2.5:3b  # 더 작은 버전
-```
-
-`config.py`에서 변경:
-```python
-OLLAMA_MODEL = "qwen2.5:3b"
-```
-
-### 4. 임베딩 모델 다운로드 느림
-첫 실행 시 HuggingFace에서 임베딩 모델을 다운로드합니다. 시간이 걸릴 수 있으니 기다려주세요.
-
-### 5. GPU 사용
-GPU를 사용하려면 `config.py` 또는 코드에서 `device`를 변경:
-```python
-# document_register.py, rag_engine.py에서
-model_kwargs={'device': 'cuda'}  # 'cpu'를 'cuda'로 변경
-```
-
-### 6. Intent Classifier 모델 없음
-```
-⚠️ Intent Classifier 모델을 찾을 수 없습니다. 기본 템플릿을 사용합니다.
-```
-
-**해결 방법:**
-```bash
-python train_intent_classifier.py
-```
-
-## 성능 최적화 팁
-
-1. **하이브리드 검색**: BM25 + FAISS로 키워드와 의미 검색 병행
-2. **Re-ranking**: Cross-Encoder로 검색 정확도 향상
-3. **Intent Classification**: 질문 유형에 맞는 프롬프트로 답변 품질 향상
-4. **RRF 파라미터 조정**: `RRF_CONSTANT`를 조정하여 융합 방식 변경
-5. **GPU 사용**: CUDA 지원 GPU가 있다면 임베딩에 GPU 사용
-6. **청크 크기 조정**: 문서 특성에 맞게 `CHUNK_SIZE` 조정
-7. **배치 크기**: `document_register.py`의 `batch_size`를 조정하여 속도 향상
-
-## 아키텍처 다이어그램
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         User Interface                              │
-│                 ┌──────────────┐  ┌──────────────┐                  │
-│                 │   Web UI     │  │    CLI       │                  │
-│                 │ (FastAPI)    │  │              │                  │
-│                 └──────┬───────┘  └──────┬───────┘                  │
-└────────────────────────┼─────────────────┼──────────────────────────┘
-                         │                 │
-                         ▼                 ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              Agent Router (LLM 기반, gpt-oss:20b tool calling)       │
-│         질문 의미 판단 → document_qa / web_search 도구 선택           │
-│         (Agent 실패 시 키워드 기반 query_router.py로 폴백)             │
-└────────────────────────┬─────────────────────┬──────────────────────┘
-                         │                      │
-                document_qa 선택           web_search 선택
-                         │                      │
-                         ▼                      ▼
-┌─────────────────────────────────────┐   ┌──────────────────────────┐
-│              RAG Engine             │   │  Web Search (DuckDuckGo) │
-│  ┌───────────┐  ┌───────────┐  ┌───┐│   │   ddgs                   │
-│  │  Intent   │  │ Retrieval │  │LLM││   │   (URL/제목/요약 반환)     │
-│  │Classifier │  │ Pipeline  │  │   ││   └──────────────────────────┘
-│  │ (BGE-M3)  │  │           │  │   ││
-│  └─────┬─────┘  └─────┬─────┘  └─┬─┘│
-│        │              │          │  │
-│        ▼              ▼          ▼  │
-│  ┌───────────┐ ┌───────────────┐┌──┐│
-│  │  Template │ │ BM25 + FAISS  ││Re││
-│  │  Selector │ │  + RRF Fusion ││sp││
-│  └───────────┘ └───────┬───────┘└──┘│
-└────────────────────────┼────────────┘
-                         ▼
-                    ┌───────────────────────┐
-                    │   FAISS VectorStore   │
-                    │   + BM25 Index        │
-                    └───────────────────────┘
-```
-
-## 기술 스택
-
-- **LangChain**: RAG 파이프라인 구축
-- **FAISS**: Dense 벡터 검색 (IndexFlatIP)
-- **BM25**: Sparse 키워드 검색
-- **Sentence Transformers**: 임베딩 및 Re-ranking
-- **Ollama**: 로컬 LLM 실행
-- **HuggingFace**: 임베딩 모델
-- **FastAPI**: 웹 서버
-- **PyTorch**: Intent Classifier 학습
-- **ddgs**: 웹검색 (Agent Router)
 
 ## 라이선스
 
-MIT License
-
-## 기여
-
-버그 리포트나 기능 제안은 이슈로 등록해주세요.
+MIT License. 자세한 내용은 [LICENSE](LICENSE)를 참조하십시오.
