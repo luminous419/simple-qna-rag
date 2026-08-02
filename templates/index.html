@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple Q&A RAG System</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- CDN 대신 로컬 정적 자산으로 고정: package-lock.json에 잠긴 버전과
+         frontend_tests/의 npm 패키지가 항상 동일한 코드를 참조하도록 함
+         (scripts/sync-vendor.js가 node_modules에서 이 파일들을 생성) -->
+    <script src="/static/vendor/marked.umd.js"></script>
+    <script src="/static/vendor/purify.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -348,151 +352,6 @@
         </div>
     </div>
 
-    <script>
-        const questionInput = document.getElementById('questionInput');
-        const searchButton = document.getElementById('searchButton');
-        const loading = document.getElementById('loading');
-        const resultContainer = document.getElementById('resultContainer');
-        const answerContent = document.getElementById('answerContent');
-        const sourcesSection = document.getElementById('sourcesSection');
-        const sourcesContent = document.getElementById('sourcesContent');
-        const showMoreContainer = document.getElementById('showMoreContainer');
-        const showMoreBtn = document.getElementById('showMoreBtn');
-
-        let allSources = [];
-        let isExpanded = false;
-        const MAX_INITIAL_SOURCES = 3;
-
-        // Enter 키 이벤트
-        questionInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                handleSearch();
-            }
-        });
-
-        // 검색 버튼 클릭
-        searchButton.addEventListener('click', handleSearch);
-
-        // 더보기 버튼 클릭
-        showMoreBtn.addEventListener('click', toggleSources);
-
-        function toggleSources() {
-            isExpanded = !isExpanded;
-            renderSources(allSources);
-
-            // 버튼 텍스트 및 아이콘 변경
-            const icon = showMoreBtn.querySelector('.icon');
-            const text = showMoreBtn.querySelector('.text');
-
-            if (isExpanded) {
-                icon.textContent = '−';
-                text.textContent = '접기';
-                showMoreBtn.classList.add('expanded');
-            } else {
-                icon.textContent = '+';
-                text.textContent = '더보기';
-                showMoreBtn.classList.remove('expanded');
-            }
-        }
-
-        function renderSources(sources) {
-            if (!sources || sources.length === 0) {
-                sourcesSection.style.display = 'none';
-                return;
-            }
-
-            allSources = sources;
-
-            // 표시할 소스 개수 결정
-            const displayCount = isExpanded ? sources.length : Math.min(MAX_INITIAL_SOURCES, sources.length);
-
-            // 소스 렌더링
-            sourcesContent.innerHTML = sources.map((source, index) => {
-                const pageInfo = source.page ? ` (페이지 ${source.page})` : '';
-                const isHidden = index >= displayCount ? 'hidden' : '';
-                return `
-                    <div class="source-item ${isHidden}">
-                        <div class="source-header">[${source.index}] ${source.source}${pageInfo}</div>
-                        <div class="source-content">${source.content}...</div>
-                    </div>
-                `;
-            }).join('');
-
-            // 더보기 버튼 표시 여부
-            if (sources.length > MAX_INITIAL_SOURCES) {
-                showMoreContainer.classList.remove('hidden');
-            } else {
-                showMoreContainer.classList.add('hidden');
-            }
-
-            sourcesSection.style.display = 'block';
-        }
-
-        async function handleSearch() {
-            const question = questionInput.value.trim();
-
-            if (!question) {
-                alert('질문을 입력해주세요.');
-                return;
-            }
-
-            // UI 상태 변경
-            searchButton.disabled = true;
-            loading.classList.add('active');
-            resultContainer.classList.remove('active');
-
-            try {
-                // API 호출
-                const response = await fetch('/rag', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ question: question })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    // 답변 표시 (Markdown 렌더링)
-                    answerContent.innerHTML = marked.parse(data.answer);
-
-                    // 출처 표시 (초기 상태로 리셋)
-                    isExpanded = false;
-                    if (data.sources && data.sources.length > 0) {
-                        renderSources(data.sources);
-                    } else {
-                        sourcesSection.style.display = 'none';
-                        showMoreContainer.classList.add('hidden');
-                    }
-
-                    resultContainer.classList.add('active');
-                } else {
-                    // 오류 표시
-                    answerContent.innerHTML = `
-                        <div class="error-message">
-                            <strong>오류 발생:</strong> ${data.answer}
-                        </div>
-                    `;
-                    sourcesSection.style.display = 'none';
-                    resultContainer.classList.add('active');
-                }
-
-            } catch (error) {
-                console.error('Error:', error);
-                answerContent.innerHTML = `
-                    <div class="error-message">
-                        <strong>서버 오류:</strong> ${error.message}
-                    </div>
-                `;
-                sourcesSection.style.display = 'none';
-                resultContainer.classList.add('active');
-            } finally {
-                // UI 상태 복원
-                searchButton.disabled = false;
-                loading.classList.remove('active');
-            }
-        }
-    </script>
+    <script type="module" src="/static/app.js"></script>
 </body>
 </html>
