@@ -1,5 +1,5 @@
 /**
- * XSS 방어 회귀 테스트 (Problems.md 권장 후속 작업).
+ * XSS 방어 회귀 테스트 (Problem.md에서 관리했던 보안 문제의 회귀 방지).
  *
  * 웹 검색 결과처럼 신뢰할 수 없는 외부 콘텐츠가 answer/sources에 섞여 들어와도
  * 실행 가능한 DOM(스크립트, 이벤트 핸들러, javascript:/data: 링크)으로 렌더링되지
