@@ -557,7 +557,7 @@ pytest -q
 
 **사용자 승인 게이트**: 초안 작성 후 정답(카테고리 분포, source 매핑, assertion 문구, abstention 사례)에 대한 사람 검토 2회(§5)를 사용자에게 명시적으로 요청한다. 승인 전에는 Phase 2를 완료 처리하지 않는다(상위 계획 §4 Phase 2 완료 조건, §8 게이트 참고). **완료**: M2_Phase2_code_review_result.md 리뷰에서 발견된 P1 3건(확장자 없는 경제 PDF가 `document_register.py`의 `**/*.pdf`/`**/*.txt` 글롭에 걸리지 않아 인덱싱 누락, 비교·절차형 질문의 독립적 사실이 하나의 `any_of`에 섞여 부분 답변도 통과, `evaluation/README.md` 부재)를 모두 수정한 뒤(파일명에 `.pdf` 확장자 추가 + vectorstore 재생성으로 18개 source 전부 검색 후보에 포함됨을 실제 유사도 검색으로 확인, 8개 사례의 복합 assertion을 독립 `AnswerAssertion` 객체로 분리, README 작성) source relevance·answer assertion 검토를 재요청해 승인받았다.
 
-### Phase 3 — metric과 reporting
+### Phase 3 — metric과 reporting (완료)
 
 파일: `evaluation/metrics.py`, `evaluation/reporting.py`, `test_evaluation_metrics.py`, `test_evaluation_reporting.py`, `.gitignore`에 `evaluation/reports/` 추가
 
@@ -566,6 +566,8 @@ pytest -q
 ```bash
 pytest -q
 ```
+
+**완료**: M2_Phase3_code_review_result.md 리뷰에서 P1 1건("write_report()가 초 단위 timestamp만 써서 같은 evaluator 리포트를 1초 안에 두 번 쓰면 기존 결과를 조용히 덮어씀") + P2 2건(percentile()이 범위 밖 p를 조용히 clamp, corpus manifest 파일 추가/삭제 회귀 테스트 누락) + P3 1건(recall_at_k/mrr_at_k/ndcg_at_k가 k<1을 검증하지 않아 음수 slice로 잘못된 값을 냄)이 발견됐다. write_report()는 마이크로초 정밀도 + 배타적 생성("x" 모드) + 충돌 시 suffix 재시도로 수정했고, percentile()과 세 metric 함수는 잘못된 입력에 ValueError를 던지도록 통일했다. 회귀 테스트 18건을 추가해 재검증했다.
 
 커밋: `평가 metric 및 report 생성기 추가`
 

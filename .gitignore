@@ -10,6 +10,9 @@ data/
 # 벡터 데이터베이스
 vectorstore/
 
+# 평가 리포트 산출물 (evaluation/baselines/는 승인된 결과만 커밋 대상이라 제외하지 않음)
+evaluation/reports/
+
 # Python 캐시
 __pycache__/
 *.py[cod]
