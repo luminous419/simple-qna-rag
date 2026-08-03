@@ -27,7 +27,7 @@ M0 Core RAG           완료
         |
 M1 Agent & Safety     완료
         |
-M2 Quality & CI       계획 완료 / 착수 대기  <-- 현재 위치
+M2 Quality & CI       진행 중 (Phase 1~3/9 완료)  <-- 현재 위치
         |
 M3 Retrieval Quality  예정
         |
@@ -36,7 +36,7 @@ M4 Production Ready   예정
 M5 Scale & Advanced   조건부
 ```
 
-현재 브랜치는 핵심 RAG, Agent 라우팅, 장애 폴백, 웹 XSS 방어와 프런트엔드 의존성 재현성까지 구현한 상태입니다. M2의 요구사항과 개발 계획이 확정됐으며, 다음 단계는 해당 계획에 따라 실제 품질을 측정할 수 있는 기준선과 CI를 구현하는 것입니다.
+현재 브랜치는 핵심 RAG, Agent 라우팅, 장애 폴백, 웹 XSS 방어와 프런트엔드 의존성 재현성까지 구현한 상태입니다. M2는 [상세 개발 계획](Development_M2_Quality_Baseline_Development_Plan.md)의 Phase 0(착수 전 상태 기록)~Phase 3(metric·report 생성기)까지 완료했습니다 — 골든 평가셋(62개 사례), schema/dataset validator, Recall/MRR/nDCG 등 metric 함수, 재현성 메타데이터(리포트) 생성기가 구현되고 사람 검토·코드 리뷰를 거쳐 master에 병합됐습니다. 다음 단계는 Phase 4(Retrieval evaluator)부터 이어서 실제 품질 기준선을 측정하는 것입니다.
 
 ## 마일스톤
 
@@ -75,7 +75,7 @@ M5 Scale & Advanced   조건부
 
 ### M2 — Quality Baseline & Continuous Integration
 
-**상태: 계획 완료 / 착수 대기**
+**상태: 진행 중** — [상세 개발 계획](Development_M2_Quality_Baseline_Development_Plan.md) Phase 0~3/9 완료(골든 평가셋, schema/dataset validator, metric·report 생성기), Phase 4(Retrieval evaluator)부터 진행 예정
 
 목표: 모든 후속 개선을 객관적으로 비교할 수 있는 품질·성능 기준선 구축
 
