@@ -31,7 +31,12 @@ from evaluation.metrics import (
     percentile,
     recall_at_k,
 )
-from evaluation.reporting import build_metadata, build_reproducibility_metadata, write_report
+from evaluation.reporting import (
+    build_metadata,
+    build_reproducibility_metadata,
+    escape_markdown_table_cell,
+    write_report,
+)
 from evaluation.schema import normalize_source_id
 
 SCHEMA_VERSION = "1.0.0"
@@ -44,7 +49,15 @@ _MRR_NDCG_K = 10
 
 
 def _apply_tag_and_limit(cases, tag: str | None, limit: int | None):
-    """tag/limit을 원본 순서를 유지한 채 결정론적으로 적용한다."""
+    """tag/limit을 원본 순서를 유지한 채 결정론적으로 적용한다.
+
+    CLI(`main()`)는 argparse의 `_positive_int` type으로 0/음수 `--limit`을 이미
+    거부하지만, `evaluate_retrieval()`을 Python에서 직접 호출하면 이 계층을
+    거치지 않는다. `limit < 1`을 여기서도 검증해야 `cases[:limit]`이 음수
+    slice(마지막 |limit|개를 제외)로 조용히 재해석되지 않는다
+    (M2_Phase_4_5_6_code_review_result.md 재리뷰 P3)."""
+    if limit is not None and limit < 1:
+        raise ValueError(f"limit은 1 이상이어야 합니다: {limit!r}")
     selected = [c for c in cases if tag in c.tags] if tag is not None else list(cases)
     if limit is not None:
         selected = selected[:limit]
@@ -242,8 +255,96 @@ def evaluate_retrieval(
     extra.update(reproducibility)
 
     payload = build_metadata(dataset_path, command, extra)
-    write_report(payload, output_dir, "retrieval")
+    write_report(payload, output_dir, "retrieval", render_markdown=_render_retrieval_markdown)
     return payload
+
+
+def _render_retrieval_markdown(payload: dict) -> str:
+    """사람이 Recall@K/MRR@10/nDCG@10/latency/stage 요약/실패 사례를 JSON을 열지
+    않고 바로 읽을 수 있는 Markdown을 만든다(M2_Phase_4_5_6_code_review_result.md
+    P1 — 공통 `_render_markdown()`은 dict/list 필드를 렌더링하지 않는다)."""
+    lines: list[str] = ["# retrieval", ""]
+    generated_at = payload.get("generated_at_utc")
+    if generated_at:
+        lines.append(f"생성 시각(UTC): {generated_at}")
+    lines.append(f"dataset: {payload.get('dataset_path')}")
+    lines.append(f"command: `{' '.join(payload.get('command') or [])}`")
+    lines.append("")
+
+    counts = payload.get("case_counts") or {}
+    lines.append("## 요약")
+    lines.append("")
+    lines.append(
+        f"- 사례: total={counts.get('total')} success={counts.get('success')} "
+        f"failure={counts.get('failure')} excluded(relevant_sources 없음)={counts.get('excluded')}"
+    )
+    lines.append(f"- nDCG 제외(relevance_grades 없음): {payload.get('ndcg_excluded_count')}")
+    lines.append(f"- vectorstore 문서 수: {payload.get('vectorstore_document_count')}")
+    lines.append("")
+
+    metrics = payload.get("metrics") or {}
+    lines.append("## Retrieval 품질 지표")
+    lines.append("")
+    lines.append("| 지표 | 값 |")
+    lines.append("|---|---|")
+    for key in sorted(metrics.keys()):
+        value = metrics[key]
+        value_display = "N/A" if value is None else f"{value:.3f}"
+        lines.append(f"| {key} | {value_display} |")
+    lines.append("")
+
+    latency = payload.get("latency_ms") or {}
+    lines.append("## End-to-end Latency (ms)")
+    lines.append("")
+    mean, median, p95 = latency.get("mean"), latency.get("median"), latency.get("p95")
+    if mean is None:
+        lines.append("- 데이터 없음(성공한 사례가 없음)")
+    else:
+        lines.append(f"- mean: {mean:.1f} · median: {median:.1f} · p95: {p95:.1f}")
+    lines.append("")
+
+    stage_summary = payload.get("stage_summary") or {}
+    lines.append("## Stage별 요약")
+    lines.append("")
+    if stage_summary:
+        lines.append("| stage | count | latency_ms mean | latency_ms p95 | candidate_count mean |")
+        lines.append("|---|---|---|---|---|")
+        for name in sorted(stage_summary.keys()):
+            s = stage_summary[name]
+            lines.append(
+                f"| {name} | {s.get('count')} | {s.get('latency_ms_mean'):.1f} | "
+                f"{s.get('latency_ms_p95'):.1f} | {s.get('candidate_count_mean'):.1f} |"
+            )
+    else:
+        lines.append("(없음)")
+    lines.append("")
+
+    failures = [c for c in (payload.get("case_results") or []) if not c.get("success", True)]
+    lines.append(f"## 실패 사례 ({len(failures)}건)")
+    lines.append("")
+    if failures:
+        lines.append("| id | 질문 | 오류 |")
+        lines.append("|---|---|---|")
+        for f in failures:
+            case_id = escape_markdown_table_cell(f.get("id"))
+            question = escape_markdown_table_cell(f.get("question"))
+            error = escape_markdown_table_cell(f.get("error"))
+            lines.append(f"| {case_id} | {question} | {error} |")
+    else:
+        lines.append("(없음)")
+    lines.append("")
+    lines.append("전체 사례별 순위·trace는 같은 이름의 `.json` 리포트를 참고하세요.")
+    return "\n".join(lines) + "\n"
+
+
+def _positive_int(value: str) -> int:
+    """--limit용 argparse type. 0/음수는 `cases[:limit]`이 Python 음수 slice로
+    조용히 재해석되는 것을 막기 위해 parser 오류(exit 2)로 거부한다
+    (M2_Phase_4_5_6_code_review_result.md P3)."""
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"--limit은 1 이상의 정수여야 합니다: {value!r}")
+    return parsed
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -259,7 +360,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--output", type=Path, required=True, help="JSON/Markdown 리포트를 저장할 디렉터리"
     )
     parser.add_argument(
-        "--limit", type=int, default=None, help="평가할 최대 사례 수(원본 순서 기준 앞에서부터)"
+        "--limit", type=_positive_int, default=None, help="평가할 최대 사례 수(원본 순서 기준 앞에서부터, 1 이상)"
     )
     parser.add_argument("--tag", type=str, default=None, help="이 tag를 가진 사례만 평가")
     return parser

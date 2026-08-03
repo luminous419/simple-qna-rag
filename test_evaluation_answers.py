@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import unicodedata
+from pathlib import Path
 
 import pytest
 
@@ -254,6 +255,15 @@ class TestEvaluateAnswers:
                 f.write(json.dumps(json.loads(case.model_dump_json()), ensure_ascii=False) + "\n")
         return path
 
+    @pytest.mark.parametrize("bad_limit", [0, -1])
+    def test_non_positive_limit_raises_even_when_called_directly(self, tmp_path, bad_limit):
+        """M2_Phase_4_5_6_code_review_result.md 재리뷰 P3: CLI의 _positive_int는
+        --limit 0/-1을 막지만, evaluate_answers()를 Python에서 직접 호출하면
+        이 계층을 거치지 않는다 — 공개 함수 자체도 방어해야 한다."""
+        dataset_path = self._write_dataset(tmp_path, [ASSERTION_CASE])
+        with pytest.raises(ValueError):
+            evaluate_answers(dataset_path, tmp_path / "reports", limit=bad_limit)
+
     def test_retrieval_only_case_excluded_and_others_scored(self, tmp_path, monkeypatch):
         dataset_path = self._write_dataset(
             tmp_path, [ASSERTION_CASE, ABSTENTION_CASE, RETRIEVAL_ONLY_CASE]
@@ -284,6 +294,48 @@ class TestEvaluateAnswers:
         assert set(fake_engine.calls) == {ASSERTION_CASE.question, ABSTENTION_CASE.question}
         assert result["corpus_manifest_sha256"] == "deadbeef"
         assert result["vectorstore_fingerprint"] is not None
+
+    def test_assertion_cases_scored_excludes_no_assertion_and_failure_cases(
+        self, tmp_path, monkeypatch
+    ):
+        """M2_Phase_4_5_6_code_review_result.md P2: assertion.cases_scored는
+        success_count 전체가 아니라 "성공했고 answer_assertions가 1개 이상 있는"
+        사례 수만 세야 한다. ASSERTION_CASE(assertion 1개)는 채점되고,
+        ABSTENTION_CASE(assertion 없음, expect_abstention=True로만 대상)는
+        cases_excluded_no_assertion으로, 질의 실패 사례는 cases_excluded_failure로
+        각각 별도 집계돼야 하며 세 값의 합은 eligible 수와 같아야 한다."""
+        failing_case = _case(
+            id="fail-assertion",
+            question="질의가 실패하는 질문",
+            answer_assertions=[AnswerAssertion(any_of=["핵심"])],
+        )
+        dataset_path = self._write_dataset(
+            tmp_path, [ASSERTION_CASE, ABSTENTION_CASE, failing_case]
+        )
+        _patch_repro(monkeypatch)
+        fake_engine = FakeEngine(
+            {
+                ASSERTION_CASE.question: _success_response("핵심 사실이 포함된 답변"),
+                ABSTENTION_CASE.question: _success_response(
+                    "제공된 문서에서 관련 정보를 찾을 수 없습니다."
+                ),
+                failing_case.question: RuntimeError("모델 호출 실패"),
+            }
+        )
+        monkeypatch.setattr(answers_module, "_get_engine", lambda: fake_engine)
+
+        result = evaluate_answers(dataset_path, tmp_path / "reports")
+
+        assertion = result["assertion"]
+        assert assertion["cases_scored"] == 1  # ASSERTION_CASE만
+        assert assertion["cases_excluded_no_assertion"] == 1  # ABSTENTION_CASE
+        assert assertion["cases_excluded_failure"] == 1  # failing_case
+        assert (
+            assertion["cases_scored"]
+            + assertion["cases_excluded_no_assertion"]
+            + assertion["cases_excluded_failure"]
+            == result["case_counts"]["eligible"]
+        )
 
     def test_query_exception_and_success_false_do_not_pollute_scoring_and_continue(
         self, tmp_path, monkeypatch
@@ -429,6 +481,63 @@ class TestEvaluateAnswers:
         assert secret_chunk not in worksheet_text
         assert "doc1.pdf" in worksheet_text
 
+    def test_markdown_report_shows_aggregate_metrics_and_failures_not_just_json_pointer(
+        self, tmp_path, monkeypatch
+    ):
+        """M2_Phase_4_5_6_code_review_result.md P1: Answer aggregate Markdown에는
+        assertion pass rate/abstention 정확도/source hit·recall/intent 정확도/
+        latency/실패 수가 표시돼야 한다."""
+        failing_case = _case(
+            id="fail-1",
+            question="질의가 실패하는 질문",
+            answer_assertions=[AnswerAssertion(any_of=["핵심"])],
+        )
+        dataset_path = self._write_dataset(tmp_path, [ASSERTION_CASE, failing_case])
+        _patch_repro(monkeypatch)
+        fake_engine = FakeEngine(
+            {
+                ASSERTION_CASE.question: _success_response(
+                    "핵심 사실이 포함된 답변",
+                    sources=[{"index": 1, "source": "doc1.pdf", "page": 1, "content": "x"}],
+                ),
+                failing_case.question: RuntimeError("모델 호출 실패"),
+            }
+        )
+        monkeypatch.setattr(answers_module, "_get_engine", lambda: fake_engine)
+
+        output_dir = tmp_path / "reports"
+        result = evaluate_answers(dataset_path, output_dir)
+        md_path = Path(result["report_markdown_path"])
+        text = md_path.read_text(encoding="utf-8")
+
+        assert "pass rate" in text
+        assert "100.0%" in text  # assertion pass rate: 1/1
+        assert "fail-1" in text
+        assert "모델 호출 실패" in text
+
+    def test_markdown_failure_row_with_pipe_and_newline_keeps_column_count(self, tmp_path, monkeypatch):
+        """M2_Phase_4_5_6_code_review_result.md 재리뷰 P2: 질문이나 오류 메시지에
+        pipe/줄바꿈이 들어가도 실패 사례 표의 열 개수(3개)가 유지돼야 한다."""
+        failing_case = _case(
+            id="fail-1",
+            question="질문 | 파이프\n줄바꿈",
+            answer_assertions=[AnswerAssertion(any_of=["핵심"])],
+        )
+        dataset_path = self._write_dataset(tmp_path, [failing_case])
+        _patch_repro(monkeypatch)
+        fake_engine = FakeEngine({failing_case.question: RuntimeError("오류 | 발생")})
+        monkeypatch.setattr(answers_module, "_get_engine", lambda: fake_engine)
+
+        output_dir = tmp_path / "reports"
+        result = evaluate_answers(dataset_path, output_dir)
+        md_path = Path(result["report_markdown_path"])
+        text = md_path.read_text(encoding="utf-8")
+
+        failure_row = next(line for line in text.splitlines() if line.startswith("| fail-1"))
+        # delimiter 4개(3열 경계) + question/error에 각 1개씩 이스케이프된 pipe = 6개.
+        assert failure_row.count("|") == 6
+        assert "\n" not in failure_row.strip()
+
     def test_tag_filter_and_limit_applied_deterministically(self, tmp_path, monkeypatch):
         tagged_case = _case(
             id="tagged-1",
@@ -522,6 +631,28 @@ class TestCLI:
         with pytest.raises(SystemExit) as exc_info:
             main(["--help"])
         assert exc_info.value.code == 0
+
+    @pytest.mark.parametrize("bad_limit", ["0", "-1"])
+    def test_non_positive_limit_is_parser_error_not_negative_slice(self, tmp_path, bad_limit):
+        """M2_Phase_4_5_6_code_review_result.md P3: --limit -1은 cases[:-1](마지막
+        하나 제외)로 조용히 재해석되면 안 되고 argparse 오류(exit 2)여야 한다."""
+        dataset_path = tmp_path / "golden.jsonl"
+        dataset_path.write_text(
+            json.dumps(json.loads(ASSERTION_CASE.model_dump_json()), ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            main(
+                [
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(tmp_path / "out"),
+                    "--limit",
+                    bad_limit,
+                ]
+            )
+        assert exc_info.value.code == 2
 
     def test_missing_dataset_file_returns_nonzero_with_guidance(self, tmp_path, capsys):
         missing_path = tmp_path / "does_not_exist.jsonl"

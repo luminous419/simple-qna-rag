@@ -27,7 +27,12 @@ from typing import Any
 import config
 from evaluation.dataset import DatasetError, load_jsonl
 from evaluation.metrics import assertion_coverage, dedupe_preserve_order, mean_median, percentile
-from evaluation.reporting import build_metadata, build_reproducibility_metadata, write_report
+from evaluation.reporting import (
+    build_metadata,
+    build_reproducibility_metadata,
+    escape_markdown_table_cell,
+    write_report,
+)
 from evaluation.schema import AnswerAssertion, GoldenCase, is_answer_eval_eligible, normalize_source_id
 
 SCHEMA_VERSION = "1.0.0"
@@ -186,7 +191,16 @@ def evaluate_answers(
       6. 사례별로 질의하고 실패(예외 또는 success=False)는 기록 후 계속,
          정상 답변만 assertion/abstention/source/intent 채점에 반영.
       7. 집계 후 JSON/Markdown 리포트와 review worksheet를 생성.
+
+    CLI(`main()`)는 argparse의 `_positive_int` type으로 0/음수 `--limit`을 이미
+    거부하지만, 이 함수를 Python에서 직접 호출하면 이 계층을 거치지 않는다.
+    `limit < 1`을 여기서도 검증해야 `considered[:limit]`이 음수 slice(마지막
+    |limit|개를 제외)로 조용히 재해석되지 않는다(M2_Phase_4_5_6_code_review_result.md
+    재리뷰 P3).
     """
+    if limit is not None and limit < 1:
+        raise ValueError(f"limit은 1 이상이어야 합니다: {limit!r}")
+
     command = [
         "python",
         "-m",
@@ -221,6 +235,8 @@ def evaluate_answers(
 
     assertion_passed_sum = 0
     assertion_total_sum = 0
+    assertion_cases_scored = 0
+    assertion_cases_excluded_no_assertion = 0
     success_count = 0
     failure_count = 0
 
@@ -285,6 +301,10 @@ def evaluate_answers(
         passed, total = assertion_coverage(answer, case.answer_assertions)
         assertion_passed_sum += passed
         assertion_total_sum += total
+        if case.answer_assertions:
+            assertion_cases_scored += 1
+        else:
+            assertion_cases_excluded_no_assertion += 1
 
         predicted_abstention = _detect_abstention(answer)
         abstention_flags.append((case.expect_abstention, predicted_abstention))
@@ -365,7 +385,16 @@ def evaluate_answers(
             "failure": failure_count,
         },
         "assertion": {
-            "cases_scored": success_count,
+            # cases_scored는 "성공했고 answer_assertions가 1개 이상 있는" 사례 수다.
+            # 이전에는 success_count를 그대로 썼는데, Answer 평가 대상에는
+            # expect_abstention=True이고 assertion이 없는 사례도 포함되므로
+            # cases_scored가 실제로 assertion을 채점한 사례 수보다 커 보이는
+            # 문제가 있었다(M2_Phase_4_5_6_code_review_result.md P2).
+            # cases_scored + cases_excluded_no_assertion + cases_excluded_failure
+            # == len(eligible) 불변식이 성립해야 한다.
+            "cases_scored": assertion_cases_scored,
+            "cases_excluded_no_assertion": assertion_cases_excluded_no_assertion,
+            "cases_excluded_failure": failure_count,
             "assertions_total": assertion_total_sum,
             "assertions_passed": assertion_passed_sum,
             "pass_rate": (assertion_passed_sum / assertion_total_sum) if assertion_total_sum > 0 else None,
@@ -399,7 +428,7 @@ def evaluate_answers(
     payload = build_metadata(dataset_path, command, extra)
     payload.update(repro)
 
-    json_path, md_path = write_report(payload, output_dir, "answers")
+    json_path, md_path = write_report(payload, output_dir, "answers", render_markdown=_render_answers_markdown)
     worksheet_path = output_dir / f"{json_path.stem}_worksheet.md"
     write_review_worksheet(case_results, worksheet_path)
 
@@ -408,6 +437,120 @@ def evaluate_answers(
     output["report_markdown_path"] = str(md_path)
     output["worksheet_path"] = str(worksheet_path)
     return output
+
+
+def _render_answers_markdown(payload: dict) -> str:
+    """사람이 assertion pass rate/abstention 정확도/source hit·recall/intent
+    정확도/latency/실패 수를 JSON을 열지 않고 바로 읽을 수 있는 Markdown을
+    만든다(M2_Phase_4_5_6_code_review_result.md P1 — 공통 `_render_markdown()`은
+    dict/list 필드를 렌더링하지 않는다). 사례별 상세는 별도 review worksheet와
+    JSON에 있으므로 여기서는 집계 결과와 실패 사례 목록만 다룬다."""
+    lines: list[str] = ["# answers", ""]
+    generated_at = payload.get("generated_at_utc")
+    if generated_at:
+        lines.append(f"생성 시각(UTC): {generated_at}")
+    lines.append("")
+
+    counts = payload.get("case_counts") or {}
+    lines.append("## 요약")
+    lines.append("")
+    lines.append(
+        f"- 대상 사례: considered={counts.get('total_considered')} eligible={counts.get('eligible')} "
+        f"(제외 {counts.get('excluded_non_eligible')}) · success={counts.get('success')} "
+        f"failure={counts.get('failure')}"
+    )
+    lines.append("")
+
+    assertion = payload.get("assertion") or {}
+    pass_rate = assertion.get("pass_rate")
+    pass_rate_display = "N/A" if pass_rate is None else f"{pass_rate:.1%}"
+    lines.append("## Assertion")
+    lines.append("")
+    lines.append(
+        f"- pass rate: {pass_rate_display} ({assertion.get('assertions_passed')}/{assertion.get('assertions_total')}) · "
+        f"채점 사례 {assertion.get('cases_scored')}건 "
+        f"(assertion 없음 제외 {assertion.get('cases_excluded_no_assertion')}건, "
+        f"질의 실패 제외 {assertion.get('cases_excluded_failure')}건)"
+    )
+    lines.append(f"- 한계: {assertion.get('limitation_note')}")
+    lines.append("")
+
+    abstention = payload.get("abstention") or {}
+    acc = abstention.get("accuracy")
+    acc_display = "N/A" if acc is None else f"{acc:.1%}"
+    lines.append("## Abstention")
+    lines.append("")
+    lines.append(
+        f"- accuracy: {acc_display} (평가 대상 {abstention.get('evaluated_count')}건) · "
+        f"TP={abstention.get('true_positive')} TN={abstention.get('true_negative')} "
+        f"FP={abstention.get('false_positive')} FN={abstention.get('false_negative')}"
+    )
+    if abstention.get("abstention_accuracy_excluded_reason"):
+        lines.append(f"- 제외 사유: {abstention.get('abstention_accuracy_excluded_reason')}")
+    lines.append("")
+
+    source = payload.get("source") or {}
+    any_hit_rate = source.get("any_hit_rate")
+    mean_recall = source.get("mean_recall")
+    lines.append("## Source")
+    lines.append("")
+    lines.append(
+        f"- any_hit_rate: {'N/A' if any_hit_rate is None else f'{any_hit_rate:.1%}'} · "
+        f"mean_recall: {'N/A' if mean_recall is None else f'{mean_recall:.3f}'} "
+        f"(평가 대상 {source.get('evaluated_count')}건, relevant_sources 없어 제외 {source.get('excluded_count')}건, "
+        f"source entry 스킵 {source.get('skipped_entries_total')}건)"
+    )
+    lines.append("")
+
+    intent = payload.get("intent") or {}
+    intent_acc = intent.get("accuracy")
+    lines.append("## Intent")
+    lines.append("")
+    lines.append(
+        f"- accuracy: {'N/A' if intent_acc is None else f'{intent_acc:.1%}'} "
+        f"({intent.get('correct_count')}/{intent.get('evaluated_count')}, 제외 {intent.get('excluded_count')}건)"
+    )
+    lines.append("")
+
+    latency = payload.get("latency_ms") or {}
+    lines.append("## Latency (ms)")
+    lines.append("")
+    mean_ms = latency.get("mean_ms")
+    if mean_ms is None:
+        lines.append("- 데이터 없음")
+    else:
+        lines.append(f"- mean: {mean_ms:.1f} · median: {latency.get('median_ms'):.1f} · p95: {latency.get('p95_ms'):.1f}")
+    lines.append("")
+
+    failures = payload.get("failures") or []
+    lines.append(f"## 실패 사례 ({len(failures)}건)")
+    lines.append("")
+    if failures:
+        lines.append("| id | 질문 | 오류 |")
+        lines.append("|---|---|---|")
+        for f in failures:
+            case_id = escape_markdown_table_cell(f.get("id"))
+            question = escape_markdown_table_cell(f.get("question"))
+            error = escape_markdown_table_cell(f.get("error"))
+            lines.append(f"| {case_id} | {question} | {error} |")
+    else:
+        lines.append("(없음)")
+    lines.append("")
+    lines.append(
+        "사례별 상세 자동 점수와 답변 원문은 사람 검토용 worksheet"
+        "(같은 디렉터리의 `answers_<timestamp>_worksheet.md`)와 같은 이름의 `.json` 리포트를 참고하세요."
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _positive_int(value: str) -> int:
+    """--limit용 argparse type. 0/음수는 `cases[:limit]`이 Python 음수 slice로
+    조용히 재해석되는 것을 막기 위해 parser 오류(exit 2)로 거부한다
+    (M2_Phase_4_5_6_code_review_result.md P3)."""
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"--limit은 1 이상의 정수여야 합니다: {value!r}")
+    return parsed
 
 
 def _render_case_section(result: dict) -> str:
@@ -507,7 +650,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m evaluation.answers")
     parser.add_argument("--dataset", type=Path, required=True, help="golden.jsonl 경로")
     parser.add_argument("--output", type=Path, required=True, help="리포트를 저장할 디렉터리")
-    parser.add_argument("--limit", type=int, default=None, help="평가 대상 상한(원본 순서 기준)")
+    parser.add_argument("--limit", type=_positive_int, default=None, help="평가 대상 상한(원본 순서 기준, 1 이상)")
     parser.add_argument("--tag", type=str, default=None, help="이 tag를 가진 사례만 평가")
     return parser
 

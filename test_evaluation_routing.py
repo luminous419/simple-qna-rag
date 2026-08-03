@@ -18,7 +18,12 @@ from pathlib import Path
 import pytest
 
 from evaluation.dataset import load_jsonl
-from evaluation.routing import _offline_mock_decide_tool, evaluate_routing, main
+from evaluation.routing import (
+    _offline_mock_decide_tool,
+    _render_routing_markdown,
+    evaluate_routing,
+    main,
+)
 from evaluation.schema import GoldenCase
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -180,7 +185,12 @@ class TestEvaluateRoutingCore:
         assert boom_failure["error"] is not None
         assert "RuntimeError" in boom_failure["error"]
 
-    def test_unknown_route_is_recorded_and_excluded_from_confusion_matrix(self):
+    def test_unknown_route_is_recorded_as_explicit_confusion_column(self):
+        """M2_Phase_4_5_6_code_review_result.md P1: unknown_route는 confusion
+        matrix에서 완전히 빠지는 게 아니라 명시적 예측 열로 남고, 기대 클래스의
+        false negative(recall 감소)로 반영돼야 한다. decide_tool()이 실제로
+        반환한 임의의 문자열("not_a_real_tool")이 아니라 고정 카테고리
+        "unknown_route"가 predicted 값으로 쓰인다."""
         cases = [_make_case("a", "a", "document_qa")]
 
         def decide(question: str):
@@ -193,9 +203,80 @@ class TestEvaluateRoutingCore:
         assert result["correct_count"] == 0
         assert result["failures"][0]["failure_type"] == "unknown_route"
         assert result["failures"][0]["actual_route"] == "not_a_real_tool"
-        # labels 밖 값이 precision_recall_f1()에 전달되지 않았어야 하며, KeyError 없이 통과한다.
+        # KeyError 없이 통과해야 하며(labels 집합은 pseudo-label로 고정돼 있음),
+        # unknown_route는 실제 반환값이 아니라 정규화된 카테고리 이름으로 기록된다.
         pr = result["precision_recall_f1"]
         assert pr["document_qa"]["precision"] == 0.0
+        assert pr["document_qa"]["recall"] == 0.0  # tp=0, fn=1(unknown_route로 실패)
+        assert pr["confusion_matrix"]["document_qa"]["unknown_route"] == 1
+        assert "not_a_real_tool" not in pr["confusion_matrix"]["document_qa"]
+
+    def test_failure_types_each_reduce_recall_as_false_negative(self):
+        """M2_Phase_4_5_6_code_review_result.md P1 권고: 정상 1건 + no-tool 1건,
+        정상 1건 + exception 1건, unknown-route 사례를 각각 포함해 recall 감소를
+        검증한다. 세 유형 모두 기대 클래스 recall의 분모(false negative)에
+        반영돼야 한다."""
+
+        def make_decide(no_tool_q, exception_q, unknown_q):
+            def decide(question: str):
+                if question == no_tool_q:
+                    return None, None
+                if question == exception_q:
+                    raise RuntimeError("boom")
+                if question == unknown_q:
+                    return "not_a_real_tool", question
+                return "document_qa", question
+
+            return decide
+
+        cases = [
+            _make_case("ok1", "ok1", "document_qa"),
+            _make_case("no_tool", "no_tool", "document_qa"),
+            _make_case("exc", "exc", "document_qa"),
+            _make_case("unk", "unk", "document_qa"),
+        ]
+        result = evaluate_routing(
+            cases, make_decide("no_tool", "exc", "unk"), measure_latency=False
+        )
+
+        pr = result["precision_recall_f1"]
+        # tp=1("ok1"), fn=3(no_tool/exception/unknown_route 각각 1건) -> recall = 1/4
+        assert pr["document_qa"]["recall"] == pytest.approx(0.25)
+        assert pr["confusion_matrix"]["document_qa"]["no_tool"] == 1
+        assert pr["confusion_matrix"]["document_qa"]["exception"] == 1
+        assert pr["confusion_matrix"]["document_qa"]["unknown_route"] == 1
+        assert pr["confusion_matrix"]["document_qa"]["document_qa"] == 1
+
+    def test_confusion_matrix_row_sums_match_expected_route_counts(self):
+        """불변식: accuracy == correct/total이고, confusion matrix의 각 실제
+        클래스 행의 합은 그 클래스가 expected_route인 전체 사례 수와 같아야
+        한다(실패 사례를 포함해서) — M2_Phase_4_5_6_code_review_result.md P1."""
+        cases = [
+            _make_case("dq_ok", "dq_ok", "document_qa"),
+            _make_case("dq_no_tool", "dq_no_tool", "document_qa"),
+            _make_case("ws_ok", "ws_ok", "web_search"),
+            _make_case("ws_exc", "ws_exc", "web_search"),
+        ]
+
+        def decide(question: str):
+            if question == "dq_no_tool":
+                return None, None
+            if question == "ws_exc":
+                raise RuntimeError("boom")
+            if question == "dq_ok":
+                return "document_qa", question
+            if question == "ws_ok":
+                return "web_search", question
+            raise AssertionError("unreachable")
+
+        result = evaluate_routing(cases, decide, measure_latency=False)
+
+        assert result["accuracy"] == result["correct_count"] / result["total_cases"]
+        confusion = result["precision_recall_f1"]["confusion_matrix"]
+        dq_row_sum = sum(confusion["document_qa"].values())
+        ws_row_sum = sum(confusion["web_search"].values())
+        assert dq_row_sum == 2  # dq_ok + dq_no_tool
+        assert ws_row_sum == 2  # ws_ok + ws_exc
 
     def test_empty_cases_raises_explicit_error_not_treated_as_success(self):
         with pytest.raises(ValueError):
@@ -276,6 +357,82 @@ class TestCliOfflineMode:
         assert payload["vectorstore_fingerprint"] is None
         assert payload["reproducibility_note"]  # non-empty 문자열
 
+    def test_markdown_report_shows_metrics_confusion_and_failures_not_just_json_pointer(
+        self, tmp_path
+    ):
+        """M2_Phase_4_5_6_code_review_result.md P1: Markdown 리포트는 accuracy,
+        클래스별 PR/F1, confusion matrix, latency, 실패 사례를 사람이 직접 읽을
+        수 있어야 한다 — "같은 이름의 .json을 참고하라"는 안내만 있으면 안 된다.
+        offline mock은 항상 document_qa를 반환하므로 web_search 사례("b")는
+        반드시 mismatch 실패로 기록된다."""
+        dataset_path = _write_dataset(
+            tmp_path,
+            [
+                _case_dict("a", "질문 1", "document_qa", tags=["t"]),
+                _case_dict("b", "질문 2", "web_search", tags=["t"]),
+            ],
+        )
+        output_dir = tmp_path / "reports"
+
+        exit_code = main(
+            ["--dataset", str(dataset_path), "--output", str(output_dir), "--mode", "offline"]
+        )
+        assert exit_code == 0
+
+        md_path = next(output_dir.glob("routing_*.md"))
+        text = md_path.read_text(encoding="utf-8")
+
+        assert "50.0%" in text  # accuracy = 1/2
+        assert "document_qa" in text and "web_search" in text
+        assert "confusion" in text.lower()
+        assert "b" in text  # 실패 사례 id
+        assert "질문 2" in text  # 실패 사례 질문
+        assert "mismatch" in text
+
+    def test_markdown_failure_row_with_pipe_backslash_and_newline_keeps_column_count(self):
+        """M2_Phase_4_5_6_code_review_result.md 재리뷰 P2: 질문이나 오류 메시지에
+        pipe/backslash/줄바꿈이 들어가도 실패 사례 표의 열 개수(6개)가 유지돼야
+        한다 — 이스케이프하지 않으면 pipe가 열을 늘려 표 구조가 깨진다."""
+        payload = {
+            "generated_at_utc": "2026-01-01T00:00:00Z",
+            "mode": "offline",
+            "tag_filter": None,
+            "limit": None,
+            "total_cases": 1,
+            "correct_count": 0,
+            "accuracy": 0.0,
+            "exception_count": 0,
+            "no_tool_count": 0,
+            "unknown_route_count": 1,
+            "precision_recall_f1": {
+                "document_qa": {"precision": 0.0, "recall": 0.0, "f1": 0.0},
+                "web_search": {"precision": 0.0, "recall": 0.0, "f1": 0.0},
+                "confusion_matrix": {
+                    "document_qa": {"document_qa": 0, "web_search": 0, "no_tool": 0, "unknown_route": 1, "exception": 0},
+                    "web_search": {"document_qa": 0, "web_search": 0, "no_tool": 0, "unknown_route": 0, "exception": 0},
+                },
+            },
+            "latency_ms": {"measured": False, "mean": None, "median": None, "p95": None},
+            "failures": [
+                {
+                    "id": "a|b",
+                    "question": "질문 | 파이프\n줄바꿈\\백슬래시",
+                    "expected_route": "document_qa",
+                    "actual_route": "weird|tool\\name",
+                    "failure_type": "unknown_route",
+                    "error": None,
+                }
+            ],
+        }
+        text = _render_routing_markdown(payload)
+        failure_row = next(line for line in text.splitlines() if line.startswith("| a"))
+        # 표 구조상 delimiter 7개(6열 경계) + id/question/actual_route에 각각 1개씩
+        # 들어있던 원본 pipe가 이스케이프돼 총 10개여야 한다 — 이스케이프하지 않으면
+        # 열이 늘어나 표가 깨진다.
+        assert failure_row.count("|") == 10
+        assert "\n" not in failure_row.strip()
+        assert "weird\\|tool\\\\name" in failure_row
+
     def test_tag_filter_matching_zero_cases_is_explicit_error_not_success(self, tmp_path, capsys):
         dataset_path = _write_dataset(
             tmp_path, [_case_dict("a", "질문", "document_qa", tags=["only-this-tag"])]
@@ -344,6 +501,29 @@ class TestCliOfflineMode:
         payload = json.loads(json_path.read_text(encoding="utf-8"))
         # tag="keep" 필터 후 [a, c, d] 중 원본 순서대로 limit=2 -> [a, c]
         assert payload["total_cases"] == 2
+
+    @pytest.mark.parametrize("bad_limit", ["0", "-1"])
+    def test_non_positive_limit_is_parser_error_not_negative_slice(self, tmp_path, capsys, bad_limit):
+        """M2_Phase_4_5_6_code_review_result.md P3: --limit -1은 cases[:-1](마지막
+        하나 제외)로 조용히 재해석되면 안 되고 argparse 오류(exit 2)여야 한다."""
+        dataset_path = _write_dataset(tmp_path, [_case_dict("a", "질문", "document_qa")])
+        output_dir = tmp_path / "reports"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(
+                [
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(output_dir),
+                    "--mode",
+                    "offline",
+                    "--limit",
+                    bad_limit,
+                ]
+            )
+        assert exc_info.value.code == 2
+        assert not output_dir.exists()
 
 
 class TestHelpDoesNotLoadModel:
@@ -417,41 +597,36 @@ class TestLiveOptIn:
         assert "찾을 수 없습니다" not in result.stderr
 
 
-ORIGINAL_ROUTING_CASES = [
-    ("오늘 서울 날씨 좀 웹에서 검색해줘", "web_search"),
-    ("최신 파이썬 버전이 몇이야? 인터넷에서 찾아줘", "web_search"),
-    ("비트코인 시세를 온라인에서 검색해줘", "web_search"),
-    ("삼성전자 주가를 웹검색으로 알아봐줘", "web_search"),
-    ("지금 서울 기온이 몇 도야?", "web_search"),
-    ("오늘 환율이 어떻게 돼?", "web_search"),
-    ("RAG에서 MMR이 뭐야?", "document_qa"),
-    ("임베딩이 뭔지 설명해줘", "document_qa"),
-    ("리랭커의 역할이 뭐야?", "document_qa"),
-    ("FAISS와 Elasticsearch를 비교해줘", "document_qa"),
-    ("BM25와 Dense Retrieval의 차이점은?", "document_qa"),
-    ("Python에서 FAISS 설치하는 방법을 알려줘", "document_qa"),
-    ("벡터스토어를 만드는 절차를 단계별로 설명해줘", "document_qa"),
-    ("LangChain은 무료로 사용할 수 있나요?", "document_qa"),
-    ("Ollama는 로컬에서 실행되나요?", "document_qa"),
-    ("이 문서에서 관련 내용을 찾아줘", "document_qa"),
-]
-
-
 class TestRoutingRegressionMigration:
-    """기존 test_agent_routing.py의 ROUTING_CASES 16쌍이 golden.jsonl로 손실 없이
-    이관됐는지 검증한다(§6.4, §6.5)."""
+    """기존 test_agent_routing.py의 ROUTING_CASES 16쌍이 golden.jsonl로 이관됐는지
+    구조적으로만 검증한다(§6.4, §6.5).
+
+    이전에는 이 클래스에 이관 전 16쌍(질문, 기대 route)을 다시 하드코딩한
+    ORIGINAL_ROUTING_CASES 상수를 두고 golden.jsonl과 완전 일치를 대조했다.
+    그 목록 자체가 골든셋과 별개인 두 번째 정답 원천이 되어, 질문 문구를 바꿀 때
+    두 곳을 함께 고쳐야 하는 문제가 있었다(M2_Phase_4_5_6_code_review_result.md
+    P2). 이관 시점의 원본 16쌍 대조 증적은 이관 커밋(c6a65b4, "routing evaluator
+    및 기존 사례 통합")과 M2_Phase_4_5_6_code_review_result.md에 남아 있으므로,
+    이후 회귀 테스트는 골든셋 자체의 구조적 불변식(개수/ID 유일성/route 유효성)만
+    지속적으로 검증한다."""
 
     def test_exactly_sixteen_cases_tagged(self):
         cases = load_jsonl(GOLDEN_DATASET_PATH)
         tagged = [c for c in cases if "routing_regression" in c.tags]
         assert len(tagged) == 16
 
-    def test_tagged_cases_match_original_question_route_pairs_one_to_one(self):
+    def test_tagged_case_ids_are_unique(self):
         cases = load_jsonl(GOLDEN_DATASET_PATH)
         tagged = [c for c in cases if "routing_regression" in c.tags]
-        actual_pairs = sorted((c.question, c.expected_route.value) for c in tagged)
-        expected_pairs = sorted(ORIGINAL_ROUTING_CASES)
-        assert actual_pairs == expected_pairs
+        ids = [c.id for c in tagged]
+        assert len(ids) == len(set(ids))
+
+    def test_tagged_cases_have_non_empty_question_and_valid_route(self):
+        cases = load_jsonl(GOLDEN_DATASET_PATH)
+        tagged = [c for c in cases if "routing_regression" in c.tags]
+        for case in tagged:
+            assert case.question.strip()
+            assert case.expected_route.value in {"document_qa", "web_search"}
 
     def test_no_duplicate_answer_list_left_in_test_agent_routing(self):
         text = TEST_AGENT_ROUTING_PATH.read_text(encoding="utf-8")

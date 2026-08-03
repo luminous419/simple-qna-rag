@@ -315,6 +315,15 @@ def _mock_reproducibility(monkeypatch) -> None:
 
 
 class TestEvaluateRetrievalDedupeAndMetrics:
+    @pytest.mark.parametrize("bad_limit", [0, -1])
+    def test_non_positive_limit_raises_even_when_called_directly(self, tmp_path, bad_limit):
+        """M2_Phase_4_5_6_code_review_result.md 재리뷰 P3: CLI의 _positive_int는
+        --limit 0/-1을 막지만, evaluate_retrieval()을 Python에서 직접 호출하면
+        이 계층을 거치지 않는다 — 공개 함수 자체도 방어해야 한다."""
+        dataset_path = _write_dataset(tmp_path, [_case("c1", "q1", relevant_sources=["a.pdf"])])
+        with pytest.raises(ValueError):
+            evaluate_retrieval(dataset_path, tmp_path / "reports", limit=bad_limit)
+
     def test_dedupe_applied_once_and_shared_across_all_metrics(self, tmp_path, monkeypatch):
         _mock_reproducibility(monkeypatch)
         question = "중복 소스 질문"
@@ -533,6 +542,60 @@ class TestEvaluateRetrievalDedupeAndMetrics:
         assert len(json_files) == 1
         assert len(md_files) == 1
 
+    def test_markdown_report_shows_metrics_latency_and_failures_not_just_json_pointer(
+        self, tmp_path, monkeypatch
+    ):
+        """M2_Phase_4_5_6_code_review_result.md P1: Retrieval Markdown에는
+        Recall/MRR/nDCG와 latency가 표시돼야 한다 — "같은 이름의 .json을
+        참고하라"는 안내만 있으면 안 된다."""
+        _mock_reproducibility(monkeypatch)
+        ok_question = "정상 질문"
+        fail_question = "실패하는 질문"
+        dataset_path = _write_dataset(
+            tmp_path,
+            [
+                _case("ok", ok_question, relevant_sources=["a.pdf"]),
+                _case("boom", fail_question, relevant_sources=["a.pdf"]),
+            ],
+        )
+        engine = FakeRetrievalEngine(
+            {ok_question: _docs("a.pdf"), fail_question: RuntimeError("검색 실패")}
+        )
+        _install_fake_engine(monkeypatch, engine)
+
+        output_dir = tmp_path / "reports"
+        evaluate_retrieval(dataset_path, output_dir)
+        md_path = next(output_dir.glob("retrieval_*.md"))
+        text = md_path.read_text(encoding="utf-8")
+
+        assert "recall@1" in text
+        assert "mrr@10" in text
+        assert "ndcg@10" in text
+        assert "1.000" in text  # recall@1 == 1.0 (ok 사례가 정확히 맞음)
+        assert "boom" in text  # 실패 사례 id
+        assert "검색 실패" in text  # 실패 사유
+
+    def test_markdown_failure_row_with_pipe_and_newline_keeps_column_count(self, tmp_path, monkeypatch):
+        """M2_Phase_4_5_6_code_review_result.md 재리뷰 P2: 질문이나 오류 메시지에
+        pipe/줄바꿈이 들어가도 실패 사례 표의 열 개수(3개)가 유지돼야 한다."""
+        _mock_reproducibility(monkeypatch)
+        question = "질문 | 파이프\n줄바꿈"
+        dataset_path = _write_dataset(
+            tmp_path, [_case("c1", question, relevant_sources=["a.pdf"])]
+        )
+        engine = FakeRetrievalEngine({question: RuntimeError("오류 | 발생")})
+        _install_fake_engine(monkeypatch, engine)
+
+        output_dir = tmp_path / "reports"
+        evaluate_retrieval(dataset_path, output_dir)
+        md_path = next(output_dir.glob("retrieval_*.md"))
+        text = md_path.read_text(encoding="utf-8")
+
+        failure_row = next(line for line in text.splitlines() if line.startswith("| c1"))
+        # delimiter 4개(3열 경계) + question/error에 각 1개씩 이스케이프된 pipe = 6개.
+        assert failure_row.count("|") == 6
+        assert "\n" not in failure_row.strip()
+
 
 # ---------------------------------------------------------------------------
 # 3. CLI (`main()`) 테스트
@@ -558,6 +621,24 @@ class TestMainCLI:
         with pytest.raises(SystemExit) as exc_info:
             main([])
         assert exc_info.value.code != 0
+
+    @pytest.mark.parametrize("bad_limit", ["0", "-1"])
+    def test_non_positive_limit_is_parser_error_not_negative_slice(self, tmp_path, bad_limit):
+        """M2_Phase_4_5_6_code_review_result.md P3: --limit -1은 cases[:-1](마지막
+        하나 제외)로 조용히 재해석되면 안 되고 argparse 오류(exit 2)여야 한다."""
+        dataset_path = _write_dataset(tmp_path, [_case("c1", "q1", relevant_sources=["a.pdf"])])
+        with pytest.raises(SystemExit) as exc_info:
+            main(
+                [
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(tmp_path / "out"),
+                    "--limit",
+                    bad_limit,
+                ]
+            )
+        assert exc_info.value.code == 2
 
     def test_missing_dataset_file_exits_1_with_guidance(self, tmp_path, capsys):
         missing = tmp_path / "nope.jsonl"

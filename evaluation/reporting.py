@@ -14,6 +14,7 @@ import platform
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable, Optional
 
 import config
 from evaluation.schema import normalize_source_id
@@ -136,7 +137,27 @@ def _render_markdown(payload: dict, name: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_report(payload: dict, output_dir: Path, name: str) -> tuple[Path, Path]:
+def escape_markdown_table_cell(value: object) -> str:
+    """evaluator별 Markdown renderer(retrieval/routing/answers)가 실패 사례 등
+    자유 텍스트(질문, 오류 메시지, 임의의 route 문자열)를 표 셀에 넣을 때 공통으로
+    쓰는 헬퍼. 줄바꿈/연속 공백은 단일 공백으로 접고, `\\`와 `|`를 이스케이프해
+    Markdown table delimiter가 값 내용 때문에 깨지지 않게 한다
+    (M2_Phase_4_5_6_code_review_result.md 재리뷰 P2). `\\`를 먼저 이스케이프한
+    뒤 `|`를 이스케이프해야, 방금 삽입한 이스케이프용 백슬래시가 다시
+    이스케이프되지 않는다."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    text = text.replace("\\", "\\\\").replace("|", "\\|")
+    return text
+
+
+def write_report(
+    payload: dict,
+    output_dir: Path,
+    name: str,
+    render_markdown: Optional[Callable[[dict], str]] = None,
+) -> tuple[Path, Path]:
     """output_dir/{name}_{utc_timestamp}.json, .md를 생성하고 두 경로를 반환한다.
     JSON은 sort_keys=True, ensure_ascii=False, indent=2로 직렬화한다.
 
@@ -146,10 +167,16 @@ def write_report(payload: dict, output_dir: Path, name: str) -> tuple[Path, Path
     실제 파일 생성은 배타적 생성("x" 모드)으로 수행해 이미 같은 경로가 존재하면
     FileExistsError를 받아 suffix를 늘려 재시도한다. JSON 경로를 먼저 예약해
     "이 stem은 이제 이 호출의 것"임을 확정한 뒤에만 두 파일을 쓴다 — 둘 중 하나만
-    쓰고 죽는 상황을 줄이기 위해 md까지 성공해야 최종 반환한다."""
+    쓰고 죽는 상황을 줄이기 위해 md까지 성공해야 최종 반환한다.
+
+    render_markdown이 주어지면 그 콜백(payload -> Markdown 문자열)으로 .md 내용을
+    만든다. 기본 `_render_markdown()`은 스칼라 필드만 나열하고 dict/list 값은
+    JSON을 참고하라는 안내만 남기므로, 사람이 핵심 지표(Recall/MRR/nDCG, PR/F1,
+    confusion matrix, latency, 실패 사례 등)를 직접 읽어야 하는 evaluator는 반드시
+    evaluator별 렌더러를 전달해야 한다(M2_Phase_4_5_6_code_review_result.md P1)."""
     output_dir.mkdir(parents=True, exist_ok=True)
     json_text = json.dumps(payload, sort_keys=True, ensure_ascii=False, indent=2)
-    md_text = _render_markdown(payload, name)
+    md_text = render_markdown(payload) if render_markdown is not None else _render_markdown(payload, name)
 
     base_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     suffix = 0
