@@ -20,6 +20,7 @@ from evaluation.reporting import (
     build_not_applicable_reproducibility_metadata,
     build_reproducibility_metadata,
     build_vectorstore_fingerprint,
+    escape_markdown_table_cell,
     write_report,
 )
 
@@ -28,6 +29,29 @@ def _make_dataset_file(tmp_path):
     path = tmp_path / "golden.jsonl"
     path.write_text('{"id": "a"}\n', encoding="utf-8")
     return path
+
+
+class TestEscapeMarkdownTableCell:
+    """M2_Phase_4_5_6_code_review_result.md 재리뷰 P2: 실패 사례 표에 들어가는
+    자유 텍스트(질문, 오류 메시지, 임의의 route 문자열)가 pipe/backslash/줄바꿈을
+    포함해도 표 열 구조를 깨뜨리지 않아야 한다."""
+
+    def test_pipe_is_escaped(self):
+        assert escape_markdown_table_cell("a | b") == "a \\| b"
+
+    def test_backslash_is_escaped_before_pipe_so_no_double_escaping(self):
+        # 원문에 이미 "\|"가 있으면 "\\|"(백슬래시 이스케이프 + 파이프 이스케이프)가
+        # 돼야지, 파이프까지 다시 이스케이프해 "\\\\|"가 되면 안 된다.
+        assert escape_markdown_table_cell("a\\|b") == "a\\\\\\|b"
+
+    def test_newlines_and_repeated_whitespace_collapse_to_single_space(self):
+        assert escape_markdown_table_cell("line1\nline2   line3") == "line1 line2 line3"
+
+    def test_none_becomes_empty_string(self):
+        assert escape_markdown_table_cell(None) == ""
+
+    def test_non_string_value_is_stringified(self):
+        assert escape_markdown_table_cell(404) == "404"
 
 
 class TestBuildMetadata:
@@ -114,6 +138,16 @@ class TestWriteReport:
         text = md_path.read_text(encoding="utf-8")
         assert "note" in text
         assert "case_counts" in text  # 안내 문구에 필드 이름은 언급됨
+
+    def test_render_markdown_callback_overrides_default_renderer(self, tmp_path):
+        """M2_Phase_4_5_6_code_review_result.md P1: evaluator가 render_markdown을
+        넘기면 기본 스칼라 전용 렌더러 대신 그 콜백의 출력을 그대로 .md에 쓴다."""
+        payload = {"generated_at_utc": "2026-01-01T00:00:00Z", "metrics": {"recall@10": 0.5}}
+        _, md_path = write_report(
+            payload, tmp_path, "retrieval", render_markdown=lambda p: f"# custom\nrecall@10={p['metrics']['recall@10']}"
+        )
+        text = md_path.read_text(encoding="utf-8")
+        assert text == "# custom\nrecall@10=0.5"
 
     def test_creates_output_dir_if_missing(self, tmp_path):
         nested = tmp_path / "a" / "b" / "reports"
