@@ -40,7 +40,7 @@
 {"id": "dq-realestate-ltv-001", "question": "10·15 부동산 대책에 따라 규제지역 내 주택담보대출(LTV) 한도는 얼마로 제한되나요?", "expected_intent": "explanation", "relevant_sources": ["2025_한국정부_부동산정책_정리.txt"], "relevance_grades": {"2025_한국정부_부동산정책_정리.txt": 3}, "tags": ["korean", "retrieval-only"], "category": "document_qa", "expected_route": "document_qa"}
 {"id": "dq-apec-theme-001", "question": "2025 APEC 정상회담의 공식 주제는 무엇인가요?", "expected_intent": "explanation", "relevant_sources": ["2025_APEC_정상회담_주요_협의사항.txt"], "tags": ["korean", "retrieval-only"], "category": "document_qa", "expected_route": "document_qa"}
 {"id": "dq-docloader-ocr-001", "question": "도큐먼트 로더가 PDF 문서를 텍스트로 변환할 때 사용할 수 있는 기술은 무엇인가요?", "expected_intent": "explanation", "relevant_sources": ["도큐먼트 로드 (Document Loader) 복사본.pdf"], "tags": ["korean", "retrieval-only"], "category": "document_qa", "expected_route": "document_qa"}
-{"id": "ws-000", "question": "오늘 서울 날씨 좀 웹에서 검색해줘", "category": "web_search", "expected_route": "web_search", "expected_intent": "other", "tags": ["korean", "web_search"]}
+{"id": "ws-000", "question": "오늘 서울 날씨 좀 웹에서 검색해줘", "category": "web_search", "expected_route": "web_search", "expected_intent": "other", "tags": ["korean", "web_search", "routing_regression"]}
 {"id": "ws-001", "question": "지금 비트코인 시세가 어떻게 되는지 찾아줘", "category": "web_search", "expected_route": "web_search", "expected_intent": "other", "tags": ["korean", "web_search"]}
 {"id": "ws-002", "question": "최근 코스피 지수를 인터넷에서 확인해줘", "category": "web_search", "expected_route": "web_search", "expected_intent": "other", "tags": ["korean", "web_search"]}
 {"id": "ws-003", "question": "이번 주 개봉하는 영화 목록을 웹검색으로 알려줘", "category": "web_search", "expected_route": "web_search", "expected_intent": "other", "tags": ["korean", "web_search"]}
@@ -50,7 +50,7 @@
 {"id": "ws-007", "question": "이번 달 한국은행 기준금리가 몇 %인지 인터넷에서 찾아줘", "category": "web_search", "expected_route": "web_search", "expected_intent": "other", "tags": ["korean", "web_search"]}
 {"id": "ws-008", "question": "오늘 서울 미세먼지 농도를 웹검색으로 알려줘", "category": "web_search", "expected_route": "web_search", "expected_intent": "other", "tags": ["korean", "web_search"]}
 {"id": "ws-009", "question": "최근 프로야구 순위를 온라인에서 확인해줘", "category": "web_search", "expected_route": "web_search", "expected_intent": "other", "tags": ["korean", "web_search"]}
-{"id": "bd-000", "question": "이 문서에서 관련 내용을 찾아줘", "category": "boundary", "expected_route": "document_qa", "expected_intent": "uncertain", "tags": ["korean", "boundary"]}
+{"id": "bd-000", "question": "이 문서에서 관련 내용을 찾아줘", "category": "boundary", "expected_route": "document_qa", "expected_intent": "uncertain", "tags": ["korean", "boundary", "routing_regression"]}
 {"id": "bd-001", "question": "문서 전체를 요약해줘", "category": "boundary", "expected_route": "document_qa", "expected_intent": "uncertain", "tags": ["korean", "boundary"]}
 {"id": "bd-002", "question": "관련된 자료가 있으면 알려줘", "category": "boundary", "expected_route": "document_qa", "expected_intent": "uncertain", "tags": ["korean", "boundary"]}
 {"id": "ua-000", "question": "이 문서 모음에 나온 2024년 서울시 지하철 요금 인상률이 얼마인가요?", "category": "unanswerable", "expected_route": "document_qa", "expected_intent": "uncertain", "expect_abstention": true, "tags": ["korean", "unanswerable", "abstention"]}
@@ -60,3 +60,17 @@
 {"id": "ua-004", "question": "이 문서 모음에서 대한민국 2025년 최저임금은 얼마로 정해졌나요?", "category": "unanswerable", "expected_route": "document_qa", "expected_intent": "uncertain", "expect_abstention": true, "tags": ["korean", "unanswerable", "abstention"]}
 {"id": "ua-005", "question": "제공된 문서에서 오픈AI GPT-5의 출시일은 언제인가요?", "category": "unanswerable", "expected_route": "document_qa", "expected_intent": "uncertain", "expect_abstention": true, "tags": ["korean", "unanswerable", "abstention"]}
 {"id": "ua-006", "question": "이 문서들에 나온 국내 프로야구 2025년 우승팀은 어디인가요?", "category": "unanswerable", "expected_route": "document_qa", "expected_intent": "uncertain", "expect_abstention": true, "tags": ["korean", "unanswerable", "abstention"]}
+{"id": "rr-ws-python-version-001", "question": "최신 파이썬 버전이 몇이야? 인터넷에서 찾아줘", "category": "web_search", "expected_route": "web_search", "tags": ["korean", "web_search", "routing_regression"]}
+{"id": "rr-ws-bitcoin-price-001", "question": "비트코인 시세를 온라인에서 검색해줘", "category": "web_search", "expected_route": "web_search", "tags": ["korean", "web_search", "routing_regression"]}
+{"id": "rr-ws-samsung-stock-001", "question": "삼성전자 주가를 웹검색으로 알아봐줘", "category": "web_search", "expected_route": "web_search", "tags": ["korean", "web_search", "routing_regression"]}
+{"id": "rr-ws-seoul-temp-001", "question": "지금 서울 기온이 몇 도야?", "category": "web_search", "expected_route": "web_search", "tags": ["korean", "web_search", "routing_regression"]}
+{"id": "rr-ws-exchange-rate-001", "question": "오늘 환율이 어떻게 돼?", "category": "web_search", "expected_route": "web_search", "tags": ["korean", "web_search", "routing_regression"]}
+{"id": "rr-dq-mmr-explain-001", "question": "RAG에서 MMR이 뭐야?", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "explanation", "routing_regression"]}
+{"id": "rr-dq-embedding-explain-001", "question": "임베딩이 뭔지 설명해줘", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "explanation", "routing_regression"]}
+{"id": "rr-dq-reranker-role-001", "question": "리랭커의 역할이 뭐야?", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "explanation", "routing_regression"]}
+{"id": "rr-dq-faiss-vs-es-001", "question": "FAISS와 Elasticsearch를 비교해줘", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "comparison", "routing_regression"]}
+{"id": "rr-dq-bm25-vs-dense-001", "question": "BM25와 Dense Retrieval의 차이점은?", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "comparison", "routing_regression"]}
+{"id": "rr-dq-faiss-install-001", "question": "Python에서 FAISS 설치하는 방법을 알려줘", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "procedure", "routing_regression"]}
+{"id": "rr-dq-vectorstore-procedure-001", "question": "벡터스토어를 만드는 절차를 단계별로 설명해줘", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "procedure", "routing_regression"]}
+{"id": "rr-dq-langchain-free-yn-001", "question": "LangChain은 무료로 사용할 수 있나요?", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "yesno", "routing_regression"]}
+{"id": "rr-dq-ollama-local-yn-001", "question": "Ollama는 로컬에서 실행되나요?", "category": "document_qa", "expected_route": "document_qa", "tags": ["korean", "yesno", "routing_regression"]}
