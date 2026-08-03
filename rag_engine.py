@@ -8,6 +8,8 @@ RAG 코어 엔진
 
 import os
 import sys
+import time
+from dataclasses import dataclass, field
 from typing import Optional, Dict, List
 
 from langchain_core.prompts import PromptTemplate
@@ -39,6 +41,29 @@ from config import (
 )
 from intent_classifier import classify_intent
 from prompt_templates import get_template_by_intent
+
+
+@dataclass
+class RetrievalStageTrace:
+    """검색 파이프라인 한 단계의 계측 결과.
+
+    name은 "bm25" | "dense" | "rrf" | "mmr" | "reranker" | "total" 중 하나만
+    사용한다. latency_ms는 time.perf_counter() 기준 경과 시간(ms)이고,
+    candidate_count는 해당 단계가 반환한 문서 수다.
+    """
+
+    name: str
+    latency_ms: float
+    candidate_count: int
+
+
+@dataclass
+class RetrievalTrace:
+    """`_retrieve_documents(question, trace=RetrievalTrace())`로 opt-in할 때만
+    채워지는 계측 컨테이너. trace=None(기본값)으로 호출하면 이 객체도, 내부의
+    RetrievalStageTrace도 전혀 생성되지 않는다(M2-REQ-006, 비활성 시 zero-cost)."""
+
+    stages: list[RetrievalStageTrace] = field(default_factory=list)
 
 
 class RAGEngine:
@@ -343,7 +368,11 @@ class RAGEngine:
 
         return [documents[i] for i in selected_indices]
 
-    def _retrieve_documents(self, question: str):
+    def _retrieve_documents(
+        self,
+        question: str,
+        trace: "RetrievalTrace | None" = None,
+    ):
         """
         문서 검색 (3-Stage Retrieval 파이프라인)
 
@@ -351,43 +380,87 @@ class RAGEngine:
             Stage 1: Hybrid Search (BM25 + FAISS) → RRF 융합
             Stage 2: MMR (다양성 확보) - USE_MMR=True일 때
             Stage 3: Re-ranking (Cross-Encoder) - USE_RERANKER=True일 때
+
+        trace가 None(기본값)이면 계측이 전혀 수행되지 않는다 — 기존 호출자
+        (RAGEngine.query() 등)는 시그니처와 반환값이 이전과 100% 동일하다
+        (M2-REQ-006/012). trace=RetrievalTrace()를 넘기면 evaluator가 각
+        단계의 latency(ms)와 candidate_count를 얻을 수 있다. 검색 로직 자체는
+        이 메서드 하나에만 존재하며, trace 유무에 따라 기록 여부만 달라진다.
         """
+        t_total0 = time.perf_counter() if trace is not None else None
+
+        def stage(name, fn):
+            if trace is None:
+                return fn()
+            t0 = time.perf_counter()
+            result = fn()
+            trace.stages.append(
+                RetrievalStageTrace(name, (time.perf_counter() - t0) * 1000, len(result))
+            )
+            return result
+
         if USE_HYBRID_SEARCH:
             # Stage 1: Hybrid Search + RRF
-            bm25_docs = self.bm25_retriever.invoke(question, top_k=BM25_TOP_K)
-            dense_docs = self.dense_retriever.invoke(question) if self.dense_retriever else []
-            docs = self._reciprocal_rank_fusion(
-                bm25_docs, dense_docs,
-                top_k=RRF_TOP_K,
-                k=RRF_CONSTANT
+            bm25_docs = stage(
+                "bm25",
+                lambda: self.bm25_retriever.invoke(question, top_k=BM25_TOP_K),
+            )
+            dense_docs = stage(
+                "dense",
+                lambda: self.dense_retriever.invoke(question) if self.dense_retriever else [],
+            )
+            docs = stage(
+                "rrf",
+                lambda: self._reciprocal_rank_fusion(
+                    bm25_docs, dense_docs,
+                    top_k=RRF_TOP_K,
+                    k=RRF_CONSTANT
+                ),
             )
 
             # Stage 2: MMR (다양성 확보)
             if USE_MMR:
-                docs = self._apply_mmr(
-                    question, docs,
-                    top_k=MMR_K,
-                    lambda_mult=MMR_LAMBDA
+                docs = stage(
+                    "mmr",
+                    lambda: self._apply_mmr(
+                        question, docs,
+                        top_k=MMR_K,
+                        lambda_mult=MMR_LAMBDA
+                    ),
                 )
 
             # Stage 3: Re-ranking
             if USE_RERANKER:
-                docs = self._rerank_documents(question, docs, top_k=RERANKER_TOP_K)
+                docs = stage(
+                    "reranker",
+                    lambda: self._rerank_documents(question, docs, top_k=RERANKER_TOP_K),
+                )
 
         elif USE_MMR:
             # MMR만 사용 (Hybrid Search 비활성화 시)
-            docs = self.dense_retriever.invoke(question)
+            docs = stage("dense", lambda: self.dense_retriever.invoke(question))
             if USE_RERANKER:
-                docs = self._rerank_documents(question, docs, top_k=RERANKER_TOP_K)
+                docs = stage(
+                    "reranker",
+                    lambda: self._rerank_documents(question, docs, top_k=RERANKER_TOP_K),
+                )
 
         elif USE_RERANKER:
             # Re-ranking만 사용
-            docs = self.dense_retriever.invoke(question)
-            docs = self._rerank_documents(question, docs, top_k=RERANKER_TOP_K)
+            docs = stage("dense", lambda: self.dense_retriever.invoke(question))
+            docs = stage(
+                "reranker",
+                lambda: self._rerank_documents(question, docs, top_k=RERANKER_TOP_K),
+            )
 
         else:
             # 기본 Similarity 검색
-            docs = self.dense_retriever.invoke(question)
+            docs = stage("dense", lambda: self.dense_retriever.invoke(question))
+
+        if trace is not None:
+            trace.stages.append(
+                RetrievalStageTrace("total", (time.perf_counter() - t_total0) * 1000, len(docs))
+            )
 
         return docs
 
