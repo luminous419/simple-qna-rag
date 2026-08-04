@@ -4,11 +4,12 @@ env/
 ENV/
 .venv/
 
-# 데이터 디렉토리 (문서 파일)
+# 기존 runtime 경로 호환 (M2.5 Phase 4 이전 checkout)
 data/
-
-# 벡터 데이터베이스
 vectorstore/
+
+# 로컬 runtime 데이터와 벡터스토어
+runtime/
 
 # 평가 리포트 산출물 (evaluation/baselines/는 승인된 결과만 커밋 대상이라 제외하지 않음)
 evaluation/reports/
@@ -18,6 +19,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+
+# Python packaging 산출물
+build/
+dist/
+*.egg-info/
 
 # Jupyter Notebook
 .ipynb_checkpoints

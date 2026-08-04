@@ -94,7 +94,7 @@ def _resolve_decide_tool():
     `--skip-routing`이 아니고(main()의) RUN_LIVE_LLM_TESTS=1 opt-in을 통과한
     뒤에만 호출된다. 오프라인 테스트는 이 함수 자체를 monkeypatch해 실제
     `agent.py`/`rag_engine.py` import(및 그로 인한 모델/Ollama 초기화)를 피한다."""
-    from agent import _decide_tool
+    from simple_qna_rag.agent import _decide_tool
 
     return _decide_tool
 
@@ -269,15 +269,15 @@ def run_baseline(
         stages["retrieval"] = _stage_failed(
             "retrieval", type(exc).__name__, str(exc),
             next_action=(
-                "data/ 와 vectorstore/ 가 준비돼 있는지 확인하세요. vectorstore가 없다면 "
-                "`python document_register.py`를 실행해 data/의 문서를 등록/색인한 뒤 "
+                "runtime/documents/ 와 runtime/vectorstore/ 가 준비돼 있는지 확인하세요. vectorstore가 없다면 "
+                "`simple-qna-rag-index`를 실행해 runtime/documents/의 문서를 등록/색인한 뒤 "
                 "다시 실행하세요."
             ),
         )
     except Exception as exc:  # noqa: BLE001 - 엔진 초기화 등 예상 밖 실패도 기록 후 다음 단계를 계속한다
         stages["retrieval"] = _stage_failed(
             "retrieval", type(exc).__name__, str(exc),
-            next_action="Ollama가 실행 중인지, vectorstore/data가 올바른지 확인한 뒤 다시 실행하세요.",
+            next_action="Ollama가 실행 중인지, runtime/vectorstore와 runtime/documents가 올바른지 확인한 뒤 다시 실행하세요.",
         )
     else:
         failing_cases = [
@@ -410,8 +410,8 @@ def run_baseline(
             stages["answers"] = _stage_failed(
                 "answers", type(exc).__name__, str(exc),
                 next_action=(
-                    "data/ 디렉터리와 vectorstore/index.faiss·index.pkl이 존재하는지 확인하세요. "
-                    "vectorstore가 없다면 `python document_register.py`를 실행해 생성한 뒤 "
+                    "runtime/documents/ 디렉터리와 runtime/vectorstore/index.faiss·index.pkl이 존재하는지 확인하세요. "
+                    "vectorstore가 없다면 `simple-qna-rag-index`를 실행해 생성한 뒤 "
                     "다시 실행하세요."
                 ),
             )
@@ -485,7 +485,7 @@ def run_baseline(
     if fingerprint_mismatch:
         limitations.append(
             "Answer 단계가 독립적으로 계산한 corpus_manifest_sha256/vectorstore_fingerprint가 "
-            "Retrieval 단계 값과 다릅니다 — baseline 실행 도중 data/ 또는 vectorstore/가 "
+            "Retrieval 단계 값과 다릅니다 — baseline 실행 도중 runtime/documents/ 또는 runtime/vectorstore/가 "
             "변경되었을 가능성이 있습니다. 두 값과 각 단계 결과는 모두 아래 보존돼 있습니다."
         )
 
@@ -734,9 +734,9 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         print(
-            "다음 조치: 로컬에 Ollama와 data/, vectorstore/가 준비돼 있다면 "
+            "다음 조치: 로컬에 Ollama와 runtime/documents/, runtime/vectorstore/가 준비돼 있다면 "
             "RUN_LIVE_LLM_TESTS=1 환경변수를 설정한 뒤 다시 실행하세요. vectorstore가 "
-            "없다면 먼저 `python document_register.py`로 data/의 문서를 등록/색인하세요. 예:\n"
+            "없다면 먼저 `simple-qna-rag-index`로 runtime/documents/의 문서를 등록/색인하세요. 예:\n"
             f"  RUN_LIVE_LLM_TESTS=1 python -m evaluation.baseline "
             f"--dataset {args.dataset} --output {args.output}",
             file=sys.stderr,

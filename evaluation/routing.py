@@ -452,7 +452,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.mode == "live":
-        from agent import _decide_tool as decide_tool  # 지연 import (live + opt-in 전용)
+        from simple_qna_rag.agent import _decide_tool as decide_tool  # 지연 import (live + opt-in 전용)
     else:
         decide_tool = _offline_mock_decide_tool
 

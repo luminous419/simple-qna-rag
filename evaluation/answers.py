@@ -24,7 +24,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-import config
+from simple_qna_rag import config
 from evaluation.dataset import DatasetError, load_jsonl
 from evaluation.metrics import assertion_coverage, dedupe_preserve_order, mean_median, percentile
 from evaluation.reporting import (
@@ -59,7 +59,7 @@ def _get_engine():
     """RAGEngine 싱글톤을 지연 로드한다. 테스트는 이 함수 자체를 monkeypatch해
     fake engine을 주입한다 — 모듈 import나 evaluate_answers() 호출 이전 시점에는
     rag_engine을 import하지 않는다."""
-    from rag_engine import get_rag_engine
+    from simple_qna_rag.rag_engine import get_rag_engine
 
     return get_rag_engine()
 
@@ -678,8 +678,8 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(f"오류: 필수 리소스를 찾을 수 없습니다: {exc}", file=sys.stderr)
         print(
-            "다음 조치: data/ 디렉터리와 vectorstore/index.faiss·index.pkl이 존재하는지 "
-            "확인하세요. vectorstore가 없다면 `python document_register.py`를 실행해 "
+            "다음 조치: runtime/documents/ 디렉터리와 runtime/vectorstore/index.faiss·index.pkl이 존재하는지 "
+            "확인하세요. vectorstore가 없다면 `simple-qna-rag-index`를 실행해 "
             "생성한 뒤 다시 실행하세요.",
             file=sys.stderr,
         )
