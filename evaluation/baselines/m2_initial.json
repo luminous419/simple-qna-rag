@@ -1,0 +1,313 @@
+{
+  "schema_version": "1.0.0",
+  "baseline_id": "m2_initial",
+  "status": "approved",
+  "approved_at": "2026-08-05",
+  "approval": {
+    "decision": "사용자 승인",
+    "note": "2026-08-04 전체 live 실행 결과를 M2 최초 baseline으로 승인함"
+  },
+  "source_report": {
+    "generated_at_utc": "2026-08-04T14:56:21Z",
+    "baseline_json": "evaluation/reports/m2_full/baseline_20260804T145621362462Z.json",
+    "baseline_markdown": "evaluation/reports/m2_full/baseline_20260804T145621362462Z.md",
+    "retrieval_json": "evaluation/reports/m2_full/retrieval/retrieval_20260804T142238259802Z.json",
+    "routing_json": "evaluation/reports/m2_full/routing/routing_20260804T142931996640Z.json",
+    "answers_json": "evaluation/reports/m2_full/answers/answers_20260804T145621300637Z.json",
+    "answers_worksheet": "evaluation/reports/m2_full/answers/answers_20260804T145621300637Z_worksheet.md",
+    "note": "evaluation/reports는 Git에서 제외되며 이 경로는 승인된 로컬 원본 실행을 식별하기 위한 기록임"
+  },
+  "execution": {
+    "overall_success": true,
+    "git_commit": "95a4fd17d6658e548658f4e922750ae114625851",
+    "git_dirty": false,
+    "python_version": "3.11.8",
+    "dataset_path": "evaluation/datasets/golden.jsonl",
+    "dataset_sha256": "61b768acd8d33522ef76e3baadd4bf19b44cc25daa79ad7ea255fb0a09d1017a",
+    "total_duration_seconds": 2742.4384348329913,
+    "stage_duration_seconds": {
+      "validate": 0.0006809160113334656,
+      "retrieval": 719.4360708330059,
+      "routing": 413.7344753329817,
+      "answers": 1609.266218667006
+    },
+    "stage_status": {
+      "validate": "success",
+      "retrieval": "success",
+      "routing": "success",
+      "answers": "success"
+    }
+  },
+  "models": {
+    "embedding_model": "BAAI/bge-m3",
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "ollama_model": "gpt-oss:20b"
+  },
+  "retrieval_config": {
+    "use_hybrid_search": true,
+    "use_mmr": true,
+    "use_reranker": true,
+    "bm25_top_k": 50,
+    "dense_top_k": 50,
+    "rrf_top_k": 50,
+    "mmr_k": 20,
+    "mmr_lambda": 0.5,
+    "reranker_top_k": 10,
+    "retrieval_k": 4
+  },
+  "reproducibility": {
+    "corpus_manifest": [
+      {
+        "source_id": "2025 kb 부동산 보고서 복사본.pdf",
+        "size_bytes": 6529319,
+        "sha256": "c2f36205b38c04f4fffe17ea07e4333415ca284e4eb44a87ab548f11fac4f934"
+      },
+      {
+        "source_id": "2025_apec_정상회담_주요_협의사항.txt",
+        "size_bytes": 1526,
+        "sha256": "34e6935e292dfb601c2abde290856215ccef35e133fa1d5b112df3d5a7c546b6"
+      },
+      {
+        "source_id": "2025_한국정부_부동산정책_정리.txt",
+        "size_bytes": 1824,
+        "sha256": "0f8602d09fcecb2da4ed4c3f6964a3c45a0b9a3c889103a57512c1068010021e"
+      },
+      {
+        "source_id": "2025년 한국 경제 전망.현대경제연구원 복사본.pdf",
+        "size_bytes": 1149054,
+        "sha256": "635d1386499bd990274aa4c9246e7dff094b312815e2afba3dc13e68f8cebdb8"
+      },
+      {
+        "source_id": "google-ai-agents-whitepaper 복사본.pdf",
+        "size_bytes": 4267233,
+        "sha256": "f7bc17c0297d3967daf98aa1bab016ef494486336b61e3533d8358d4f3957257"
+      },
+      {
+        "source_id": "langgraph-개요 복사본.pdf",
+        "size_bytes": 3097610,
+        "sha256": "7d6bc74cbc8896f127ea80dfbeb45a853dcf25d13d52227ab0a43b4ce5600623"
+      },
+      {
+        "source_id": "llm (large language model) 복사본.pdf",
+        "size_bytes": 130737,
+        "sha256": "c864f27bcfbc0ed102f6f8b654dff625e34f868ff55ed152e6629b6f79db7920"
+      },
+      {
+        "source_id": "retrieval-augmented generation (rag) 복사본.pdf",
+        "size_bytes": 253626,
+        "sha256": "d1ce625f694733f995e61962767b75643cfb2f95dd492670665bd6bf694e7bf3"
+      },
+      {
+        "source_id": "spri_ai_brief_2023년12월호_f 복사본.pdf",
+        "size_bytes": 975735,
+        "sha256": "21b3bcd0bba89c1c4e49a59b3b506b359e07bf9358e32ee3265b69e94f65da59"
+      },
+      {
+        "source_id": "검색기 (retriever) 복사본.pdf",
+        "size_bytes": 160740,
+        "sha256": "2b7da3de6f6aaa0c682274c9aa076ce35c93274fb256385e50c20325c44d50d4"
+      },
+      {
+        "source_id": "도큐먼트 로드 (document loader) 복사본.pdf",
+        "size_bytes": 218824,
+        "sha256": "95de47fba4f0b4f30926dbdab9c66da69c7be90c0c7d6477fba701c9d7fd8972"
+      },
+      {
+        "source_id": "리랭커(reranker) 복사본.pdf",
+        "size_bytes": 813124,
+        "sha256": "b00d7d405c6ee21431089c4fd567b527e9a2a10ddaf1328433858db30dd064c7"
+      },
+      {
+        "source_id": "벡터스토어(vector store) 저장 복사본.pdf",
+        "size_bytes": 227101,
+        "sha256": "997b14fccc1cc634ad3cdaaa473d8b2455a55c8f014cf755803dd66740fee229"
+      },
+      {
+        "source_id": "임베딩 (embedding) 복사본.pdf",
+        "size_bytes": 464155,
+        "sha256": "e3effbcd2a69170de2e1d2e842255d7376041a6d08d07cf50632484a40fd2cda"
+      },
+      {
+        "source_id": "체인(chain) 생성 복사본.pdf",
+        "size_bytes": 177597,
+        "sha256": "05649937d755d2672a1a3804b8feac2b40a67b9285ce99a791ac42bcd2882002"
+      },
+      {
+        "source_id": "출력파서(output parser) 복사본.pdf",
+        "size_bytes": 78384,
+        "sha256": "1f487f9c07f581fb38f4bc1434488e5a5baac23574242e5716c21ad3da50a6ca"
+      },
+      {
+        "source_id": "텍스트 분할 (text splitter) 복사본.pdf",
+        "size_bytes": 724212,
+        "sha256": "ae49cd91149c768e69e17ee6509a60bc03e20baa87da5d1c5c3412fae7d8b8a2"
+      },
+      {
+        "source_id": "프롬프트 (prompt) 복사본.pdf",
+        "size_bytes": 198038,
+        "sha256": "61c8d6434f3e7e76b33ac07936a36b4bd8ae09e46b2f7747e0fa73eeaa6312ec"
+      }
+    ],
+    "corpus_manifest_sha256": "5c0d648d032bc231c93cf1c545e5b3f8d26337da56677a4a0c1a66f24c82374a",
+    "vectorstore_fingerprint": {
+      "index_faiss_sha256": "c52fb288f3bc780d681ab68d62dd5b4c545843ee9dc53ef5528bd50db4d69820",
+      "index_pkl_sha256": "3f7217a2825f141bbea4c75dbf2b15738c3bcd50e3c0900e25a6a4a7ed91bb00"
+    },
+    "fingerprint_invariant": {
+      "checked": true,
+      "ok": true,
+      "corpus_manifest_sha256_match": true,
+      "vectorstore_fingerprint_match": true
+    }
+  },
+  "dataset": {
+    "total": 76,
+    "by_category": {
+      "document_qa": 51,
+      "web_search": 15,
+      "boundary": 3,
+      "unanswerable": 7
+    },
+    "retrieval_evaluable": 42,
+    "answer_evaluable": 29,
+    "answer_assertion_cases": 22,
+    "abstention_cases": 7
+  },
+  "retrieval": {
+    "case_counts": {
+      "total": 76,
+      "success": 42,
+      "failure": 0,
+      "excluded": 34
+    },
+    "metrics": {
+      "recall@1": 0.9404761904761905,
+      "recall@3": 0.9404761904761905,
+      "recall@5": 0.9523809523809523,
+      "recall@10": 0.9761904761904762,
+      "mrr@10": 0.9821428571428571,
+      "ndcg@10": 0.9543434614267636
+    },
+    "latency_ms": {
+      "mean": 16842.32324509607,
+      "median": 16845.711229005246,
+      "p95": 22606.528750009602
+    },
+    "stage_latency_ms_mean": {
+      "bm25": 0.5181469480573598,
+      "dense": 115.35422216721123,
+      "rrf": 0.04262695091754375,
+      "mmr": 14349.305193404212,
+      "reranker": 2377.0879623563296,
+      "total": 16842.31948018853
+    }
+  },
+  "routing": {
+    "total_cases": 76,
+    "correct_count": 59,
+    "mismatch_count": 17,
+    "execution_failure_count": 0,
+    "accuracy": 0.7763157894736842,
+    "document_qa": {
+      "precision": 1.0,
+      "recall": 0.7213114754098361,
+      "f1": 0.8380952380952381
+    },
+    "web_search": {
+      "precision": 0.46875,
+      "recall": 1.0,
+      "f1": 0.6382978723404256
+    },
+    "confusion_matrix": {
+      "document_qa": {
+        "document_qa": 44,
+        "web_search": 17,
+        "no_tool": 0,
+        "unknown_route": 0,
+        "exception": 0
+      },
+      "web_search": {
+        "document_qa": 0,
+        "web_search": 15,
+        "no_tool": 0,
+        "unknown_route": 0,
+        "exception": 0
+      }
+    },
+    "latency_ms": {
+      "mean": 5441.378492392495,
+      "median": 4272.046812489862,
+      "p95": 12935.321707976982
+    },
+    "observed_pattern": "17개 오분류가 모두 document_qa를 web_search로 과다 라우팅한 사례임"
+  },
+  "answers": {
+    "case_counts": {
+      "total_considered": 76,
+      "eligible": 29,
+      "excluded_non_eligible": 47,
+      "success": 29,
+      "failure": 0
+    },
+    "assertion": {
+      "assertions_passed": 24,
+      "assertions_total": 32,
+      "cases_scored": 22,
+      "automatic_pass_rate": 0.75
+    },
+    "abstention": {
+      "evaluated_count": 29,
+      "true_positive": 4,
+      "true_negative": 22,
+      "false_positive": 0,
+      "false_negative": 3,
+      "automatic_accuracy": 0.896551724137931
+    },
+    "source": {
+      "evaluated_count": 22,
+      "excluded_count": 7,
+      "any_hit_rate": 1.0,
+      "mean_recall": 0.9545454545454546
+    },
+    "intent": {
+      "evaluated_count": 29,
+      "correct_count": 15,
+      "accuracy": 0.5172413793103449
+    },
+    "latency_ms": {
+      "count": 29,
+      "mean": 55482.81327734003,
+      "median": 54161.79329200531,
+      "p95": 74875.61054198886
+    }
+  },
+  "human_review": {
+    "reviewed": true,
+    "assertion_false_negative_assessment": {
+      "automatic_missed_assertions": 8,
+      "semantic_content_present": 8,
+      "summary": "띄어쓰기, 영문 약어, underscore 및 동의 표현 차이로 자동 assertion이 의미상 포함된 내용을 놓침"
+    },
+    "abstention_false_negative_assessment": {
+      "automatic_false_negatives": 3,
+      "qualitatively_correct_abstentions": 3,
+      "summary": "세 답변 모두 문서에 정보가 없음을 명시했지만 detector의 제한된 공식 문구와 일치하지 않아 누락됨"
+    },
+    "security_note": "고정 baseline에는 사례별 질문, 모델 답변과 worksheet 내용을 포함하지 않음"
+  },
+  "limitations": [
+    "assertion coverage는 문자열 기반 핵심 문구 포함 여부이며 답변 전체의 진실성이나 문맥 왜곡을 보증하지 않는다.",
+    "abstention detector는 제한된 표현을 사용해 의미상 올바른 거절을 false negative로 분류할 수 있다.",
+    "intent accuracy는 현재 classifier 라벨과 골든 라벨의 일치율이며 답변 내용의 정확성과 동일하지 않다.",
+    "corpus manifest와 vectorstore fingerprint는 같은 파일을 사용했는지는 보여 주지만 vectorstore가 현재 embedding/chunk 설정으로 생성됐다는 provenance는 보증하지 않는다.",
+    "실제 설치 dependency snapshot은 이 baseline에 포함되지 않아 동일한 Git 및 fingerprint에서도 환경 차이가 남을 수 있다.",
+    "상세 timestamped report는 질문과 모델 답변을 포함할 수 있어 Git에서 제외된다."
+  ],
+  "m3_candidates": [
+    "MMR latency가 Retrieval 시간의 대부분을 차지하므로 문서 임베딩 재사용 또는 계산 경로 최적화",
+    "최신 연도·정책·기업 관련 document QA를 web search로 과다 라우팅하는 정책 개선",
+    "yesno와 uncertain 중심의 intent classifier 정확도 개선 또는 구조 단순화",
+    "assertion 정규화와 abstention 표현 인식을 확장해 자동 평가 false negative 감소",
+    "Answer End-to-End 평균 55.48초와 p95 74.88초 개선"
+  ]
+}
