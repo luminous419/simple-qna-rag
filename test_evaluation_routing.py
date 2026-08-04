@@ -20,7 +20,7 @@ import pytest
 from evaluation.dataset import load_jsonl
 from evaluation.routing import (
     _offline_mock_decide_tool,
-    _render_routing_markdown,
+    render_routing_markdown,
     evaluate_routing,
     main,
 )
@@ -424,7 +424,7 @@ class TestCliOfflineMode:
                 }
             ],
         }
-        text = _render_routing_markdown(payload)
+        text = render_routing_markdown(payload)
         failure_row = next(line for line in text.splitlines() if line.startswith("| a"))
         # 표 구조상 delimiter 7개(6열 경계) + id/question/actual_route에 각각 1개씩
         # 들어있던 원본 pipe가 이스케이프돼 총 10개여야 한다 — 이스케이프하지 않으면

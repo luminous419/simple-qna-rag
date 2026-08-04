@@ -174,6 +174,8 @@ def _make_fake_evaluate_retrieval(
             "corpus_manifest_sha256": corpus_sha,
             "vectorstore_fingerprint": vs_fp,
             "reproducibility_note": None,
+            "report_json_path": str(output_dir / "retrieval_20260101T000000000000Z.json") if write_files else None,
+            "report_markdown_path": str(output_dir / "retrieval_20260101T000000000000Z.md") if write_files else None,
         }
 
     return fake
@@ -283,6 +285,11 @@ def _patch_all_success(monkeypatch, calls: list, **overrides):
     monkeypatch.setattr(baseline_module, "evaluate_routing", overrides.get("routing") or _make_fake_evaluate_routing(calls))
     monkeypatch.setattr(baseline_module, "evaluate_answers", overrides.get("answers") or _make_fake_evaluate_answers(calls))
     monkeypatch.setattr(baseline_module, "_resolve_decide_tool", lambda: _SENTINEL_DECIDE_TOOL)
+    # run_baseline() 자신도 opt-in을 검사하므로(M2_Phase_7_8_code_review_result.md
+    # P2) fake evaluator만 주입하는 대부분의 orchestration 테스트는 opt-in도
+    # 함께 켜 둔다. opt-in 자체를 검증하는 테스트(TestLiveOptIn)는 이 헬퍼를
+    # 쓴 뒤 명시적으로 monkeypatch.delenv()로 다시 지운다.
+    monkeypatch.setenv("RUN_LIVE_LLM_TESTS", "1")
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +488,41 @@ class TestRoutingFailurePolicy:
 
         assert result["stages"]["routing"]["status"] == "failed"
         assert result["stages"]["routing"]["error_type"] == "ValueError"
+        assert result["overall_success"] is False
+
+    def test_routing_report_write_failure_does_not_block_answers_and_preserves_retrieval(
+        self, tmp_path, monkeypatch
+    ):
+        """M2_Phase_7_8_code_review_result.md P1: evaluate_routing() 자체는
+        성공했지만 그 결과를 report로 남기는 write_report() 호출(디스크 공간
+        부족, 권한 문제 등)이 실패하는 경우를 재현한다. 이전에는 이 예외가
+        run_baseline() 밖으로 그대로 전파되어 Answer 단계가 전혀 실행되지
+        않고, 이미 성공한 Retrieval 결과도 최종 report에 남지 않았다.
+        수정 후에는 report 작성 실패도 routing 단계의 failed 상태로 기록되고,
+        Retrieval 결과는 보존되며, Answer 단계는 계속 실행되어야 한다."""
+        calls: list = []
+        _patch_all_success(monkeypatch, calls)
+        dataset_path = _valid_dataset(tmp_path)
+
+        real_write_report = baseline_module.write_report
+
+        def flaky_write_report(payload, output_dir, name, render_markdown=None):
+            if name == "routing":
+                raise OSError("디스크 여유 공간 부족")
+            return real_write_report(payload, output_dir, name, render_markdown=render_markdown)
+
+        monkeypatch.setattr(baseline_module, "write_report", flaky_write_report)
+
+        result = run_baseline(dataset_path, tmp_path / "reports")
+
+        stage_names = [c["stage"] for c in calls]
+        assert "answers" in stage_names
+        assert result["stages"]["retrieval"]["status"] == "success"
+        assert result["stages"]["routing"]["status"] == "failed"
+        assert result["stages"]["routing"]["error_type"] == "OSError"
+        assert result["stages"]["routing"]["evaluation_status"] == "success"
+        assert result["stages"]["routing"]["report_status"] == "failed"
+        assert result["stages"]["answers"]["status"] == "success"
         assert result["overall_success"] is False
 
 
@@ -906,17 +948,22 @@ class TestLiveOptIn:
         assert "찾을 수 없습니다" not in result.stderr
         assert not (tmp_path / "reports").exists()
 
-    def test_run_baseline_api_itself_does_not_check_opt_in(self, tmp_path, monkeypatch):
-        """run_baseline()은 라이브러리 API이므로 opt-in 검사는 main()의
-        책임이다 — monkeypatch로 실제 모델 호출을 막은 상태라면 opt-in 없이도
-        정상 동작해야 한다(§4.5, run_baseline()은 sys.exit()을 호출하지 않는다)."""
+    def test_run_baseline_api_itself_requires_opt_in(self, tmp_path, monkeypatch):
+        """M2_Phase_7_8_code_review_result.md P2: run_baseline()은 라이브러리
+        API로 직접 호출될 수 있으므로, CLI main()과 별개로 자기 자신도
+        RUN_LIVE_LLM_TESTS=1 opt-in을 검사해야 한다 — 그렇지 않으면
+        monkeypatch 없이 직접 호출하는 코드가 opt-in 없이 실제
+        Ollama/vectorstore를 건드릴 수 있다. evaluator가 모두 mock된
+        상태에서도(=실제로는 안전하더라도) opt-in이 없으면 RuntimeError를
+        내야 한다(§4.5, run_baseline()은 sys.exit()을 호출하지 않으므로
+        SystemExit이 아니라 RuntimeError)."""
         calls: list = []
         _patch_all_success(monkeypatch, calls)
         monkeypatch.delenv("RUN_LIVE_LLM_TESTS", raising=False)
         dataset_path = _valid_dataset(tmp_path)
 
-        result = run_baseline(dataset_path, tmp_path / "reports")
-        assert result["overall_success"] is True
+        with pytest.raises(RuntimeError, match="RUN_LIVE_LLM_TESTS"):
+            run_baseline(dataset_path, tmp_path / "reports")
 
 
 # ---------------------------------------------------------------------------
