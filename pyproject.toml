@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simple-qna-rag"
+version = "0.2.5"
+description = "Local-first Korean document Q&A RAG application"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = { file = "LICENSE" }
+dynamic = ["dependencies"]
+
+[project.scripts]
+simple-qna-rag-web = "simple_qna_rag.cli.web:main"
+simple-qna-rag-query = "simple_qna_rag.cli.query:main"
+simple-qna-rag-index = "simple_qna_rag.cli.index_documents:main"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

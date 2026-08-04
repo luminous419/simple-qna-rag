@@ -20,7 +20,7 @@ import sys
 import time
 from pathlib import Path
 
-import config
+from simple_qna_rag import config
 from evaluation.dataset import DatasetError, load_jsonl
 from evaluation.metrics import (
     dedupe_preserve_order,
@@ -120,7 +120,7 @@ def evaluate_retrieval(
             # get_rag_engine()을 호출한다(M2-NFR-003). import는 여기서 처음
             # 이뤄지므로 evaluation.retrieval 모듈 자체를 import하는 것만으로는
             # rag_engine의 모델/vectorstore가 로드되지 않는다.
-            from rag_engine import RetrievalTrace, get_rag_engine
+            from simple_qna_rag.rag_engine import RetrievalTrace, get_rag_engine
 
             engine = get_rag_engine()
 
@@ -405,8 +405,8 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(f"오류: 필수 리소스를 찾을 수 없습니다: {exc}", file=sys.stderr)
         print(
-            "다음 조치: data/ 와 vectorstore/ 가 준비돼 있는지 확인하세요. vectorstore가 "
-            "없다면 `python document_register.py`를 실행해 data/의 문서를 등록/색인한 뒤 "
+            "다음 조치: runtime/documents/ 와 runtime/vectorstore/ 가 준비돼 있는지 확인하세요. vectorstore가 "
+            "없다면 `simple-qna-rag-index`를 실행해 runtime/documents/의 문서를 등록/색인한 뒤 "
             "다시 실행하세요.",
             file=sys.stderr,
         )
@@ -414,9 +414,9 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         print(f"오류: RAG 엔진 초기화에 실패했습니다: {exc}", file=sys.stderr)
         print(
-            "다음 조치: vectorstore/ 와 data/ 가 올바르게 준비돼 있는지, Ollama가 실행 "
+            "다음 조치: runtime/vectorstore/ 와 runtime/documents/ 가 올바르게 준비돼 있는지, Ollama가 실행 "
             "중이고 필요한 모델이 설치돼 있는지 확인하세요. vectorstore가 없다면 "
-            "`python document_register.py`를 실행해 문서를 등록/색인한 뒤 다시 실행하세요.",
+            "`simple-qna-rag-index`를 실행해 문서를 등록/색인한 뒤 다시 실행하세요.",
             file=sys.stderr,
         )
         return 2

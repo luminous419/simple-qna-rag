@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
-import config
+from simple_qna_rag import config
 from evaluation.schema import normalize_source_id
 
 SCHEMA_VERSION = "1.0.0"

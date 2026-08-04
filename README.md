@@ -2,7 +2,7 @@
 
 로컬 문서와 웹 검색 결과를 기반으로 질문에 답하는 한국어 중심의 RAG(Retrieval-Augmented Generation) 애플리케이션입니다. 문서 데이터는 로컬에서 임베딩하고, Ollama로 실행되는 LLM이 답변을 생성합니다.
 
-프로젝트의 방향과 현재 위치는 [Roadmap.md](Roadmap.md), 알려진 미해결 문제는 [Problem.md](Problem.md)에서 관리합니다.
+프로젝트의 방향과 현재 위치는 [Roadmap](docs/Roadmap.md), 알려진 미해결 문제는 [Problem](docs/Problem.md)에서 관리합니다.
 
 ## 목적
 
@@ -70,7 +70,7 @@ Agent가 실패하면 키워드 라우터를 사용합니다. 웹 검색까지 �
 - Ollama
 - `gpt-oss:20b`를 실행할 수 있는 메모리와 디스크 공간
 
-모든 명령은 프로젝트 루트에서 실행해야 합니다. 현재 데이터, 벡터스토어, 템플릿 경로가 프로젝트 루트 기준 상대 경로로 설정되어 있습니다.
+설치된 `simple-qna-rag-*` 제품 명령은 다른 current directory에서도 실행할 수 있습니다. `evaluation` 명령과 저장소 관리 명령은 프로젝트 루트에서 실행하십시오. runtime 환경변수와 CLI 경로 override는 M2.5 Phase 4에서 추가합니다.
 
 ### 1. Python 환경
 
@@ -79,6 +79,7 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+python -m pip install -e . --no-deps
 ```
 
 Windows PowerShell에서는 다음 명령으로 가상환경을 활성화합니다.
@@ -91,13 +92,13 @@ Windows PowerShell에서는 다음 명령으로 가상환경을 활성화합니�
 
 ### 2. 프런트엔드 테스트 환경
 
-운영 페이지에서 사용하는 `marked`와 DOMPurify 파일은 저장소의 `static/vendor/`에 포함됩니다. 라이브러리를 갱신하거나 프런트엔드 테스트를 실행하려면 다음 명령을 사용합니다.
+운영 페이지에서 사용하는 `marked`와 DOMPurify 파일은 저장소의 `web/static/vendor/`에 포함됩니다. 라이브러리를 갱신하거나 프런트엔드 테스트를 실행하려면 다음 명령을 사용합니다.
 
 ```bash
 npm ci
 ```
 
-`npm ci`의 `postinstall` 단계가 잠금된 npm 패키지의 배포 파일을 `static/vendor/`에 동기화합니다. 필요하면 직접 실행할 수 있습니다.
+`npm ci`의 `postinstall` 단계가 잠금된 npm 패키지의 배포 파일을 `web/static/vendor/`에 동기화합니다. 필요하면 직접 실행할 수 있습니다.
 
 ```bash
 npm run sync-vendor
@@ -112,26 +113,38 @@ ollama pull gpt-oss:20b
 ollama serve
 ```
 
-기본 연결 주소와 모델은 [config.py](config.py)의 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`에서 설정합니다.
+기본 연결 주소와 모델은 [config.py](src/simple_qna_rag/config.py)의 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`에서 설정합니다.
 
 ### 4. 문서 인덱스 생성
 
-`data/` 디렉터리에 PDF 또는 TXT 문서를 넣고 인덱스를 생성합니다.
+`runtime/documents/` 디렉터리에 PDF 또는 TXT 문서를 넣고 인덱스를 생성합니다.
 
 ```bash
-python document_register.py
+simple-qna-rag-index
 ```
 
-생성된 FAISS 인덱스는 기본적으로 `vectorstore/`에 저장됩니다. `data/`와 `vectorstore/`는 Git에서 제외됩니다.
+생성된 FAISS 인덱스는 기본적으로 `runtime/vectorstore/`에 저장됩니다. `runtime/` 전체는 Git에서 제외됩니다.
 
-주의: 현재 등록 명령은 기존 `vectorstore/`를 삭제하고 전체 인덱스를 다시 생성합니다. 중요한 인덱스는 실행 전에 별도로 백업하십시오.
+주의: 현재 등록 명령은 기존 `runtime/vectorstore/`를 삭제하고 전체 인덱스를 다시 생성합니다. 중요한 인덱스는 실행 전에 별도로 백업하십시오.
+
+필요하면 CLI 또는 환경변수로 runtime 경로를 재정의할 수 있습니다.
+
+```bash
+simple-qna-rag-index --documents-dir /path/to/documents --vectorstore-dir /path/to/vectorstore
+
+export SIMPLE_QNA_RAG_DOCUMENTS_DIR=/path/to/documents
+export SIMPLE_QNA_RAG_VECTORSTORE_DIR=/path/to/vectorstore
+export SIMPLE_QNA_RAG_MODEL_DIR=/path/to/intent-model
+```
+
+경로 우선순위는 `CLI > environment > repository default`입니다.
 
 ## 실행 방법
 
 ### Web UI와 API
 
 ```bash
-python web_server.py
+simple-qna-rag-web
 ```
 
 브라우저에서 <http://localhost:8000>에 접속합니다.
@@ -157,7 +170,7 @@ curl -X POST http://localhost:8000/rag \
 CLI는 웹 검색 Agent를 거치지 않고 문서 QA 엔진을 직접 사용합니다.
 
 ```bash
-python document_query_cli.py
+simple-qna-rag-query
 ```
 
 `종료`, `끝`, `stop`, `quit`, `exit`, `finish` 중 하나를 입력하면 종료합니다.
@@ -166,17 +179,17 @@ python document_query_cli.py
 
 ### 전체 오프라인 검증
 
-일반 Pull Request와 로컬 회귀 검증은 Ollama, 웹 검색, `data/`, `vectorstore/` 없이 실행됩니다.
+일반 Pull Request와 로컬 회귀 검증은 Ollama, 웹 검색, `runtime/documents/`, `runtime/vectorstore/` 없이 실행됩니다.
 
 ```bash
 python -m pip check
-python -c "import web_server"
+python -c "from simple_qna_rag.web.server import app"
 python -m evaluation.dataset validate evaluation/datasets/golden.jsonl
 pytest -q
 npm ci
 npm test
 npm run sync-vendor
-git diff --exit-code -- static/vendor/
+git diff --exit-code -- web/static/vendor/
 git diff --check
 ```
 
@@ -194,7 +207,7 @@ python -m evaluation.dataset validate evaluation/datasets/golden.jsonl
 
 ### 개별 evaluator 실행
 
-Retrieval과 Answer 평가는 실제 `data/`, `vectorstore/`, embedding/reranker와 Ollama를 사용합니다. Routing의 live 모드도 Ollama가 필요합니다. 상세 결과는 기본적으로 Git에서 제외되는 `evaluation/reports/` 아래 JSON과 Markdown으로 생성됩니다.
+Retrieval과 Answer 평가는 실제 `runtime/documents/`, `runtime/vectorstore/`, embedding/reranker와 Ollama를 사용합니다. Routing의 live 모드도 Ollama가 필요합니다. 상세 결과는 기본적으로 Git에서 제외되는 `evaluation/reports/` 아래 JSON과 Markdown으로 생성됩니다.
 
 ```bash
 python -m evaluation.retrieval \
@@ -232,8 +245,8 @@ RUN_LIVE_LLM_TESTS=1 python -m evaluation.baseline \
 
 실행 전 다음을 확인하십시오.
 
-- Ollama가 실행 중이고 [config.py](config.py)의 모델이 설치돼 있음
-- `data/`와 `vectorstore/index.faiss`, `vectorstore/index.pkl`이 준비돼 있음
+- Ollama가 실행 중이고 [config.py](src/simple_qna_rag/config.py)의 모델이 설치돼 있음
+- `runtime/documents/`와 `runtime/vectorstore/index.faiss`, `runtime/vectorstore/index.pkl`이 준비돼 있음
 - 실행 중 corpus와 vectorstore를 변경하지 않음
 - 비교 목적이라면 `git status`가 clean이고 기준선과 dataset/corpus/vectorstore fingerprint가 같음
 
@@ -251,7 +264,7 @@ timestamped report에는 질문과 모델 답변이 포함될 수 있으므로 `
 Ollama와 `gpt-oss:20b`가 실행 중일 때만 사용합니다.
 
 ```bash
-RUN_LIVE_LLM_TESTS=1 pytest test_agent_routing.py -v
+RUN_LIVE_LLM_TESTS=1 pytest tests/integration/test_agent_routing.py -v
 ```
 
 이 테스트는 LLM 출력의 확률적 변동을 고려해 라우팅 정확도 80% 이상을 통과 기준으로 사용합니다.
@@ -266,22 +279,22 @@ RUN_LIVE_LLM_TESTS=1 pytest test_agent_routing.py -v
 
 1. Python 의존성
 2. Ollama와 `gpt-oss:20b`
-3. `data/`에서 생성한 `vectorstore/`
-4. 저장소에 포함된 `templates/`와 `static/`
+3. `runtime/documents/`에서 생성한 `runtime/vectorstore/`
+4. 저장소에 포함된 `web/templates/`와 `web/static/`
 
 서버 실행:
 
 ```bash
-uvicorn web_server:app --host 0.0.0.0 --port 8000
+simple-qna-rag-web --host 0.0.0.0 --port 8000
 ```
 
 현재 RAG 엔진은 프로세스마다 대형 모델과 인덱스를 메모리에 로드하므로 worker 수를 무작정 늘리지 마십시오. 외부에 공개할 경우 애플리케이션 앞에 TLS를 종료하는 reverse proxy, 인증, 요청 크기 제한, rate limiting을 별도로 구성해야 합니다.
 
-프로덕션 배포 자동화와 운영 준비는 [Roadmap.md](Roadmap.md)의 Production Readiness 마일스톤에서 다룹니다.
+프로덕션 배포 자동화와 운영 준비는 [Roadmap](docs/Roadmap.md)의 Production Readiness 마일스톤에서 다룹니다.
 
 ## 주요 설정
 
-[config.py](config.py)에서 다음 항목을 조정할 수 있습니다.
+[config.py](src/simple_qna_rag/config.py)에서 다음 항목을 조정할 수 있습니다.
 
 - 임베딩, LLM, reranker 모델
 - 데이터 및 벡터스토어 경로
@@ -289,36 +302,28 @@ uvicorn web_server:app --host 0.0.0.0 --port 8000
 - BM25/Dense/RRF/MMR/Re-ranker top-k
 - 웹 검색 활성화, 결과 수, 타임아웃, 지역
 
-현재 설정은 Python 상수로 관리됩니다. 환경변수 기반 설정은 향후 운영 개선 대상입니다.
+검색·모델 동작 설정은 Python 상수로 관리됩니다. 문서, vectorstore와 intent model 경로는 `SIMPLE_QNA_RAG_*` 환경변수 또는 CLI 옵션으로 재정의할 수 있습니다.
 
 ## 프로젝트 구조
 
 ```text
 .
-├── agent.py                    # LLM 기반 도구 라우팅
-├── config.py                   # 애플리케이션 설정
-├── document_register.py        # 문서 인덱스 생성
-├── document_query_cli.py       # 문서 QA CLI
-├── intent_classifier.py        # 질문 의도 분류
-├── prompt_templates.py         # 의도별 답변 프롬프트
-├── query_router.py             # Agent 장애 시 키워드 폴백
-├── rag_engine.py               # 검색 및 답변 생성 파이프라인
-├── tools.py                    # Agent 도구 정의
-├── web_search.py               # DuckDuckGo 웹 검색
-├── web_server.py               # FastAPI 애플리케이션
-├── templates/                  # HTML 템플릿
-├── static/                     # 프런트엔드 코드와 vendor 파일
-├── frontend_tests/             # 프런트엔드 보안 테스트
-├── intent_dataset/             # Intent 학습/검증 데이터
+├── pyproject.toml              # Python package와 CLI entry point
+├── src/simple_qna_rag/         # 제품 Python package
+│   ├── cli/                    # query/index/web 명령
+│   └── web/                    # FastAPI 애플리케이션
+├── web/                        # HTML 템플릿과 프런트엔드/vendor 자산
+├── tests/                      # unit/integration/frontend 테스트
+├── training/                   # Intent 학습 코드와 dataset
+├── models/                     # 버전 관리되는 Intent 모델 artifact
+├── runtime/                    # Git 제외 문서와 vectorstore
 ├── evaluation/                 # 골든셋, evaluator, 리포팅과 승인 기준선
+├── docs/                       # 로드맵, 문제, 마일스톤과 리뷰 문서
 ├── .github/workflows/ci.yml    # Python 및 frontend 오프라인 CI
-├── Roadmap.md                  # 비전, 마일스톤, 현재 위치
-├── Problem.md                  # 알려진 미해결 문제
-├── Development_M2_Quality_Baseline_Requirement.md
-│                               # M2 요구사항과 수용 기준
-└── Development_M2_Quality_Baseline_Plan.md
-                                # M2 단계별 개발 계획
+└── README.md                   # 프로젝트 진입 문서
 ```
+
+M2.5 구조 이전 구현은 완료됐으며 사용자 최종 승인과 실제 GitHub Actions 확인을 기다리고 있습니다. 디렉터리별 책임은 [Repository Structure](docs/architecture/Repository_Structure.md)를 참조하십시오.
 
 ## 라이선스
 

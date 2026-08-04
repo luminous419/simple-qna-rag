@@ -5,7 +5,7 @@
 ## 골든 사례 스키마
 
 각 사례는 `evaluation/schema.py`의 `GoldenCase`로 검증된다. 필드 의미는
-[Development_M2_Quality_Baseline_Requirement.md](../Development_M2_Quality_Baseline_Requirement.md)
+[M2 Quality Baseline 요구사항](../docs/milestones/m2-quality-baseline/Requirement.md)
 M2-REQ-003에 정의돼 있다. 요약:
 
 - `id`, `question`, `category`, `expected_route`, `tags`: 필수.
@@ -21,14 +21,14 @@ M2-REQ-003에 정의돼 있다. 요약:
 
 ## source ID 규칙
 
-`document_register.py`의 `DirectoryLoader`가 `data/**/*.pdf`, `data/**/*.txt`만 수집한다 —
+`simple-qna-rag-index`의 `DirectoryLoader`가 `runtime/documents/**/*.pdf`, `runtime/documents/**/*.txt`만 수집한다 —
 **확장자가 없는 파일은 인덱싱되지 않으므로 골든셋의 정답 source가 될 수 없다.** 새 문서를
-`data/`에 추가할 때는 반드시 `.pdf` 또는 `.txt` 확장자를 붙인다.
+`runtime/documents/`에 추가할 때는 반드시 `.pdf` 또는 `.txt` 확장자를 붙인다.
 
-`relevant_sources`/`relevance_grades`의 key는 `data/` 파일의 **basename**(전체 경로 아님)을
+`relevant_sources`/`relevance_grades`의 key는 `runtime/documents/` 파일의 **basename**(전체 경로 아님)을
 그대로 적는다. 비교는 `evaluation/schema.py`의 `normalize_source_id()`(NFC 정규화 → 경로 구분자
 통일 → basename 추출 → casefold) 기준으로 이뤄지므로, 대소문자·Unicode 정규화 형태·경로 구분자
-차이는 같은 source로 취급된다. 다만 이는 사후 검증일 뿐 — 골든셋 저작 시점에는 사람이 `data/`의
+차이는 같은 source로 취급된다. 다만 이는 사후 검증일 뿐 — 골든셋 저작 시점에는 사람이 `runtime/documents/`의
 정확한 파일명을 그대로 옮겨 적어야 한다.
 
 **정답 근거를 실제로 검색할 수 있는지 항상 확인한다.** `python -c` 등으로 파일이
@@ -40,7 +40,7 @@ M2-REQ-003에 정의돼 있다. 요약:
 ```bash
 python -c "
 from pypdf import PdfReader
-r = PdfReader('data/파일명.pdf')
+r = PdfReader('runtime/documents/파일명.pdf')
 for i, page in enumerate(r.pages):
     print(f'--- p{i+1} ---')
     print(page.extract_text())
@@ -82,7 +82,7 @@ for i, page in enumerate(r.pages):
 
 ## abstention 작성법
 
-`category=unanswerable`이면서 `expect_abstention=true`인 사례는 **현재 corpus(`data/`)에서
+`category=unanswerable`이면서 `expect_abstention=true`인 사례는 **현재 corpus(`runtime/documents/`)에서
 실제로 답을 찾을 수 없는 질문**이어야 한다. 저작 시 다음을 확인한다.
 
 1. corpus 18개 문서 어디에도 해당 사실이 없는지 실제로 확인한다(추측 금지).
@@ -105,7 +105,7 @@ python -c "import evaluation.schema, evaluation.dataset"
 python -m evaluation.dataset --help
 
 # Phase 1 전용 테스트 + 전체 회귀
-pytest -q test_evaluation_schema.py test_evaluation_dataset.py
+pytest -q tests/unit/test_evaluation_schema.py tests/unit/test_evaluation_dataset.py
 pytest -q
 ```
 
@@ -185,7 +185,7 @@ python -m evaluation.retrieval \
   --output evaluation/reports/retrieval
 ```
 
-실제 `data/`, `vectorstore/`, embedding과 reranker가 필요하다.
+실제 `runtime/documents/`, `runtime/vectorstore/`, embedding과 reranker가 필요하다.
 
 ### Routing
 
@@ -252,4 +252,4 @@ GitHub Actions는 Pull Request와 `master` push에서 다음 두 job을 실행�
 - `python-tests`: Python 3.11, dependency check, Web import, `pytest -q`, dataset validation
 - `frontend-tests`: Node 22, `npm ci`, `npm test`, vendor sync 및 diff 확인
 
-CI는 Ollama, DDGS, Hugging Face 모델 가중치, `data/`, `vectorstore/`와 secret을 요구하지 않는다. 실제 품질 및 latency baseline은 준비된 로컬 환경에서 명시적 opt-in으로만 실행하고 사용자 검토 후 고정한다.
+CI는 Ollama, DDGS, Hugging Face 모델 가중치, `runtime/documents/`, `runtime/vectorstore/`와 secret을 요구하지 않는다. 실제 품질 및 latency baseline은 준비된 로컬 환경에서 명시적 opt-in으로만 실행하고 사용자 검토 후 고정한다.
