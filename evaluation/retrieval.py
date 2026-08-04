@@ -74,7 +74,10 @@ def evaluate_retrieval(
     """golden.jsonl의 `relevant_sources`가 있는 사례에 대해 production
     `RAGEngine._retrieve_documents(question, trace=RetrievalTrace())`를 호출하고
     Recall@K/MRR@10/nDCG@10, 단계별 latency/candidate_count를 집계해 JSON/Markdown
-    리포트를 쓴 뒤 같은 payload(dict)를 반환한다.
+    리포트를 쓴 뒤, 그 payload에 `report_json_path`/`report_markdown_path`(실제
+    생성된 파일 경로, str)를 추가한 dict를 반환한다(`evaluation.answers.evaluate_answers()`와
+    동일한 계약 — 호출부가 파일명을 직접 추측하지 않게 한다,
+    M2_Phase_7_8_code_review_result.md P2).
 
     `get_rag_engine()`은 평가 대상 사례가 최소 1건 있을 때만, 그리고 이 함수
     내부에서만 호출한다(지연 로딩). dataset/schema 오류(`DatasetError`)와 엔진
@@ -255,8 +258,14 @@ def evaluate_retrieval(
     extra.update(reproducibility)
 
     payload = build_metadata(dataset_path, command, extra)
-    write_report(payload, output_dir, "retrieval", render_markdown=_render_retrieval_markdown)
-    return payload
+    json_path, md_path = write_report(
+        payload, output_dir, "retrieval", render_markdown=_render_retrieval_markdown
+    )
+
+    output = dict(payload)
+    output["report_json_path"] = str(json_path)
+    output["report_markdown_path"] = str(md_path)
+    return output
 
 
 def _render_retrieval_markdown(payload: dict) -> str:

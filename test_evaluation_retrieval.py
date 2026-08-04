@@ -542,6 +542,29 @@ class TestEvaluateRetrievalDedupeAndMetrics:
         assert len(json_files) == 1
         assert len(md_files) == 1
 
+    def test_returned_payload_includes_report_paths(self, tmp_path, monkeypatch):
+        """M2_Phase_7_8_code_review_result.md P2: 호출부(예: evaluation.baseline)가
+        생성된 리포트 경로를 디렉터리 snapshot으로 추측하지 않도록,
+        evaluate_answers()처럼 report_json_path/report_markdown_path를 반환
+        payload에 직접 포함해야 한다."""
+        _mock_reproducibility(monkeypatch)
+        question = "질문"
+        dataset_path = _write_dataset(
+            tmp_path, [_case("c1", question, relevant_sources=["a.pdf"])]
+        )
+        engine = FakeRetrievalEngine({question: _docs("a.pdf")})
+        _install_fake_engine(monkeypatch, engine)
+
+        output_dir = tmp_path / "reports"
+        payload = evaluate_retrieval(dataset_path, output_dir)
+
+        json_files = list(output_dir.glob("retrieval_*.json"))
+        md_files = list(output_dir.glob("retrieval_*.md"))
+        assert payload["report_json_path"] == str(json_files[0])
+        assert payload["report_markdown_path"] == str(md_files[0])
+        assert Path(payload["report_json_path"]).exists()
+        assert Path(payload["report_markdown_path"]).exists()
+
     def test_markdown_report_shows_metrics_latency_and_failures_not_just_json_pointer(
         self, tmp_path, monkeypatch
     ):

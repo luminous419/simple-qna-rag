@@ -10,9 +10,14 @@ dataset validation -> Retrieval -> live Routing -> Answer 평가를 정해진 �
 이 모듈은 import 시점에 `agent.py`/`rag_engine.py`/Ollama를 로드하지 않는다.
 `agent._decide_tool`은 `--skip-routing`이 아니고 opt-in(RUN_LIVE_LLM_TESTS=1)을
 통과했을 때만 `run_baseline()` 내부에서 `_resolve_decide_tool()`을 통해
-지연 import된다. `run_baseline()` 자체는 항상 live Routing/Answer를 시도하는
-API이므로(§4.1) opt-in 검사는 CLI `main()`이 담당하고, `run_baseline()`은
-`sys.exit()`을 호출하지 않고 결과 dict만 반환한다(§4.5).
+지연 import된다. `run_baseline()`은 항상 live Routing/Answer를 시도하는
+API이므로(§4.1) `run_baseline()` 자신도 호출 즉시 opt-in을 검사해
+`RuntimeError`를 던진다 — CLI `main()`이 더 친절한 안내 메시지와 함께 같은
+검사를 먼저 수행해 정상 경로에서는 이 예외가 발생하지 않지만, `run_baseline()`을
+CLI 없이 Python에서 직접 호출하는 경우에도 opt-in 없이 실제 모델이 호출되지
+않도록 하는 방어선이다(M2_Phase_7_8_code_review_result.md P2). `run_baseline()`은
+`sys.exit()`을 호출하지 않고 결과 dict를 반환하거나(정상/부분 실패) `ValueError`
+(잘못된 `limit`)/`RuntimeError`(opt-in 없음)만 던진다(§4.5).
 """
 
 from __future__ import annotations
@@ -34,7 +39,7 @@ from evaluation.reporting import (
     write_report,
 )
 from evaluation.retrieval import evaluate_retrieval
-from evaluation.routing import _render_routing_markdown, evaluate_routing
+from evaluation.routing import evaluate_routing, render_routing_markdown
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -83,28 +88,6 @@ def _stage_not_run(name: str, reason: str) -> dict:
     return {"stage": name, "status": "not_run", "reason": reason}
 
 
-def _snapshot_json_md(dir_path: Path) -> set[str]:
-    if not dir_path.exists():
-        return set()
-    return {p.name for p in dir_path.iterdir() if p.is_file()}
-
-
-def _find_new_report(dir_path: Path, before: set[str], name_prefix: str) -> tuple[str | None, str | None]:
-    """evaluate_retrieval()은 내부적으로 write_report()를 호출해 리포트를 쓰지만
-    json_path/md_path를 반환하지 않는다. 호출 전후 디렉터리 스냅샷 차이로 새로
-    생성된 {name_prefix}*.json/.md를 찾는다(같은 stem 강제는 하지 않음 — 대칭
-    쌍임을 write_report()의 배타적 생성 계약이 이미 보장한다)."""
-    if not dir_path.exists():
-        return None, None
-    after = {p.name for p in dir_path.iterdir() if p.is_file()}
-    new_files = sorted(after - before)
-    json_name = next((n for n in new_files if n.startswith(name_prefix) and n.endswith(".json")), None)
-    md_name = next((n for n in new_files if n.startswith(name_prefix) and n.endswith(".md")), None)
-    json_path = str(dir_path / json_name) if json_name else None
-    md_path = str(dir_path / md_name) if md_name else None
-    return json_path, md_path
-
-
 def _resolve_decide_tool():
     """live Routing 평가에 쓸 실제 `agent._decide_tool()`을 지연 import한다.
 
@@ -128,9 +111,14 @@ def run_baseline(
     """validate -> retrieval -> routing -> answers 순서로 실행한다.
 
     `sys.exit()`을 호출하지 않는다 — 항상 결과 dict를 반환하거나(정상/부분
-    실패 모두 dict), `limit`이 잘못된 경우에만 `ValueError`를 던진다(§4.4,
-    Python API 계약). 최종 성공 여부는 반환 dict의 `overall_success` 키로
-    판단한다. CLI `main()`이 이 값을 보고 exit code를 결정한다.
+    실패 모두 dict), `limit`이 잘못된 경우 `ValueError`를, `RUN_LIVE_LLM_TESTS=1`
+    opt-in이 없는 경우 `RuntimeError`를 던진다(§4.4/§4.8, Python API 계약).
+    opt-in 검사는 CLI `main()`도 별도로 수행하지만(더 친절한 안내 메시지 포함),
+    `run_baseline()`을 CLI 없이 직접 호출하는 경로도 안전해야 하므로 이 함수
+    자신도 어떤 evaluator도 호출하기 전에 동일한 검사를 한다
+    (M2_Phase_7_8_code_review_result.md P2). 최종 성공 여부는 반환 dict의
+    `overall_success` 키로 판단한다. CLI `main()`이 이 값을 보고 exit code를
+    결정한다.
 
     단계 순서: dataset 로드 -> composition validation -> (실패 시 이후 단계는
     모두 `not_run`으로 표시하고 즉시 반환) -> Retrieval(스킵 옵션 없음) ->
@@ -143,6 +131,13 @@ def run_baseline(
     """
     if limit is not None and limit < 1:
         raise ValueError(f"limit은 1 이상이어야 합니다: {limit!r}")
+
+    if os.environ.get("RUN_LIVE_LLM_TESTS") != "1":
+        raise RuntimeError(
+            "통합 baseline은 실제 Retrieval/Ollama LLM/vectorstore를 사용합니다. "
+            "RUN_LIVE_LLM_TESTS=1 환경변수 없이는 run_baseline()을 실행할 수 없습니다. "
+            "CLI를 통해 실행한다면 opt-in 안내가 이미 main()에서 먼저 출력됩니다."
+        )
 
     dataset_path = Path(dataset_path)
     output_dir = Path(output_dir)
@@ -261,7 +256,6 @@ def run_baseline(
     # ---- Stage 2: retrieval (스킵 옵션 없음) ----
     t0 = time.perf_counter()
     retrieval_output_dir = output_dir / "retrieval"
-    before_files = _snapshot_json_md(retrieval_output_dir)
     retrieval_payload: dict | None = None
     try:
         retrieval_payload = evaluate_retrieval(dataset_path, retrieval_output_dir, limit=limit, tag=tag)
@@ -286,7 +280,6 @@ def run_baseline(
             next_action="Ollama가 실행 중인지, vectorstore/data가 올바른지 확인한 뒤 다시 실행하세요.",
         )
     else:
-        json_path, md_path = _find_new_report(retrieval_output_dir, before_files, "retrieval_")
         failing_cases = [
             {"id": c.get("id"), "question": c.get("question"), "error": c.get("error")}
             for c in (retrieval_payload.get("case_results") or [])
@@ -294,8 +287,8 @@ def run_baseline(
         ]
         stages["retrieval"] = _stage_success(
             "retrieval",
-            report_json_path=json_path,
-            report_markdown_path=md_path,
+            report_json_path=retrieval_payload.get("report_json_path"),
+            report_markdown_path=retrieval_payload.get("report_markdown_path"),
             case_counts=retrieval_payload.get("case_counts"),
             metrics=retrieval_payload.get("metrics"),
             latency_ms=retrieval_payload.get("latency_ms"),
@@ -343,36 +336,58 @@ def run_baseline(
                 next_action="Ollama가 실행 중인지, agent 설정이 올바른지 확인한 뒤 다시 실행하세요.",
             )
         else:
-            routing_output_dir = output_dir / "routing"
-            routing_command = [
-                "python", "-m", "evaluation.routing",
-                "--dataset", str(dataset_path), "--output", str(routing_output_dir), "--mode", "live",
-            ]
-            if tag is not None:
-                routing_command += ["--tag", tag]
-            if limit is not None:
-                routing_command += ["--limit", str(limit)]
-            reproducibility = build_not_applicable_reproducibility_metadata(
-                "routing은 corpus/vectorstore를 사용하지 않음"
-            )
-            routing_payload = build_metadata(
-                dataset_path, routing_command,
-                {"mode": "live", "tag_filter": tag, "limit": limit, **routing_result, **reproducibility},
-            )
-            json_path, md_path = write_report(
-                routing_payload, routing_output_dir, "routing", render_markdown=_render_routing_markdown
-            )
-            stages["routing"] = _stage_success(
-                "routing",
-                report_json_path=str(json_path),
-                report_markdown_path=str(md_path),
-                total_cases=routing_result.get("total_cases"),
-                correct_count=routing_result.get("correct_count"),
-                accuracy=routing_result.get("accuracy"),
-                precision_recall_f1=routing_result.get("precision_recall_f1"),
-                latency_ms=routing_result.get("latency_ms"),
-                failures=routing_result.get("failures"),
-            )
+            # evaluate_routing() 자체는 성공했다 — 이제 결과를 report로 남기는
+            # 단계다. M2_Phase_7_8_code_review_result.md P1: 이 report 작성
+            # (metadata 생성 + write_report())도 실패할 수 있고(디스크 공간,
+            # 권한 등), 이전에는 이 try 블록 밖에 있어서 예외가 run_baseline()
+            # 밖으로 그대로 전파돼 Answer 단계가 실행되지 않고 이미 성공한
+            # Retrieval 결과도 최종 report에 남지 않았다. evaluate_routing()의
+            # 성공(evaluation_status)과 report 파일 생성 성공(report_status)을
+            # 구분해 기록하되, report는 필수 산출물이므로 report 작성이
+            # 실패하면 단계 최종 상태는 failed로 남긴다.
+            try:
+                routing_output_dir = output_dir / "routing"
+                routing_command = [
+                    "python", "-m", "evaluation.routing",
+                    "--dataset", str(dataset_path), "--output", str(routing_output_dir), "--mode", "live",
+                ]
+                if tag is not None:
+                    routing_command += ["--tag", tag]
+                if limit is not None:
+                    routing_command += ["--limit", str(limit)]
+                reproducibility = build_not_applicable_reproducibility_metadata(
+                    "routing은 corpus/vectorstore를 사용하지 않음"
+                )
+                routing_payload = build_metadata(
+                    dataset_path, routing_command,
+                    {"mode": "live", "tag_filter": tag, "limit": limit, **routing_result, **reproducibility},
+                )
+                json_path, md_path = write_report(
+                    routing_payload, routing_output_dir, "routing", render_markdown=render_routing_markdown
+                )
+            except Exception as exc:  # noqa: BLE001 - report 작성 실패도 단계 실패로 기록하고 Answer는 계속 실행한다
+                stages["routing"] = _stage_failed(
+                    "routing", type(exc).__name__, str(exc),
+                    path=str(output_dir / "routing"),
+                    next_action="output 디렉터리의 쓰기 권한과 디스크 여유 공간을 확인한 뒤 다시 실행하세요.",
+                    evaluation_status="success",
+                    report_status="failed",
+                    total_cases=routing_result.get("total_cases"),
+                    correct_count=routing_result.get("correct_count"),
+                    accuracy=routing_result.get("accuracy"),
+                )
+            else:
+                stages["routing"] = _stage_success(
+                    "routing",
+                    report_json_path=str(json_path),
+                    report_markdown_path=str(md_path),
+                    total_cases=routing_result.get("total_cases"),
+                    correct_count=routing_result.get("correct_count"),
+                    accuracy=routing_result.get("accuracy"),
+                    precision_recall_f1=routing_result.get("precision_recall_f1"),
+                    latency_ms=routing_result.get("latency_ms"),
+                    failures=routing_result.get("failures"),
+                )
         stage_durations["routing"] = time.perf_counter() - t0
 
     # ---- Stage 4: answers ----

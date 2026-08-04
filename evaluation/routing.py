@@ -318,10 +318,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _render_routing_markdown(payload: dict) -> str:
+def render_routing_markdown(payload: dict) -> str:
     """사람이 accuracy/클래스별 PR·F1/confusion matrix/latency/실패 사례를 JSON을
     열지 않고 바로 읽을 수 있는 Markdown을 만든다(M2_Phase_4_5_6_code_review_result.md
-    P1 — 공통 `_render_markdown()`은 dict/list 필드를 렌더링하지 않는다)."""
+    P1 — 공통 `_render_markdown()`은 dict/list 필드를 렌더링하지 않는다).
+
+    공개 함수다(비공개 접두사 없음) — `evaluation.baseline`처럼 Routing을
+    live 모드로 호출한 뒤 같은 형식의 Markdown을 만들어야 하는 다른 모듈이
+    재사용할 수 있다(M2_Phase_7_8_code_review_result.md P3)."""
     lines: list[str] = ["# routing", ""]
     generated_at = payload.get("generated_at_utc")
     if generated_at:
@@ -475,7 +479,7 @@ def main(argv: list[str] | None = None) -> int:
         },
     )
 
-    json_path, md_path = write_report(payload, args.output, "routing", render_markdown=_render_routing_markdown)
+    json_path, md_path = write_report(payload, args.output, "routing", render_markdown=render_routing_markdown)
     print(
         f"라우팅 정확도: {result['accuracy']:.1%} "
         f"({result['correct_count']}/{result['total_cases']})",
