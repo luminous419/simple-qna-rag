@@ -29,9 +29,9 @@ M1 Agent & Safety     완료
         |
 M2 Quality & CI       완료
         |
-M2.5 Repo Structure   구현 완료·승인 대기         <-- 현재 위치
+M2.5 Repo Structure   완료
         |
-M3 Retrieval Quality  예정
+M3 Retrieval Quality  착수 준비                  <-- 현재 위치
         |
 M4 Production Ready   예정
         |
@@ -40,7 +40,9 @@ M5 Scale & Advanced   조건부
 
 M2의 Phase 0~9를 완료했습니다. 76개 골든 사례, Retrieval·Routing·Answer evaluator, 통합 live baseline, 재현성 metadata와 Python/Node CI가 구현됐습니다. 최초 전체 live 실행은 사용자 승인을 거쳐 [M2 기준선](../evaluation/baselines/m2_initial.md)으로 고정됐습니다.
 
-현재 위치는 M2.5 Repository Restructuring의 로컬 구현 완료 단계입니다. Phase 0~5를 순차 수행해 제품 package, 문서·테스트, Web·학습·모델 자산과 runtime 경로를 정리했습니다. 실제 GitHub Actions 성공과 사용자 최종 승인 후 M2.5를 완료로 전환하고 M3 범위를 합의합니다.
+M2.5 Repository Restructuring의 Phase 0~5를 완료했습니다. 제품 package, 문서·테스트, Web·학습·모델 자산과 runtime 경로를 정리했고 PR #12의 Python/Frontend GitHub Actions 성공과 사용자 최종 승인을 확인했습니다.
+
+현재 위치는 M3 착수 준비 단계입니다. M2 기준선에서 확인된 Retrieval latency, 문서 질문의 Web search 과다 라우팅, intent 정확도와 Answer 평가 false negative를 바탕으로 M3 범위와 수용 기준을 합의해야 합니다.
 
 ## 마일스톤
 
@@ -108,7 +110,7 @@ M2의 Phase 0~9를 완료했습니다. 76개 골든 사례, Retrieval·Routing·
 
 ### M2.5 — Repository Restructuring
 
-**상태: 구현 완료·승인 대기** — Phase 0~5 로컬 검증 완료, GitHub Actions와 사용자 최종 승인 필요
+**상태: 완료** — Phase 0~5 구현, PR #12 GitHub Actions와 사용자 최종 승인 완료
 
 목표: M2에서 확립한 동작과 기준선을 보존하면서 제품 코드, 테스트, 문서, 평가, 학습 자산과 runtime 데이터를 일관된 책임 경계로 재배치
 
@@ -128,7 +130,7 @@ M2의 Phase 0~9를 완료했습니다. 76개 골든 사례, Retrieval·Routing·
 - M2 dataset·baseline hash와 corpus/vectorstore fingerprint가 보존됩니다.
 - 기존 runtime 데이터가 삭제 또는 덮어쓰기 되지 않고 충돌 시 migration이 중단됩니다.
 - clean install CI와 저장소 루트 외부 current directory 실행이 성공합니다.
-- 사용자 최종 승인 전에는 완료로 표시하지 않습니다.
+- PR #12의 Python/Frontend CI 성공과 사용자 최종 승인을 완료했습니다.
 
 개발 문서:
 
@@ -142,7 +144,7 @@ M2의 Phase 0~9를 완료했습니다. 76개 골든 사례, Retrieval·Routing·
 
 ### M3 — Retrieval & Domain Quality
 
-**상태: 예정** — M2.5 완료 후 M2 기준선 기반 범위·수용 기준 합의
+**상태: 착수 준비** — M2 기준선 기반 범위·수용 기준 합의 필요
 
 목표: M2 기준선을 사용해 한국어 검색과 실제 도메인 답변 품질 개선
 

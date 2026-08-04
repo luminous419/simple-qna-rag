@@ -2,7 +2,7 @@
 
 측정일: 2026-08-05 (Asia/Seoul)
 
-상태: **로컬 구현·검증 완료, GitHub Actions와 사용자 최종 승인 대기**
+상태: **완료** — PR #12 GitHub Actions와 사용자 최종 승인 완료
 
 ## 최종 구조
 
@@ -77,7 +77,7 @@ npm test
 | legacy root import·`sys.path` 우회 | 없음 |
 | `git diff --check` | 성공 |
 
-공유 Conda 환경의 Torchvision warning, `pip check` 충돌과 `email-validator`로 인한 Web server import 실패는 Phase 0 이전부터 존재한 환경 결함입니다. clean install GitHub Actions에서 새 package Web import가 성공하는지는 commit/PR 이후 확인해야 합니다.
+공유 Conda 환경의 Torchvision warning, `pip check` 충돌과 `email-validator`로 인한 Web server import 실패는 Phase 0 이전부터 존재한 환경 결함입니다. PR #12의 clean GitHub Actions에서는 dependency 검사와 새 package Web import가 성공했습니다.
 
 ## M2 보호 대상
 
@@ -111,11 +111,12 @@ M2 기준선 문서 안의 과거 `data/`, `vectorstore/` 경로와 commit SHA�
 - 기존 경로와 새 경로가 동시에 존재하면 config가 중단하므로 먼저 어느 쪽을 보존할지 명시적으로 결정해야 합니다.
 - vectorstore를 재생성해 rollback 오류를 덮어쓰면 안 됩니다.
 
-## 남은 승인 게이트
+## 최종 승인
 
-1. 변경을 commit/PR한 뒤 GitHub Actions Python/Frontend job 성공 확인
-2. clean CI의 `from simple_qna_rag.web.server import app` 성공 확인
-3. 필요 시 실제 Web/API 및 query smoke test 수행
-4. 사용자 최종 승인 후 Roadmap에서 M2.5를 `완료`로 변경
+- PR #12 `python-tests`: 성공
+- PR #12 `frontend-tests`: 성공
+- Clean CI `from simple_qna_rag.web.server import app`: 성공
+- master merge commit: `48e905ea7020cda4995cb02d88fb69ea83dda5c7`
+- 사용자 최종 승인: 2026-08-05
 
-commit과 push는 이 작업에서 수행하지 않았습니다.
+실제 LLM query와 재색인 smoke는 모델 실행 비용과 기존 vectorstore의 파괴적 재생성을 피하기 위해 최종 승인 범위에서 면제했습니다. M2.5를 완료하고 다음 마일스톤을 M3 착수 준비로 전환합니다.

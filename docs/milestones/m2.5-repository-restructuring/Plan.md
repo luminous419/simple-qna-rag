@@ -1,6 +1,6 @@
 # M2.5 Repository Restructuring 상세 이전 계획
 
-상태: **Phase 5 로컬 구현 완료** — GitHub Actions와 사용자 최종 승인 대기
+상태: **완료** — Phase 0~5 구현, PR #12 GitHub Actions와 사용자 최종 승인 완료
 
 ## 1. 목적
 
@@ -330,7 +330,7 @@ CLI entry point 이름과 인자는 `pyproject.toml`에서 고정하고 README�
 
 ### Phase 5 — 문서화와 최종 회귀 검증
 
-상태: **로컬 완료** — 결과는 [Phase_5_Final_Result.md](Phase_5_Final_Result.md) 참조
+상태: **완료** — 결과는 [Phase_5_Final_Result.md](Phase_5_Final_Result.md) 참조
 
 작업:
 
@@ -363,7 +363,7 @@ CLI entry point 이름과 인자는 `pyproject.toml`에서 고정하고 README�
 - [x] golden dataset validation이 76건으로 통과합니다.
 - [x] 승인된 `m2_initial.json`과 `m2_initial.md` 내용 hash가 이동 전과 같습니다.
 - [x] corpus manifest와 vectorstore fingerprint가 물리적 경로 이동 전후 동일합니다.
-- [ ] Web server import, API/Web smoke test, 문서 index와 query smoke test가 성공합니다.
+- [x] Clean CI Web server import와 세 CLI smoke가 성공했습니다. 실제 LLM query·재색인은 비파괴 원칙에 따라 사용자 승인으로 면제했습니다.
 - [x] live test의 opt-in 정책과 기본 offline CI 정책이 유지됩니다.
 
 ### 9.3 실행과 경로
@@ -379,7 +379,7 @@ CLI entry point 이름과 인자는 `pyproject.toml`에서 고정하고 README�
 
 - [x] README, Roadmap, Problem과 평가 가이드의 모든 local link가 유효합니다.
 - [x] README 명령을 그대로 실행할 수 있습니다.
-- [ ] GitHub Actions가 새 package와 테스트 경로에서 모두 성공합니다.
+- [x] GitHub Actions가 새 package와 테스트 경로에서 모두 성공합니다. (PR #12)
 - [x] `.gitignore`가 `runtime/`, 평가 report, 환경·IDE·cache 파일을 올바르게 제외합니다.
 - [x] `git diff --check`가 성공하고 의도하지 않은 generated file이 없습니다.
 
@@ -388,7 +388,7 @@ CLI entry point 이름과 인자는 `pyproject.toml`에서 고정하고 README�
 - [x] M2.5 비범위인 검색·라우팅·답변 품질 변경이 포함되지 않았습니다.
 - [x] 순수 이동과 논리 변경을 리뷰에서 구분할 수 있습니다.
 - [x] 이동 전후 mapping, 실행 결과, 알려진 예외와 rollback 방법이 최종 리뷰 문서에 기록됩니다.
-- [ ] 사용자 최종 승인 후에만 Roadmap의 M2.5를 완료로 변경합니다.
+- [x] 사용자 최종 승인 후 Roadmap의 M2.5를 완료로 변경했습니다. (2026-08-05)
 
 ## 10. 검증 명령 기준
 

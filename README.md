@@ -323,7 +323,7 @@ simple-qna-rag-web --host 0.0.0.0 --port 8000
 └── README.md                   # 프로젝트 진입 문서
 ```
 
-M2.5 구조 이전 구현은 완료됐으며 사용자 최종 승인과 실제 GitHub Actions 확인을 기다리고 있습니다. 디렉터리별 책임은 [Repository Structure](docs/architecture/Repository_Structure.md)를 참조하십시오.
+M2.5 구조 이전과 GitHub Actions 검증, 사용자 최종 승인을 완료했습니다. 디렉터리별 책임은 [Repository Structure](docs/architecture/Repository_Structure.md)를 참조하십시오.
 
 ## 라이선스
 
