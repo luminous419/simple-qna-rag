@@ -1,5 +1,7 @@
 # M2 Quality Baseline — 상세 개발 계획 (Development Plan)
 
+상태: **완료** — Phase 0~9 구현, PR #10 CI 성공, 최초 live baseline 승인 및 고정 완료
+
 ## 0. 문서 관계
 
 - 상위 목표: [Roadmap.md](Roadmap.md)
@@ -1011,32 +1013,32 @@ jobs:
 - [x] Phase 0: 깨끗한 venv에서 `import web_server`/`TestClient`/`pip check` 실행 완료 — 모두 통과, 저장소 자체 문제 아님으로 결론(§1). `requirements.txt` 선행 수정 불필요
 - [x] Phase 2: 골든셋 source relevance 검토 승인 (사용자) — M2_Phase2_code_review_result.md P1(확장자 없는 경제 PDF 인덱싱 누락) 반영 후 재검토·승인
 - [x] Phase 2: 골든셋 answer assertion 검토 승인 (사용자) — M2_Phase2_code_review_result.md P1(복합 assertion 분리) 반영 후 재검토·승인
-- [ ] Phase 7: 최초 live baseline 결과 및 주요 실패 사례 검토·승인 (사용자)
+- [x] Phase 7: 최초 live baseline 결과 및 주요 실패 사례 검토·승인 (사용자) — 2026-08-05 승인, `evaluation/baselines/m2_initial.json/.md` 고정
 
 ## 9. 완료 정의 체크리스트 (요구사항 문서 §9 그대로, 진행 시 체크)
 
-- [x] 골든 평가셋(최소 60개) schema/구성 검증 통과 — Phase 2 완료(62개 사례, 사람 검토 2회 승인)
-- [ ] Retrieval/Routing/Answer 평가 명령 + 통합 baseline 명령 제공
-- [ ] 필수 metric·경계 조건 단위 테스트 통과
-- [ ] 실제 로컬 환경 최초 baseline JSON/Markdown 생성 및 고정 경로 저장(승인 후)
-- [ ] 리포트에 요구된 실행 환경/설정 메타데이터 포함
-- [ ] GitHub Actions에서 Python/dataset/frontend 검증이 외부 모델 없이 통과
-- [ ] 기존 Python/프런트엔드 테스트 전부 통과
-- [ ] README/Roadmap/Problem 문서가 구현 상태와 일치
-- [ ] Retrieval 알고리즘/기존 API 의미 의도치 않게 변경되지 않음
-- [ ] 리뷰에서 요구사항별 증거 확인 가능(§2 매트릭스 + PR 설명의 추적표)
+- [x] 골든 평가셋(최소 60개) schema/구성 검증 통과 — Phase 2 승인 후 Routing 사례 이전을 포함해 최종 76개
+- [x] Retrieval/Routing/Answer 평가 명령 + 통합 baseline 명령 제공
+- [x] 필수 metric·경계 조건 단위 테스트 통과
+- [x] 실제 로컬 환경 최초 baseline JSON/Markdown 생성 및 고정 경로 저장
+- [x] 리포트에 요구된 실행 환경/설정 메타데이터 포함
+- [x] GitHub Actions에서 Python/dataset/frontend 검증이 외부 모델 없이 통과 — PR #10
+- [x] 기존 Python/프런트엔드 테스트 전부 통과 — Python 349 passed, 1 skipped / frontend 9 passed
+- [x] README/Roadmap/Problem 문서가 구현 상태와 일치
+- [x] Retrieval 알고리즘/기존 API 의미 의도치 않게 변경되지 않음 — Phase별 코드 리뷰 승인
+- [x] 리뷰에서 요구사항별 증거 확인 가능 — Requirement §10과 승인 baseline 참조
 
-## 10. 요구사항 추적표 (초기 상태 — 착수 시점)
+## 10. 요구사항 추적표 (완료 상태)
 
 | 요구사항 | 상태 | 구현/테스트/리포트 증거 |
 |---|---|---|
-| M2-REQ-001~004 | 계획됨 | Phase 1, §3.1~3.3 |
-| M2-REQ-005~006 | 계획됨 | Phase 4, §3.4~3.5 |
-| M2-REQ-007 | 계획됨 | Phase 5 |
-| M2-REQ-008~010 | 계획됨 | Phase 6, 7, §3.6 |
-| M2-REQ-011~012 | 계획됨 | Phase 0(기준), 3, 4 |
-| M2-REQ-013 | 계획됨 | Phase 8 |
-| M2-REQ-014~016 | 계획됨 | Phase 9, 각 Phase의 CLI 오류 처리 |
-| M2-NFR-001~005 | 계획됨 | §3.1, 3.4, 3.6, Phase 8 |
+| M2-REQ-001~004 | 완료 | schema/dataset validator, 최종 골든셋 76개 |
+| M2-REQ-005~006 | 완료 | Retrieval trace/evaluator와 승인 기준선 |
+| M2-REQ-007 | 완료 | offline/live Routing evaluator와 승인 기준선 |
+| M2-REQ-008~010 | 완료 | Answer evaluator, 통합 baseline, 재현성 metadata, 승인 `m2_initial.*` |
+| M2-REQ-011~012 | 완료 | metric·evaluator·reporting·baseline 테스트, 전체 회귀 통과 |
+| M2-REQ-013 | 완료 | `.github/workflows/ci.yml`, PR #10 두 job 성공 |
+| M2-REQ-014~016 | 완료 | README/evaluation 가이드/Roadmap/Problem, CLI 오류·종료 코드 |
+| M2-NFR-001~005 | 완료 | 결정론, fingerprint 비교, lazy loading, CI 시간, 모듈 역할 분리 검증 |
 
-구현이 진행되며 각 셀을 "완료"로 갱신하고 실제 커밋/테스트 파일/리포트 경로로 채운다.
+파일별 세부 증거는 `Development_M2_Quality_Baseline_Requirement.md` §10을 따른다.

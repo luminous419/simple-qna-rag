@@ -1,8 +1,6 @@
 # evaluation/ — M2 Quality Baseline
 
-`evaluation/datasets/golden.jsonl` 골든 평가셋을 작성·검증하는 방법을 정리한다. 이 문서는 Phase 2
-산출물로 시작했으며(Development_M2_Quality_Baseline_Development_Plan.md §5), Phase 3 이후 metric·CI
-내용이 추가되면 갱신한다.
+`evaluation/`은 골든 평가셋 검증, Retrieval·Routing·Answer 평가, 통합 live baseline과 결과 리포팅을 제공한다. 이 문서는 평가셋 작성법, source ID, metric 정의, 실행 방법과 결과 해석의 한계를 정리한다.
 
 ## 골든 사례 스키마
 
@@ -130,5 +128,128 @@ Development_M2_Quality_Baseline_Development_Plan.md §5.3에 따라 골든셋 �
   문맥적 정확성을 완전히 대체하지 않는다(M2-REQ-008).
 - 현재 이 프로젝트에는 LLM judge 기반 평가가 포함되어 있지 않다 — assertion coverage와
   abstention 정확도 같은 규칙 기반 지표만 사용한다.
-- Metric(Recall/MRR/nDCG 등) 정의와 계산 방식은 Phase 3(`evaluation/metrics.py`) 구현 시 이
-  문서에 추가한다.
+- corpus manifest와 vectorstore fingerprint는 동일한 파일을 사용했는지는 식별하지만, 인덱스가 현재 embedding model과 chunk 설정으로 생성됐다는 provenance는 보증하지 않는다.
+- dependency version snapshot은 현재 baseline metadata에 없으므로 같은 Git과 fingerprint라도 설치된 라이브러리 차이가 남을 수 있다.
+
+## 평가 대상 선택 규칙
+
+| Evaluator | 대상 사례 |
+|---|---|
+| Retrieval | `relevant_sources`가 하나 이상인 사례 |
+| Routing | 필터 후 남은 모든 사례 |
+| Answer | `answer_assertions`가 있거나 `expect_abstention=true`인 사례 |
+
+`--tag`는 해당 tag를 가진 사례만 남기고 `--limit`은 필터 결과의 원래 순서 앞에서부터 양의 개수만 선택한다. `0`과 음수 limit은 CLI와 공개 API 모두 거부한다.
+
+## Metric 정의
+
+### Retrieval
+
+- **Recall@K**: 정답 source 중 top-K 고유 검색 source에 포함된 비율을 사례별로 계산한 뒤 macro average한다.
+- **MRR@10**: 첫 번째 정답 source의 reciprocal rank를 사례별로 계산한 뒤 평균한다.
+- **nDCG@10**: `relevance_grades`가 있는 사례만 대상으로 `gain = 2**grade - 1`, `discount = log2(rank + 1)`을 사용해 사례별 nDCG를 계산한 뒤 macro average한다.
+- 세 metric 모두 source ID를 정규화하고 중복 source는 최초 등장만 유지한다. K는 chunk 수가 아니라 top-K 고유 source 수다.
+- latency는 실제 production Retrieval 전체와 BM25, Dense, RRF, MMR, reranker 단계별 mean/median/p95 및 후보 수를 기록한다.
+
+### Routing
+
+- 전체 accuracy와 `document_qa`/`web_search`별 precision, recall, F1을 계산한다.
+- no-tool, unknown route와 exception은 제외하지 않고 각각 별도 prediction 열로 confusion matrix에 포함한다. 따라서 기대 route의 false negative로 반영된다.
+- live mode는 실제 `agent._decide_tool()`을 사용하고 offline mode는 외부 LLM 없이 parsing·집계·리포팅 계약을 검증한다.
+
+### Answer
+
+- **Assertion coverage**: 각 assertion의 `any_of` 중 하나가 정규화된 답변 문자열에 포함되면 통과한다. 전체 통과 assertion 수를 전체 assertion 수로 나눈다.
+- **Abstention accuracy**: 기대 abstention과 규칙 기반 detector가 판정한 거절 여부의 일치율이다.
+- **Source any-hit/recall**: 반환 source와 `relevant_sources`를 정규화해 하나 이상 맞았는지와 정답 source 회수 비율을 계산한다.
+- **Intent accuracy**: 반환 intent와 `expected_intent`가 같은 비율이다.
+- End-to-End latency는 Retrieval, intent 분류와 LLM 답변 생성을 포함한다.
+
+Assertion과 abstention은 문자열 규칙이라 표기·띄어쓰기·동의 표현에 민감하다. M2 최초 baseline에서도 의미상 맞는 답변을 자동 실패로 판정한 사례가 있었으므로 worksheet 사람 검토와 함께 해석해야 한다.
+
+## 실행 방법
+
+모든 명령은 저장소 루트에서 실행한다.
+
+### Dataset validation
+
+```bash
+python -m evaluation.dataset validate evaluation/datasets/golden.jsonl
+```
+
+### Retrieval
+
+```bash
+python -m evaluation.retrieval \
+  --dataset evaluation/datasets/golden.jsonl \
+  --output evaluation/reports/retrieval
+```
+
+실제 `data/`, `vectorstore/`, embedding과 reranker가 필요하다.
+
+### Routing
+
+```bash
+# 외부 모델 없는 집계·리포트 확인
+python -m evaluation.routing \
+  --dataset evaluation/datasets/golden.jsonl \
+  --mode offline \
+  --output evaluation/reports/routing-offline
+
+# 실제 Ollama tool decision
+RUN_LIVE_LLM_TESTS=1 python -m evaluation.routing \
+  --dataset evaluation/datasets/golden.jsonl \
+  --mode live \
+  --output evaluation/reports/routing
+```
+
+### Answer
+
+```bash
+python -m evaluation.answers \
+  --dataset evaluation/datasets/golden.jsonl \
+  --output evaluation/reports/answers
+```
+
+JSON/Markdown 집계 report와 사례별 사람 검토 worksheet를 만든다. worksheet에는 답변과 출처가 포함될 수 있으므로 Git에 commit하지 않는다.
+
+### 통합 baseline
+
+```bash
+RUN_LIVE_LLM_TESTS=1 python -m evaluation.baseline \
+  --dataset evaluation/datasets/golden.jsonl \
+  --output evaluation/reports
+```
+
+실행 순서는 validation → Retrieval → live Routing → Answer다. 한 단계가 실패해도 가능한 다음 단계를 실행하고 완료된 결과와 실패 원인을 보존한 뒤 전체 명령은 non-zero로 끝난다.
+
+Retrieval의 corpus/vectorstore fingerprint를 top-level에 기록하고 Answer가 독립 계산한 값과 비교한다. 둘이 다르면 실행 중 artifact가 변경된 것으로 보고 전체 baseline을 실패 처리한다.
+
+`--limit 1`은 환경 사전 점검에만 사용한다. 제한 실행, skip 실행이나 일부 tag 실행을 정식 최초 baseline으로 고정하지 않는다.
+
+## 리포트와 기준선
+
+- `evaluation/reports/`: timestamped 상세 JSON/Markdown/worksheet. Git 제외 대상
+- `evaluation/baselines/m2_initial.json`: 사용자가 승인한 기계 판독용 최초 기준선
+- `evaluation/baselines/m2_initial.md`: 사람 판독용 최초 기준선과 해석
+
+상세 report는 질문과 모델 답변을 포함할 수 있다. 승인 기준선에는 집계 수치, 실행 metadata, 전체 corpus manifest, fingerprint와 비민감 실패 패턴만 기록한다.
+
+비교 실행에서는 최소한 다음이 같은지 확인한다.
+
+1. dataset SHA-256
+2. corpus manifest SHA-256
+3. `index.faiss`와 `index.pkl` SHA-256
+4. Git revision 또는 비교 대상 변경 범위
+5. 모델 이름과 Retrieval 설정
+
+fingerprint가 다르면 동일 조건의 전후 비교로 간주하지 않는다.
+
+## CI와 로컬 live 실행 차이
+
+GitHub Actions는 Pull Request와 `master` push에서 다음 두 job을 실행한다.
+
+- `python-tests`: Python 3.11, dependency check, Web import, `pytest -q`, dataset validation
+- `frontend-tests`: Node 22, `npm ci`, `npm test`, vendor sync 및 diff 확인
+
+CI는 Ollama, DDGS, Hugging Face 모델 가중치, `data/`, `vectorstore/`와 secret을 요구하지 않는다. 실제 품질 및 latency baseline은 준비된 로컬 환경에서 명시적 opt-in으로만 실행하고 사용자 검토 후 고정한다.

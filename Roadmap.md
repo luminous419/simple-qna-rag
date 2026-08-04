@@ -27,16 +27,18 @@ M0 Core RAG           완료
         |
 M1 Agent & Safety     완료
         |
-M2 Quality & CI       진행 중 (Phase 1~3/9 완료)  <-- 현재 위치
+M2 Quality & CI       완료
         |
-M3 Retrieval Quality  예정
+M3 Retrieval Quality  착수 준비                  <-- 현재 위치
         |
 M4 Production Ready   예정
         |
 M5 Scale & Advanced   조건부
 ```
 
-현재 브랜치는 핵심 RAG, Agent 라우팅, 장애 폴백, 웹 XSS 방어와 프런트엔드 의존성 재현성까지 구현한 상태입니다. M2는 [상세 개발 계획](Development_M2_Quality_Baseline_Development_Plan.md)의 Phase 0(착수 전 상태 기록)~Phase 3(metric·report 생성기)까지 완료했습니다 — 골든 평가셋(62개 사례), schema/dataset validator, Recall/MRR/nDCG 등 metric 함수, 재현성 메타데이터(리포트) 생성기가 구현되고 사람 검토·코드 리뷰를 거쳐 master에 병합됐습니다. 다음 단계는 Phase 4(Retrieval evaluator)부터 이어서 실제 품질 기준선을 측정하는 것입니다.
+M2의 Phase 0~9를 완료했습니다. 76개 골든 사례, Retrieval·Routing·Answer evaluator, 통합 live baseline, 재현성 metadata와 Python/Node CI가 구현됐습니다. 최초 전체 live 실행은 사용자 승인을 거쳐 [M2 기준선](evaluation/baselines/m2_initial.md)으로 고정됐습니다.
+
+현재 위치는 M3 착수 준비 단계입니다. M2 기준선에서 확인된 MMR latency, 문서 질문의 Web search 과다 라우팅, 낮은 intent 정확도와 규칙 기반 Answer 평가의 false negative를 바탕으로 M3 범위와 수용 기준을 먼저 합의해야 합니다. 아직 M3 구현 계획 문서는 작성하지 않았습니다.
 
 ## 마일스톤
 
@@ -75,19 +77,21 @@ M5 Scale & Advanced   조건부
 
 ### M2 — Quality Baseline & Continuous Integration
 
-**상태: 진행 중** — [상세 개발 계획](Development_M2_Quality_Baseline_Development_Plan.md) Phase 0~3/9 완료(골든 평가셋, schema/dataset validator, metric·report 생성기), Phase 4(Retrieval evaluator)부터 진행 예정
+**상태: 완료** — Phase 0~9 구현, live baseline 사용자 승인 및 CI 검증 완료
 
 목표: 모든 후속 개선을 객관적으로 비교할 수 있는 품질·성능 기준선 구축
 
-예상 산출물:
+완료 산출물:
 
 - 대표 질문과 관련 문서를 포함한 골든 평가셋
 - Retrieval 지표: Recall@K, MRR, nDCG
-- 답변 평가 기준: 충실성, 관련성, 완결성, 출처 일치
-- Agent 라우팅 정확도와 폴백 성공률
+- 답변 평가 기준: assertion coverage, abstention, 출처 일치, intent와 사람 검토 worksheet
+- Agent 라우팅 정확도, confusion matrix와 오류 유형
 - 검색 단계별 및 End-to-End latency 기준선
 - Python/Node 정적 테스트 CI
 - Ollama 라이브 테스트의 별도 실행 정책
+- [승인된 최초 품질 기준선](evaluation/baselines/m2_initial.md)
+- [평가 패키지 사용 가이드](evaluation/README.md)
 
 완료 조건:
 
@@ -102,7 +106,7 @@ M5 Scale & Advanced   조건부
 
 ### M3 — Retrieval & Domain Quality
 
-**상태: 예정**
+**상태: 착수 준비** — M2 기준선 기반 범위·수용 기준 합의 필요
 
 목표: M2 기준선을 사용해 한국어 검색과 실제 도메인 답변 품질 개선
 
@@ -168,7 +172,7 @@ M5 Scale & Advanced   조건부
 
 ## 우선순위 요약
 
-1. M2에서 측정 가능한 기준선을 만듭니다.
+1. 완료된 M2 기준선에서 M3의 개선 목표와 허용 회귀 범위를 합의합니다.
 2. M3에서 기준선에 근거해 검색과 도메인 품질을 개선합니다.
 3. M4에서 운영·배포·동시성 문제를 해결합니다.
 4. M5는 실제 규모와 사용자 요구가 확인된 경우에만 진행합니다.

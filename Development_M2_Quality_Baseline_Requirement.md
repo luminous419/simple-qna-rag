@@ -461,11 +461,11 @@ M2는 기준선 구축 마일스톤이므로 Recall이나 답변 점수가 특�
 
 | 요구사항 | 상태 | 구현/테스트/리포트 증거 |
 |---|---|---|
-| M2-REQ-001~004 | 미착수 | |
-| M2-REQ-005~006 | 미착수 | |
-| M2-REQ-007 | 미착수 | |
-| M2-REQ-008~010 | 미착수 | |
-| M2-REQ-011~012 | 미착수 | |
-| M2-REQ-013 | 미착수 | |
-| M2-REQ-014~016 | 미착수 | |
-| M2-NFR-001~005 | 미착수 | |
+| M2-REQ-001~004 | 완료 | `evaluation/schema.py`, `evaluation/dataset.py`, `evaluation/datasets/golden.jsonl`, `test_evaluation_schema.py`, `test_evaluation_dataset.py`; dataset 76건 validation 통과 |
+| M2-REQ-005~006 | 완료 | `rag_engine.py` 선택적 trace, `evaluation/retrieval.py`, `test_evaluation_retrieval.py`; [최초 기준선 Retrieval 결과](evaluation/baselines/m2_initial.md#retrieval-기준선) |
+| M2-REQ-007 | 완료 | `evaluation/routing.py`, `test_evaluation_routing.py`, `test_agent_routing.py`; offline/live 분리 및 [Routing 기준선](evaluation/baselines/m2_initial.md#routing-기준선) |
+| M2-REQ-008~010 | 완료 | `evaluation/answers.py`, `evaluation/baseline.py`, `evaluation/reporting.py`, 관련 테스트; 사용자 승인 [JSON](evaluation/baselines/m2_initial.json)/[Markdown](evaluation/baselines/m2_initial.md) |
+| M2-REQ-011~012 | 완료 | `test_evaluation_metrics.py`, evaluator/reporting/baseline 회귀 테스트; 최종 `pytest -q` 349 passed, 1 skipped |
+| M2-REQ-013 | 완료 | `.github/workflows/ci.yml`; PR #10 `python-tests`·`frontend-tests` 성공, 외부 live 서비스 미사용 |
+| M2-REQ-014~016 | 완료 | [README](README.md#테스트-방법), [평가 가이드](evaluation/README.md), evaluator CLI 오류·종료 코드 테스트, [Roadmap](Roadmap.md), [Problem](Problem.md) |
+| M2-NFR-001~005 | 완료 | 결정론적 metric/report 테스트, fingerprint 비교, lazy import/`--help` 테스트, CI 10분 이내, schema·metric·runner·reporting 역할 분리 |

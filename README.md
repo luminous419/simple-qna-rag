@@ -66,7 +66,7 @@ Agent가 실패하면 키워드 라우터를 사용합니다. 웹 검색까지 �
 ### 요구사항
 
 - Python 3.11 권장
-- Node.js 20 이상: 프런트엔드 테스트와 vendor 동기화에만 필요
+- Node.js 22.22.2 이상 권장: 프런트엔드 테스트와 vendor 동기화에만 필요
 - Ollama
 - `gpt-oss:20b`를 실행할 수 있는 메모리와 디스크 공간
 
@@ -164,15 +164,89 @@ python document_query_cli.py
 
 ## 테스트 방법
 
-### 기본 Python 테스트
+### 전체 오프라인 검증
 
-외부 네트워크와 Ollama 없이 mock 기반 라우팅, 폴백, 웹 검색 포맷을 검증합니다.
+일반 Pull Request와 로컬 회귀 검증은 Ollama, 웹 검색, `data/`, `vectorstore/` 없이 실행됩니다.
 
 ```bash
+python -m pip check
+python -c "import web_server"
+python -m evaluation.dataset validate evaluation/datasets/golden.jsonl
 pytest -q
+npm ci
+npm test
+npm run sync-vendor
+git diff --exit-code -- static/vendor/
+git diff --check
 ```
 
-### 라이브 Agent 라우팅 테스트
+GitHub Actions의 `python-tests`와 `frontend-tests`도 같은 오프라인 경계를 사용합니다. CI는 Ollama, DDGS, 모델 가중치 다운로드, 로컬 corpus/vectorstore 또는 secret을 요구하지 않습니다.
+
+### 골든 평가셋 검증
+
+평가셋의 schema, 최소 사례 수, category·intent 구성과 정답 규칙을 검사합니다.
+
+```bash
+python -m evaluation.dataset validate evaluation/datasets/golden.jsonl
+```
+
+현재 골든셋 작성 규칙과 metric 정의는 [evaluation/README.md](evaluation/README.md)를 참고하십시오.
+
+### 개별 evaluator 실행
+
+Retrieval과 Answer 평가는 실제 `data/`, `vectorstore/`, embedding/reranker와 Ollama를 사용합니다. Routing의 live 모드도 Ollama가 필요합니다. 상세 결과는 기본적으로 Git에서 제외되는 `evaluation/reports/` 아래 JSON과 Markdown으로 생성됩니다.
+
+```bash
+python -m evaluation.retrieval \
+  --dataset evaluation/datasets/golden.jsonl \
+  --output evaluation/reports/retrieval
+
+RUN_LIVE_LLM_TESTS=1 python -m evaluation.routing \
+  --dataset evaluation/datasets/golden.jsonl \
+  --mode live \
+  --output evaluation/reports/routing
+
+python -m evaluation.answers \
+  --dataset evaluation/datasets/golden.jsonl \
+  --output evaluation/reports/answers
+```
+
+Routing은 모델 호출 없이 파싱·집계·리포팅을 확인할 수 있는 offline 모드도 제공합니다.
+
+```bash
+python -m evaluation.routing \
+  --dataset evaluation/datasets/golden.jsonl \
+  --mode offline \
+  --output evaluation/reports/routing-offline
+```
+
+### 통합 live baseline
+
+통합 명령은 dataset validation → Retrieval → live Routing → Answer 순서로 실행합니다. 실제 모델과 vectorstore를 사용하므로 명시적인 opt-in이 필요합니다.
+
+```bash
+RUN_LIVE_LLM_TESTS=1 python -m evaluation.baseline \
+  --dataset evaluation/datasets/golden.jsonl \
+  --output evaluation/reports
+```
+
+실행 전 다음을 확인하십시오.
+
+- Ollama가 실행 중이고 [config.py](config.py)의 모델이 설치돼 있음
+- `data/`와 `vectorstore/index.faiss`, `vectorstore/index.pkl`이 준비돼 있음
+- 실행 중 corpus와 vectorstore를 변경하지 않음
+- 비교 목적이라면 `git status`가 clean이고 기준선과 dataset/corpus/vectorstore fingerprint가 같음
+
+빠른 환경 점검에는 `--limit 1`을 사용할 수 있지만 제한 실행 결과를 정식 baseline으로 확정하면 안 됩니다. `--tag`, `--skip-routing`, `--skip-answers`도 지원합니다.
+
+사용자가 승인한 M2 최초 기준선은 다음 파일에 고정돼 있습니다.
+
+- [기계 판독용 기준선](evaluation/baselines/m2_initial.json)
+- [사람 판독용 기준선](evaluation/baselines/m2_initial.md)
+
+timestamped report에는 질문과 모델 답변이 포함될 수 있으므로 `evaluation/reports/`는 commit하지 않습니다. 고정 기준선에는 비교에 필요한 집계 수치와 fingerprint만 포함합니다.
+
+### 라이브 Agent 라우팅 회귀 테스트
 
 Ollama와 `gpt-oss:20b`가 실행 중일 때만 사용합니다.
 
@@ -181,25 +255,6 @@ RUN_LIVE_LLM_TESTS=1 pytest test_agent_routing.py -v
 ```
 
 이 테스트는 LLM 출력의 확률적 변동을 고려해 라우팅 정확도 80% 이상을 통과 기준으로 사용합니다.
-
-### 프런트엔드 보안 테스트
-
-```bash
-npm ci
-npm test
-```
-
-Vitest와 jsdom으로 XSS 정화, 안전한 링크, 출처 렌더링을 검증합니다.
-
-### 전체 로컬 검증
-
-```bash
-pytest -q
-npm test
-git diff --check
-```
-
-현재 자동 테스트는 mock과 DOM 단위 테스트 중심입니다. 실제 문서 검색과 답변 품질을 평가하는 End-to-End 기준선은 향후 마일스톤에서 구축할 예정입니다.
 
 ## 배포 방법
 
@@ -255,6 +310,8 @@ uvicorn web_server:app --host 0.0.0.0 --port 8000
 ├── static/                     # 프런트엔드 코드와 vendor 파일
 ├── frontend_tests/             # 프런트엔드 보안 테스트
 ├── intent_dataset/             # Intent 학습/검증 데이터
+├── evaluation/                 # 골든셋, evaluator, 리포팅과 승인 기준선
+├── .github/workflows/ci.yml    # Python 및 frontend 오프라인 CI
 ├── Roadmap.md                  # 비전, 마일스톤, 현재 위치
 ├── Problem.md                  # 알려진 미해결 문제
 ├── Development_M2_Quality_Baseline_Requirement.md

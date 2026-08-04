@@ -1,5 +1,7 @@
 # M2 Quality Baseline & CI 개발 계획
 
+상태: **완료** — Phase 0~9 구현, CI 검증, 최초 live baseline 사용자 승인 및 문서화 완료
+
 ## 1. 목적
 
 이 계획은 [Development_M2_Quality_Baseline_Requirement.md](Development_M2_Quality_Baseline_Requirement.md)의 요구사항을 구현하기 위한 작업 순서, 산출물, 검증 방법을 정의합니다.
