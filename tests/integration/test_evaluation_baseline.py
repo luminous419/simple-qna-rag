@@ -27,6 +27,7 @@ import pytest
 
 import evaluation.baseline as baseline_module
 from evaluation.baseline import _positive_int, _render_baseline_markdown, main, run_baseline
+from evaluation.compare import evaluate_gates
 from evaluation.dataset import DatasetError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -142,9 +143,16 @@ def _make_fake_evaluate_retrieval(
 ):
     vs_fp = vs_fp if vs_fp is not None else dict(DEFAULT_VS_FP)
 
-    def fake(dataset_path, output_dir, k_values=(1, 3, 5, 10), limit=None, tag=None):
+    def fake(dataset_path, output_dir, k_values=(1, 3, 5, 10), limit=None, tag=None, **kwargs):
         calls.append(
-            {"stage": "retrieval", "dataset_path": dataset_path, "output_dir": output_dir, "limit": limit, "tag": tag}
+            {
+                "stage": "retrieval",
+                "dataset_path": dataset_path,
+                "output_dir": output_dir,
+                "limit": limit,
+                "tag": tag,
+                **kwargs,
+            }
         )
         if raise_exc is not None:
             raise raise_exc
@@ -169,6 +177,26 @@ def _make_fake_evaluate_retrieval(
                 "ndcg@10": 0.9,
             },
             "latency_ms": {"mean": 10.0, "median": 9.0, "p95": 15.0},
+            "stage_summary": {"mmr": {"latency_ms_mean": 5.0}},
+            "warmup": {
+                "requested_cases": 0,
+                "executed_cases": 0,
+                "succeeded_cases": 0,
+                "failed_cases": 0,
+                "case_ids": [],
+                "same_process": True,
+                "engine_object_id_matches": True,
+                "discarded_from_metrics": True,
+                "performed": False,
+            },
+            "mmr_instrumentation": {
+                "query_embedding_calls_total": 2,
+                "candidate_embedding_calls_total": 0,
+                "vector_lookup_hits_total": 100,
+                "vector_lookup_misses_total": 0,
+                "fallback_case_count": 0,
+                "fallback_reasons": {},
+            },
             "case_results": case_results,
             "corpus_manifest": [{"source_id": "a.pdf", "size_bytes": 1, "sha256": "x"}],
             "corpus_manifest_sha256": corpus_sha,
@@ -176,23 +204,34 @@ def _make_fake_evaluate_retrieval(
             "reproducibility_note": None,
             "report_json_path": str(output_dir / "retrieval_20260101T000000000000Z.json") if write_files else None,
             "report_markdown_path": str(output_dir / "retrieval_20260101T000000000000Z.md") if write_files else None,
+            "candidate": {
+                "candidate_id": None,
+                "label": None,
+                "phase": None,
+                "baseline_ref": "evaluation/baselines/m2_initial.json",
+                "baseline_dataset_sha256": "61b768acd8d33522ef76e3baadd4bf19b44cc25daa79ad7ea255fb0a09d1017a",
+                "notes": None,
+            },
         }
 
     return fake
 
 
 def _make_fake_evaluate_routing(calls: list, *, raise_exc: Exception | None = None, failures: list[dict] | None = None):
-    def fake(cases, decide_tool, measure_latency=True):
+    def fake(cases, decide_tool, *, runs=1, measure_latency=True):
         calls.append(
             {
                 "stage": "routing",
                 "cases": list(cases),
+                "runs": runs,
                 "measure_latency": measure_latency,
                 "decide_tool": decide_tool,
             }
         )
         if raise_exc is not None:
             raise raise_exc
+        document_qa_total = sum(1 for c in cases if getattr(c.expected_route, "value", c.expected_route) == "document_qa")
+        web_search_total = len(cases) - document_qa_total
         return {
             "total_cases": len(cases),
             "success_count": len(cases),
@@ -211,8 +250,22 @@ def _make_fake_evaluate_routing(calls: list, *, raise_exc: Exception | None = No
                     "web_search": {"document_qa": 0, "web_search": 0},
                 },
             },
+            "recall_denominators": {"document_qa": document_qa_total, "web_search": web_search_total},
+            "document_route_correct": document_qa_total,
+            "document_route_recall": 1.0 if document_qa_total else None,
+            "web_search_correct": web_search_total,
+            "web_search_recall": 1.0 if web_search_total else None,
             "latency_ms": {"measured": True, "mean": 5.0, "median": 5.0, "p95": 5.0},
             "failures": failures or [],
+            "case_routes": [
+                {"id": c.id, "expected_route": getattr(c.expected_route, "value", c.expected_route), "route": getattr(c.expected_route, "value", c.expected_route)}
+                for c in cases
+            ],
+            "run_count": runs,
+            "median_run_index": 0,
+            "per_run": None if runs == 1 else [],
+            "aggregate": None if runs == 1 else {},
+            "case_variation": None if runs == 1 else [],
         }
 
     return fake
@@ -228,9 +281,16 @@ def _make_fake_evaluate_answers(
 ):
     vs_fp = vs_fp if vs_fp is not None else dict(DEFAULT_VS_FP)
 
-    def fake(dataset_path, output_dir, limit=None, tag=None):
+    def fake(dataset_path, output_dir, limit=None, tag=None, **kwargs):
         calls.append(
-            {"stage": "answers", "dataset_path": dataset_path, "output_dir": output_dir, "limit": limit, "tag": tag}
+            {
+                "stage": "answers",
+                "dataset_path": dataset_path,
+                "output_dir": output_dir,
+                "limit": limit,
+                "tag": tag,
+                **kwargs,
+            }
         )
         if raise_exc is not None:
             raise raise_exc
@@ -263,7 +323,47 @@ def _make_fake_evaluate_answers(
             },
             "source": {"evaluated_count": 2, "excluded_count": 0, "skipped_entries_total": 0, "any_hit_rate": 1.0, "mean_recall": 1.0},
             "intent": {"evaluated_count": 2, "excluded_count": 0, "correct_count": 2, "accuracy": 1.0},
+            "evaluator_versions": {
+                "assertion": "v1+v2",
+                "abstention": "v1+v2",
+                "rules_fingerprint": "fake",
+                "evaluator_profile": "v2",
+                "reviewed_variants_loaded": True,
+                "reviewed_variants_sha256": "fake",
+                "official": True,
+            },
+            "assertion_v2": {
+                "cases_scored": 2,
+                "assertions_total": 2,
+                "assertions_passed": 2,
+                "pass_rate": 1.0,
+                "fixed_vs_v1": [],
+                "regressed_vs_v1": [],
+            },
+            "abstention_v2": {
+                "true_positive": 0,
+                "true_negative": 2,
+                "false_positive": 0,
+                "false_negative": 0,
+                "accuracy": 1.0,
+                "evaluated_count": 2,
+                "abstention_accuracy_excluded_reason": None,
+                "fixed_vs_v1": [],
+                "regressed_vs_v1": [],
+            },
             "latency_ms": {"mean_ms": 20.0, "median_ms": 20.0, "p95_ms": 20.0, "count": 2},
+            "measured_case_count": 2,
+            "warmup": {
+                "requested_cases": 0,
+                "executed_cases": 0,
+                "succeeded_cases": 0,
+                "failed_cases": 0,
+                "case_ids": [],
+                "same_process": True,
+                "engine_object_id_matches": True,
+                "discarded_from_metrics": True,
+                "performed": False,
+            },
             "failures": failures or [],
             "corpus_manifest": [{"source_id": "a.pdf", "size_bytes": 1, "sha256": "x"}],
             "corpus_manifest_sha256": corpus_sha,
@@ -272,7 +372,50 @@ def _make_fake_evaluate_answers(
             "report_json_path": str(json_path),
             "report_markdown_path": str(md_path),
             "worksheet_path": str(worksheet_path),
+            "candidate": {
+                "candidate_id": None,
+                "label": None,
+                "phase": None,
+                "baseline_ref": "evaluation/baselines/m2_initial.json",
+                "baseline_dataset_sha256": "61b768acd8d33522ef76e3baadd4bf19b44cc25daa79ad7ea255fb0a09d1017a",
+                "notes": None,
+            },
         }
+
+    return fake
+
+
+def _make_fake_evaluate_retrieval_matching_disk(calls: list, **kwargs):
+    """`_make_fake_evaluate_retrieval()`처럼 orchestration을 검증하는 대부분의
+    테스트는 산출 JSON 파일 내용("{}")과 반환 payload가 달라도 상관없다(
+    run_baseline()은 반환 payload만 gate 계산에 쓰기 때문). 하지만 저장된 child
+    JSON을 다시 읽어 evaluate_gates()가 같은 결과를 내는지 검증하려면(Iteration 2
+    MINOR m1) 디스크에 쓰는 내용이 실제 evaluate_retrieval()처럼 반환 payload와
+    동일해야 한다 — 그래서 base fake가 만든 payload를 그대로 같은 파일에 다시
+    직렬화한다."""
+    base_fake = _make_fake_evaluate_retrieval(calls, **kwargs)
+
+    def fake(dataset_path, output_dir, k_values=(1, 3, 5, 10), limit=None, tag=None, **fake_kwargs):
+        payload = base_fake(dataset_path, output_dir, k_values=k_values, limit=limit, tag=tag, **fake_kwargs)
+        Path(payload["report_json_path"]).write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+        return payload
+
+    return fake
+
+
+def _make_fake_evaluate_answers_matching_disk(calls: list, **kwargs):
+    """`_make_fake_evaluate_retrieval_matching_disk()`와 동일한 이유로 answers
+    child JSON도 반환 payload와 동일한 내용을 디스크에 남긴다."""
+    base_fake = _make_fake_evaluate_answers(calls, **kwargs)
+
+    def fake(dataset_path, output_dir, limit=None, tag=None, **fake_kwargs):
+        payload = base_fake(dataset_path, output_dir, limit=limit, tag=tag, **fake_kwargs)
+        Path(payload["report_json_path"]).write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+        return payload
 
     return fake
 
@@ -282,7 +425,7 @@ _SENTINEL_DECIDE_TOOL = object()
 
 def _patch_all_success(monkeypatch, calls: list, **overrides):
     monkeypatch.setattr(baseline_module, "evaluate_retrieval", overrides.get("retrieval") or _make_fake_evaluate_retrieval(calls))
-    monkeypatch.setattr(baseline_module, "evaluate_routing", overrides.get("routing") or _make_fake_evaluate_routing(calls))
+    monkeypatch.setattr(baseline_module, "evaluate_routing_multi", overrides.get("routing") or _make_fake_evaluate_routing(calls))
     monkeypatch.setattr(baseline_module, "evaluate_answers", overrides.get("answers") or _make_fake_evaluate_answers(calls))
     monkeypatch.setattr(baseline_module, "_resolve_decide_tool", lambda: _SENTINEL_DECIDE_TOOL)
     # run_baseline() 자신도 opt-in을 검사하므로(M2_Phase_7_8_code_review_result.md
@@ -474,15 +617,15 @@ class TestRoutingFailurePolicy:
         _patch_all_success(monkeypatch, calls)
         dataset_path = _valid_dataset(tmp_path)
 
-        # "no-such-tag"에 매칭되는 사례가 없으므로 evaluate_routing()의 실제
-        # 계약(ValueError)과 동일하게 fake도 재현한다.
-        def raising_routing(cases, decide_tool, measure_latency=True):
+        # "no-such-tag"에 매칭되는 사례가 없으므로 evaluate_routing_multi()의
+        # 실제 계약(ValueError)과 동일하게 fake도 재현한다.
+        def raising_routing(cases, decide_tool, *, runs=1, measure_latency=True):
             calls.append({"stage": "routing", "cases": list(cases)})
             if not cases:
                 raise ValueError("평가할 사례가 없습니다")
             raise AssertionError("unreachable")
 
-        monkeypatch.setattr(baseline_module, "evaluate_routing", raising_routing)
+        monkeypatch.setattr(baseline_module, "evaluate_routing_multi", raising_routing)
 
         result = run_baseline(dataset_path, tmp_path / "reports", tag="no-such-tag")
 
@@ -769,6 +912,14 @@ class TestFingerprintInvariant:
         assert routing_payload["corpus_manifest_sha256"] is None
         assert routing_payload["vectorstore_fingerprint"] is None
         assert routing_payload["reproducibility_note"]
+        assert routing_payload["schema_version"] == "1.1.0"
+        assert routing_payload["router_prompt_sha256"]
+        assert routing_payload["routing_policy"]["signal_override"] is True
+        assert routing_payload["routing_policy"]["signal_counts"] == {
+            "web": 0,
+            "document": 0,
+            "none": 60,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -1024,3 +1175,146 @@ class TestPositiveInt:
 
         with pytest.raises(argparse.ArgumentTypeError):
             _positive_int(bad)
+
+
+# ---------------------------------------------------------------------------
+# M3 Phase 6: gate_evaluation / candidate / routing_runs / warmup_cases
+# ---------------------------------------------------------------------------
+
+
+class TestM3GateWiring:
+    def test_gate_evaluation_present_and_uses_evaluate_gates(self, tmp_path, monkeypatch):
+        calls: list = []
+        _patch_all_success(monkeypatch, calls)
+        dataset_path = _valid_dataset(tmp_path)
+
+        result = run_baseline(dataset_path, tmp_path / "reports")
+
+        assert "gate_evaluation" in result
+        assert result["gate_evaluation"]["spec_version"] == "m3-4.1"
+        assert isinstance(result["gate_evaluation"]["items"], list)
+        assert len(result["gate_evaluation"]["items"]) == 14  # M3_GATES 개수
+
+    def test_candidate_block_forwarded_from_candidate_id(self, tmp_path, monkeypatch):
+        calls: list = []
+        _patch_all_success(monkeypatch, calls)
+        dataset_path = _valid_dataset(tmp_path)
+
+        result = run_baseline(dataset_path, tmp_path / "reports", candidate_id="m3-final")
+
+        assert result["candidate"]["candidate_id"] == "m3-final"
+        assert result["candidate"]["phase"] == 6
+
+    def test_routing_runs_forwarded_to_evaluate_routing_multi(self, tmp_path, monkeypatch):
+        calls: list = []
+        _patch_all_success(monkeypatch, calls)
+        dataset_path = _valid_dataset(tmp_path)
+
+        run_baseline(dataset_path, tmp_path / "reports", routing_runs=3)
+
+        routing_calls = [c for c in calls if c["stage"] == "routing"]
+        assert routing_calls[0]["runs"] == 3
+
+    def test_warmup_cases_forwarded_to_retrieval_and_answers(self, tmp_path, monkeypatch):
+        calls: list = []
+        _patch_all_success(monkeypatch, calls)
+        dataset_path = _valid_dataset(tmp_path)
+
+        run_baseline(dataset_path, tmp_path / "reports", warmup_cases=3)
+
+        retrieval_calls = [c for c in calls if c["stage"] == "retrieval"]
+        answers_calls = [c for c in calls if c["stage"] == "answers"]
+        assert retrieval_calls[0]["warmup_cases"] == 3
+        assert answers_calls[0]["warmup_cases"] == 3
+
+    def test_schema_version_bumped_to_1_1_0(self, tmp_path, monkeypatch):
+        calls: list = []
+        _patch_all_success(monkeypatch, calls)
+        dataset_path = _valid_dataset(tmp_path)
+
+        result = run_baseline(dataset_path, tmp_path / "reports")
+        assert result["schema_version"] == "1.1.0"
+
+    def test_gate_evaluation_absent_stage_reports_pass_none(self, tmp_path, monkeypatch):
+        calls: list = []
+        _patch_all_success(monkeypatch, calls)
+        dataset_path = _valid_dataset(tmp_path)
+
+        result = run_baseline(dataset_path, tmp_path / "reports", skip_answers=True, skip_routing=True)
+
+        gate_items = result["gate_evaluation"]["items"]
+        answer_latency_item = next(i for i in gate_items if i["id"] == "answer_latency_mean_s")
+        assert answer_latency_item["pass"] is None
+        assert result["gate_evaluation"]["overall_pass"] is False
+
+
+# ---------------------------------------------------------------------------
+# Code_Review_Iteration_2.md MINOR m1: 저장된 child artifact를 다시 읽어
+# evaluate_gates()가 baseline이 기록한 gate_evaluation과 동일한 결과를 내는지
+# 확인하는 회귀 테스트. Iteration 1에서 발생했던 in-memory payload와 저장된
+# artifact 간 불일치(M1)가 재발하면 이 테스트가 잡아야 한다.
+# ---------------------------------------------------------------------------
+
+
+class TestChildArtifactReloadGateParity:
+    def test_reloaded_retrieval_routing_answers_json_reproduce_stored_gate_evaluation(
+        self, tmp_path, monkeypatch
+    ):
+        calls: list = []
+        _patch_all_success(
+            monkeypatch,
+            calls,
+            retrieval=_make_fake_evaluate_retrieval_matching_disk(calls),
+            answers=_make_fake_evaluate_answers_matching_disk(calls),
+        )
+        dataset_path = _valid_dataset(tmp_path)
+
+        result = run_baseline(dataset_path, tmp_path / "reports")
+
+        retrieval_json_path = Path(result["stages"]["retrieval"]["report_json_path"])
+        routing_json_path = Path(result["stages"]["routing"]["report_json_path"])
+        answers_json_path = Path(result["stages"]["answers"]["report_json_path"])
+
+        reloaded_retrieval = json.loads(retrieval_json_path.read_text(encoding="utf-8"))
+        reloaded_routing = json.loads(routing_json_path.read_text(encoding="utf-8"))
+        reloaded_answers = json.loads(answers_json_path.read_text(encoding="utf-8"))
+
+        recomputed_gate_evaluation = evaluate_gates(
+            {
+                "retrieval": reloaded_retrieval,
+                "routing": reloaded_routing,
+                "answers": reloaded_answers,
+            }
+        )
+
+        assert recomputed_gate_evaluation == result["gate_evaluation"]
+        # gate 전부가 판정 불가(None)면 이 parity 검증 자체가 무의미해지므로,
+        # 최소한 일부 gate는 실제로 True/False 판정이 났는지 확인한다.
+        assert any(item["pass"] is not None for item in recomputed_gate_evaluation["items"])
+
+    def test_reloaded_child_json_matches_stage_summary_forwarded_into_baseline(
+        self, tmp_path, monkeypatch
+    ):
+        """저장된 child JSON이 baseline stages 요약에 그대로 반영된 핵심 지표
+        (recall@10, source any_hit_rate)와도 일치하는지 확인해, 저장/재로드
+        경로에서 값이 조용히 바뀌지 않았음을 이중 확인한다."""
+        calls: list = []
+        _patch_all_success(
+            monkeypatch,
+            calls,
+            retrieval=_make_fake_evaluate_retrieval_matching_disk(calls),
+            answers=_make_fake_evaluate_answers_matching_disk(calls),
+        )
+        dataset_path = _valid_dataset(tmp_path)
+
+        result = run_baseline(dataset_path, tmp_path / "reports")
+
+        reloaded_retrieval = json.loads(
+            Path(result["stages"]["retrieval"]["report_json_path"]).read_text(encoding="utf-8")
+        )
+        reloaded_answers = json.loads(
+            Path(result["stages"]["answers"]["report_json_path"]).read_text(encoding="utf-8")
+        )
+
+        assert reloaded_retrieval["metrics"]["recall@10"] == result["stages"]["retrieval"]["metrics"]["recall@10"]
+        assert reloaded_answers["source"]["any_hit_rate"] == result["stages"]["answers"]["source"]["any_hit_rate"]

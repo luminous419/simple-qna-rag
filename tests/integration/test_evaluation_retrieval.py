@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import builtins
 import json
+import math
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from langchain_core.documents import Document
 
@@ -27,6 +29,7 @@ import evaluation.retrieval as retrieval_module
 from simple_qna_rag import rag_engine
 from evaluation.retrieval import evaluate_retrieval, main
 from simple_qna_rag.rag_engine import RAGEngine, RetrievalStageTrace, RetrievalTrace
+from simple_qna_rag.vector_index import VectorLookupError
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +54,7 @@ def _docs(*sources: str) -> list[Document]:
     ]
 
 
-def _stub_mmr(question, documents, top_k=20, lambda_mult=0.5):
+def _stub_mmr(question, documents, top_k=20, lambda_mult=0.5, **kwargs):
     return list(documents[:top_k])
 
 
@@ -69,6 +72,33 @@ class _RecordingRetriever:
 
     def invoke(self, question, top_k=None):
         self.calls.append((question, top_k))
+        return list(self._docs)
+
+
+class _RecordingEmbeddings:
+    """`embed_query()` 호출 횟수/인자를 기록하는 결정론적 더미(M3-REQ-002:
+    질문당 ≤1회 계약을 확인하는 데 쓰인다)."""
+
+    def __init__(self, vector: list[float] | None = None):
+        self.vector = vector or [0.1, 0.2, 0.3]
+        self.calls: list[str] = []
+
+    def embed_query(self, text):
+        self.calls.append(text)
+        return list(self.vector)
+
+
+class _RecordingVectorstore:
+    """Hybrid 분기에서 `self.vectorstore.similarity_search_by_vector()`를
+    직접 호출하는 M3 Phase 2 경로를 흉내내는 더미."""
+
+    def __init__(self, embeddings: _RecordingEmbeddings, docs: list[Document]):
+        self.embeddings = embeddings
+        self._docs = docs
+        self.calls: list[tuple] = []
+
+    def similarity_search_by_vector(self, embedding, k=None, **kwargs):
+        self.calls.append((tuple(embedding), k))
         return list(self._docs)
 
 
@@ -98,7 +128,8 @@ class TestRetrieveDocumentsFourBranches:
         _configure_branch(monkeypatch, hybrid=True, mmr=True, reranker=True)
         engine = _make_engine()
         engine.bm25_retriever = _RecordingRetriever(_docs("a.pdf", "b.pdf", "c.pdf"))
-        engine.dense_retriever = _RecordingRetriever(_docs("b.pdf", "d.pdf"))
+        embeddings = _RecordingEmbeddings()
+        engine.vectorstore = _RecordingVectorstore(embeddings, _docs("b.pdf", "d.pdf"))
         engine._apply_mmr = _stub_mmr
         engine._rerank_documents = _stub_rerank
         return engine
@@ -117,7 +148,7 @@ class TestRetrieveDocumentsFourBranches:
         trace = RetrievalTrace()
         docs = engine._retrieve_documents("질문", trace=trace)
         names = [s.name for s in trace.stages]
-        assert names == ["bm25", "dense", "rrf", "mmr", "reranker", "total"]
+        assert names == ["query_embed", "bm25", "dense", "rrf", "mmr", "reranker", "total"]
         assert names.count("total") == 1
         assert trace.stages[-1].name == "total"
         assert trace.stages[-1].candidate_count == len(docs)
@@ -126,7 +157,13 @@ class TestRetrieveDocumentsFourBranches:
             assert s.latency_ms >= 0
         # 실제 검색 호출이 건너뛰어지지 않았는지도 확인한다.
         assert engine.bm25_retriever.calls == [("질문", 50)]
-        assert engine.dense_retriever.calls == [("질문", None)]
+        # Phase 2: dense 단계는 dense_retriever가 아니라
+        # vectorstore.similarity_search_by_vector()를 직접 호출하고, 질의
+        # embedding은 질문당 정확히 1회만 계산된다(M3-REQ-002).
+        assert engine.vectorstore.embeddings.calls == ["질문"]
+        assert len(engine.vectorstore.calls) == 1
+        assert engine.vectorstore.calls[0][1] == 50
+        assert trace.counters["query_embedding_calls"] == 1
 
     def _mmr_only_engine(self, monkeypatch):
         _configure_branch(monkeypatch, hybrid=False, mmr=True, reranker=False)
@@ -206,7 +243,8 @@ class TestTraceZeroCostWhenDisabled:
         _configure_branch(monkeypatch, hybrid=True, mmr=True, reranker=True)
         engine = _make_engine()
         engine.bm25_retriever = _RecordingRetriever(_docs("a.pdf", "b.pdf"))
-        engine.dense_retriever = _RecordingRetriever(_docs("b.pdf", "c.pdf"))
+        embeddings = _RecordingEmbeddings()
+        engine.vectorstore = _RecordingVectorstore(embeddings, _docs("b.pdf", "c.pdf"))
         engine._apply_mmr = _stub_mmr
         engine._rerank_documents = _stub_rerank
 
@@ -223,7 +261,7 @@ class TestTraceZeroCostWhenDisabled:
         assert calls == []
 
         engine._retrieve_documents("질문", trace=RetrievalTrace())
-        assert len(calls) == 6  # bm25, dense, rrf, mmr, reranker, total
+        assert len(calls) == 7  # query_embed, bm25, dense, rrf, mmr, reranker, total
 
     def test_default_call_without_trace_argument_is_unaffected(self, monkeypatch):
         """기존 호출부(RAGEngine.query() 등)와 동일하게 trace 인자를 아예 넘기지
@@ -234,6 +272,87 @@ class TestTraceZeroCostWhenDisabled:
         engine.dense_retriever = _RecordingRetriever(_docs("a.pdf"))
         docs = engine._retrieve_documents("질문")
         assert [d.metadata["source"] for d in docs] == ["a.pdf"]
+
+
+class _RaisingStoredVectorIndex:
+    """`vectors_for()`를 호출하면 항상 지정된 reason의 VectorLookupError를
+    던지는 더미(§6.5 폴백 6칸 행렬 검증용)."""
+
+    def __init__(self, reason: str):
+        self._reason = reason
+
+    def vectors_for(self, documents):
+        raise VectorLookupError(self._reason)
+
+
+class TestMmrStoredVectorFallbackMatrix:
+    """M3-REQ-002 §6.5: 6칸 폴백 행렬 — (trace=None | trace 제공) ×
+    (lookup_miss | dimension_mismatch | non_finite) 모두에서 (a) 예외 없이
+    (b) legacy(embed) 경로와 완전히 동일한 문서 리스트를 반환해야 한다."""
+
+    def _make_mmr_engine(self, monkeypatch, *, stored_index):
+        monkeypatch.setattr(rag_engine, "MMR_VECTOR_SOURCE", "stored")
+        engine = _make_engine()
+        # embed_query가 문서 콘텐츠 문자열에 따라 결정론적인 벡터를 내도록 구성.
+        content_vectors = {
+            "content-0": [1.0, 0.0, 0.0],
+            "content-1": [0.0, 1.0, 0.0],
+            "content-2": [0.0, 0.0, 1.0],
+            "content-3": [0.7, 0.7, 0.0],
+        }
+
+        class _Embeddings:
+            def embed_query(self, text):
+                return list(content_vectors[text])
+
+        engine.vectorstore = SimpleNamespace(embeddings=_Embeddings())
+        engine.stored_vector_index = stored_index
+        engine._mmr_fallback_logged_reasons = set()
+        return engine
+
+    @pytest.mark.parametrize("reason", ["lookup_miss", "dimension_mismatch", "non_finite"])
+    @pytest.mark.parametrize("with_trace", [False, True])
+    def test_fallback_matches_legacy_result_and_never_raises(self, monkeypatch, reason, with_trace):
+        documents = _docs("a.pdf", "b.pdf", "c.pdf", "d.pdf")
+        query_embedding = [0.9, 0.1, 0.0]
+
+        # legacy 기대값: stored_vector_index가 아예 없는(embed) 경로로 직접 계산.
+        legacy_engine = self._make_mmr_engine(monkeypatch, stored_index=None)
+        monkeypatch.setattr(rag_engine, "MMR_VECTOR_SOURCE", "embed")
+        legacy_result = legacy_engine._apply_mmr(
+            "질문", documents, top_k=2, lambda_mult=0.5, query_embedding=query_embedding, trace=None
+        )
+
+        # 폴백 경로: stored_vector_index가 있지만 항상 reason으로 실패한다.
+        monkeypatch.setattr(rag_engine, "MMR_VECTOR_SOURCE", "stored")
+        fallback_engine = self._make_mmr_engine(
+            monkeypatch, stored_index=_RaisingStoredVectorIndex(reason)
+        )
+        trace = RetrievalTrace() if with_trace else None
+        fallback_result = fallback_engine._apply_mmr(
+            "질문", documents, top_k=2, lambda_mult=0.5, query_embedding=query_embedding, trace=trace
+        )
+
+        assert [d.metadata["source"] for d in fallback_result] == [
+            d.metadata["source"] for d in legacy_result
+        ]
+
+        if with_trace:
+            assert trace.counters.get("mmr_fallback") == 1
+            assert trace.counters.get("vector_lookup_misses") == len(documents)
+            assert trace.notes == [f"fallback:{reason}"]
+
+    def test_trace_none_product_path_is_safe(self, monkeypatch):
+        """`RAGEngine.query()`가 실제로 쓰는 trace 미제공 제품 경로가 폴백
+        상황에서도 예외 없이 완료됨을 별도로 확인한다."""
+        documents = _docs("a.pdf", "b.pdf", "c.pdf")
+        engine = self._make_mmr_engine(
+            monkeypatch, stored_index=_RaisingStoredVectorIndex("lookup_miss")
+        )
+        result = engine._apply_mmr(
+            "질문", documents, top_k=1, lambda_mult=0.5, query_embedding=[1.0, 0.0, 0.0], trace=None
+        )
+        assert len(result) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -618,6 +737,166 @@ class TestEvaluateRetrievalDedupeAndMetrics:
         # delimiter 4개(3열 경계) + question/error에 각 1개씩 이스케이프된 pipe = 6개.
         assert failure_row.count("|") == 6
         assert "\n" not in failure_row.strip()
+
+
+class FakeRetrievalEngineWithCounters(FakeRetrievalEngine):
+    """`FakeRetrievalEngine`에 `trace.counters`/`trace.notes`를 채워 넣어
+    `mmr_instrumentation` 집계를 검증할 수 있게 한 변형."""
+
+    def __init__(self, responses: dict, *, counters: dict | None = None, fallback: bool = False):
+        super().__init__(responses)
+        self._counters = counters or {"query_embedding_calls": 1, "candidate_embedding_calls": 0}
+        self._fallback = fallback
+
+    def _retrieve_documents(self, question, trace=None):
+        self.calls.append(question)
+        outcome = self._responses[question]
+        if isinstance(outcome, Exception):
+            raise outcome
+        docs = list(outcome)
+        if trace is not None:
+            trace.stages.append(RetrievalStageTrace("dense", 1.5, len(docs)))
+            trace.stages.append(RetrievalStageTrace("total", 2.0, len(docs)))
+            trace.counters.update(self._counters)
+            if self._fallback:
+                trace.counters["mmr_fallback"] = 1
+                trace.counters["vector_lookup_misses"] = len(docs)
+                trace.notes.append("fallback:lookup_miss")
+        return docs
+
+
+class TestEvaluateRetrievalWarmupAndMmrInstrumentation:
+    def test_warmup_cases_are_excluded_from_measured_metrics(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        cases = [
+            _case("c1", "q1", relevant_sources=["a.pdf"]),
+            _case("c2", "q2", relevant_sources=["a.pdf"]),
+            _case("c3", "q3", relevant_sources=["a.pdf"]),
+        ]
+        dataset_path = _write_dataset(tmp_path, cases)
+        engine = FakeRetrievalEngine({f"q{i}": _docs("a.pdf") for i in range(1, 4)})
+        _install_fake_engine(monkeypatch, engine)
+
+        payload = evaluate_retrieval(dataset_path, tmp_path / "reports", warmup_cases=1)
+
+        # warm-up 사례(q1)는 먼저 한 번 더 실행되고 버려지므로, 공식 표본은
+        # 여전히 3건이고 engine이 총 4회(warmup 1 + 공식 3) 호출된다.
+        assert payload["measured_case_count"] == 3
+        assert engine.calls.count("q1") == 2
+        assert engine.calls.count("q2") == 1
+        assert engine.calls.count("q3") == 1
+        warmup = payload["warmup"]
+        assert warmup["requested_cases"] == 1
+        assert warmup["executed_cases"] == 1
+        assert warmup["succeeded_cases"] == 1
+        assert warmup["failed_cases"] == 0
+        assert warmup["performed"] is True
+        assert warmup["discarded_from_metrics"] is True
+        assert warmup["case_ids"] == ["c1"]
+
+    def test_warmup_zero_means_not_performed(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        question = "질문"
+        dataset_path = _write_dataset(tmp_path, [_case("c1", question, relevant_sources=["a.pdf"])])
+        engine = FakeRetrievalEngine({question: _docs("a.pdf")})
+        _install_fake_engine(monkeypatch, engine)
+
+        payload = evaluate_retrieval(dataset_path, tmp_path / "reports", warmup_cases=0)
+        assert payload["warmup"]["performed"] is False
+
+    def test_warmup_cases_exceeding_eligible_count_raises(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        dataset_path = _write_dataset(
+            tmp_path, [_case("c1", "q1", relevant_sources=["a.pdf"])]
+        )
+        engine = FakeRetrievalEngine({"q1": _docs("a.pdf")})
+        _install_fake_engine(monkeypatch, engine)
+
+        with pytest.raises(ValueError):
+            evaluate_retrieval(dataset_path, tmp_path / "reports", warmup_cases=5)
+
+    def test_warmup_failure_is_counted_and_run_continues(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        cases = [
+            _case("c1", "q1", relevant_sources=["a.pdf"]),
+            _case("c2", "q2", relevant_sources=["a.pdf"]),
+        ]
+        dataset_path = _write_dataset(tmp_path, cases)
+        # q1은 warm-up 단계에서만 실패하도록는 흉내내기 어려우므로, 대신
+        # warm-up이 사례 자체를 실패시키는 경우를 시뮬레이션한다: q1이
+        # 항상 예외를 던지면 warm-up도 실패로 집계되고 공식 표본에서도
+        # 동일하게 실패로 기록되어야 한다(경로가 하나뿐이므로 일관성 유지).
+        engine = FakeRetrievalEngine({"q1": RuntimeError("boom"), "q2": _docs("a.pdf")})
+        _install_fake_engine(monkeypatch, engine)
+
+        payload = evaluate_retrieval(dataset_path, tmp_path / "reports", warmup_cases=1)
+        assert payload["warmup"]["failed_cases"] == 1
+        assert payload["warmup"]["performed"] is False
+        assert payload["case_counts"]["failure"] == 1
+
+    def test_mmr_instrumentation_aggregates_counters_when_mmr_enabled(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        monkeypatch.setattr(retrieval_module.config, "USE_MMR", True)
+        question = "질문"
+        dataset_path = _write_dataset(tmp_path, [_case("c1", question, relevant_sources=["a.pdf"])])
+        engine = FakeRetrievalEngineWithCounters(
+            {question: _docs("a.pdf")}, counters={"query_embedding_calls": 1, "candidate_embedding_calls": 0}
+        )
+        _install_fake_engine(monkeypatch, engine)
+
+        payload = evaluate_retrieval(dataset_path, tmp_path / "reports")
+        instrumentation = payload["mmr_instrumentation"]
+        assert instrumentation is not None
+        assert instrumentation["query_embedding_calls_total"] == 1
+        assert instrumentation["candidate_embedding_calls_total"] == 0
+        assert instrumentation["fallback_case_count"] == 0
+
+    def test_mmr_instrumentation_records_fallback_reason(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        monkeypatch.setattr(retrieval_module.config, "USE_MMR", True)
+        question = "질문"
+        dataset_path = _write_dataset(tmp_path, [_case("c1", question, relevant_sources=["a.pdf"])])
+        engine = FakeRetrievalEngineWithCounters({question: _docs("a.pdf")}, fallback=True)
+        _install_fake_engine(monkeypatch, engine)
+
+        payload = evaluate_retrieval(dataset_path, tmp_path / "reports")
+        instrumentation = payload["mmr_instrumentation"]
+        assert instrumentation["fallback_case_count"] == 1
+        assert instrumentation["fallback_reasons"] == {"lookup_miss": 1}
+
+    def test_mmr_instrumentation_none_when_mmr_disabled(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        monkeypatch.setattr(retrieval_module.config, "USE_MMR", False)
+        question = "질문"
+        dataset_path = _write_dataset(tmp_path, [_case("c1", question, relevant_sources=["a.pdf"])])
+        engine = FakeRetrievalEngine({question: _docs("a.pdf")})
+        _install_fake_engine(monkeypatch, engine)
+
+        payload = evaluate_retrieval(dataset_path, tmp_path / "reports")
+        assert payload["mmr_instrumentation"] is None
+
+    def test_candidate_block_present_with_valid_id(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        question = "질문"
+        dataset_path = _write_dataset(tmp_path, [_case("c1", question, relevant_sources=["a.pdf"])])
+        engine = FakeRetrievalEngine({question: _docs("a.pdf")})
+        _install_fake_engine(monkeypatch, engine)
+
+        payload = evaluate_retrieval(
+            dataset_path, tmp_path / "reports", candidate_id="m3-p2a-stored-vector"
+        )
+        assert payload["candidate"]["candidate_id"] == "m3-p2a-stored-vector"
+        assert payload["candidate"]["phase"] == 2
+
+    def test_candidate_block_null_when_not_given(self, tmp_path, monkeypatch):
+        _mock_reproducibility(monkeypatch)
+        question = "질문"
+        dataset_path = _write_dataset(tmp_path, [_case("c1", question, relevant_sources=["a.pdf"])])
+        engine = FakeRetrievalEngine({question: _docs("a.pdf")})
+        _install_fake_engine(monkeypatch, engine)
+
+        payload = evaluate_retrieval(dataset_path, tmp_path / "reports")
+        assert payload["candidate"]["candidate_id"] is None
 
 
 # ---------------------------------------------------------------------------

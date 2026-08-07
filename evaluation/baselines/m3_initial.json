@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.1.0",
+  "baseline_id": "m3_initial",
+  "status": "approved",
+  "approved_at": "2026-08-08",
+  "approval": {
+    "decision": "사용자 승인",
+    "note": "2026-08-08 사용자가 비식별 worksheet 29건을 직접 검토하고 기존 사례별 채점을 승인했으며, Phase 4 결과와 ANSWER_TEMPLATE_MODE=default 채택을 승인함"
+  },
+  "source_report": {
+    "generated_at_utc": "2026-08-07T15:59:03Z",
+    "baseline_json": "evaluation/reports/m3/m3-final-approved/baseline_20260807T155903164991Z.json",
+    "retrieval_json": "evaluation/reports/m3/m3-final-approved/retrieval/retrieval_20260807T145556866058Z.json",
+    "routing_json": "evaluation/reports/m3/m3-final-approved/routing/routing_20260807T151212029319Z.json",
+    "answers_json": "evaluation/reports/m3/m3-final-approved/answers/answers_20260807T155903114143Z.json"
+  },
+  "execution": {
+    "overall_success": true,
+    "gate_overall_pass": true,
+    "gate_count": 14,
+    "git_commit": "8771924426502b35b2f0a8b779d9f35519f02244",
+    "git_dirty": true,
+    "python_version": "3.11.8",
+    "dataset_sha256": "61b768acd8d33522ef76e3baadd4bf19b44cc25daa79ad7ea255fb0a09d1017a",
+    "total_duration_seconds": 1984.4005598750082
+  },
+  "reproducibility": {
+    "corpus_manifest_sha256": "5c0d648d032bc231c93cf1c545e5b3f8d26337da56677a4a0c1a66f24c82374a",
+    "vectorstore_fingerprint": {
+      "index_faiss_sha256": "c52fb288f3bc780d681ab68d62dd5b4c545843ee9dc53ef5528bd50db4d69820",
+      "index_pkl_sha256": "3f7217a2825f141bbea4c75dbf2b15738c3bcd50e3c0900e25a6a4a7ed91bb00"
+    }
+  },
+  "retrieval": {
+    "recall@5": 0.9523809523809523,
+    "recall@10": 0.9761904761904762,
+    "mrr@10": 0.9821428571428571,
+    "ndcg@10": 0.9543434614267636,
+    "latency_mean_ms": 2213.257875047497,
+    "latency_p95_ms": 2403.6850000265986,
+    "mmr_latency_mean_ms": 8.376935523258345,
+    "mmr_vector_source": "stored",
+    "fallback_case_count": 0
+  },
+  "routing": {
+    "schema_version": "1.1.0",
+    "router_prompt_sha256": "478ca30cdebaa94a23213cbc6ab7a89da45aaf746cb4549fa3307801abbddd3c",
+    "runs": 3,
+    "correct_count_values": [74, 75, 75],
+    "accuracy_median": 0.9868421052631579,
+    "document_correct_values": [59, 60, 60],
+    "document_recall_median": 0.9836065573770492,
+    "web_correct_values": [15, 15, 15],
+    "web_recall_each_run": 1.0,
+    "signal_counts": {"web": 8, "document": 12, "none": 56}
+  },
+  "answers": {
+    "case_success": 29,
+    "case_failure": 0,
+    "assertion_v2_pass_rate": 0.84375,
+    "abstention_v2_accuracy": 1.0,
+    "source_any_hit": 1.0,
+    "source_mean_recall": 0.9545454545454546,
+    "latency_mean_seconds": 27.508812888037685,
+    "latency_p95_seconds": 37.339550333999796,
+    "template_mode": "default",
+    "intent_accuracy": null,
+    "intent_excluded_count": 29,
+    "intent_excluded_reason": "ANSWER_TEMPLATE_MODE=default (classifier 비활성)"
+  },
+  "intent_ab": {
+    "eligible": 29,
+    "intent_preferred": 2,
+    "default_preferred": 20,
+    "tie": 7,
+    "incomplete": 0,
+    "margin_percentage_points": -62.0689,
+    "decision": "unproven",
+    "adoption": "default_template"
+  }
+}

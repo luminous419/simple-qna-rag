@@ -31,9 +31,9 @@ M2 Quality & CI       완료
         |
 M2.5 Repo Structure   완료
         |
-M3 Retrieval Quality  착수 준비                  <-- 현재 위치
+M3 Retrieval Quality  완료
         |
-M4 Production Ready   예정
+M4 Production Ready   예정                         <-- 현재 위치
         |
 M5 Scale & Advanced   조건부
 ```
@@ -42,7 +42,12 @@ M2의 Phase 0~9를 완료했습니다. 76개 골든 사례, Retrieval·Routing·
 
 M2.5 Repository Restructuring의 Phase 0~5를 완료했습니다. 제품 package, 문서·테스트, Web·학습·모델 자산과 runtime 경로를 정리했고 PR #12의 Python/Frontend GitHub Actions 성공과 사용자 최종 승인을 확인했습니다.
 
-현재 위치는 M3 착수 준비 단계입니다. M2 기준선에서 확인된 Retrieval latency, 문서 질문의 Web search 과다 라우팅, intent 정확도와 Answer 평가 false negative를 바탕으로 M3 범위와 수용 기준을 합의해야 합니다.
+M3 Retrieval & Domain Quality를 완료했습니다. 저장 벡터를 재사용해 Retrieval
+평균 latency를 16.84초에서 2.21초로 줄이면서 검색 품질을 유지했고, 라우팅
+정확도 중앙값은 75/76, 웹 recall은 모든 run에서 15/15를 달성했습니다. Answer
+evaluator v2의 false negative를 줄였으며 paired blind 평가와 사용자 승인을
+근거로 intent별 템플릿 대신 기본 템플릿을 채택했습니다. 다음 단계는 M4
+Production Readiness입니다.
 
 ## 마일스톤
 
@@ -144,26 +149,38 @@ M2.5 Repository Restructuring의 Phase 0~5를 완료했습니다. 제품 package
 
 ### M3 — Retrieval & Domain Quality
 
-**상태: 착수 준비** — M2 기준선 기반 범위·수용 기준 합의 필요
+**상태: 완료** — 구현, live 품질 gate 14/14 통과 및 사용자 승인 완료
 
 목표: M2 기준선을 사용해 한국어 검색과 실제 도메인 답변 품질 개선
 
-후보 범위:
+완료 범위:
 
-- 한국어 BM25 tokenizer 비교 및 적용
-- MMR 문서 임베딩 재사용
-- RRF/MMR/top-k/reranker 하이퍼파라미터 튜닝
-- heading/문단 기반 청크 전략
-- 문서 메타데이터 스키마와 인용 위치 개선
-- Intent Classifier의 도메인 데이터 보강 또는 구조 단순화
-- 웹 검색 결과 관련성·신뢰도 개선
-- query rewriting과 답변 근거 검증 실험
+- MMR 후보 문서의 저장 벡터 재사용과 안전한 폴백
+- Retrieval 전후 비교, fingerprint 및 14개 통합 품질 gate
+- precision-first 라우팅 신호 정책과 3회 반복 live 평가
+- Answer evaluator v2 및 기존 결과 재채점
+- Intent paired blind A/B와 기본 템플릿 구조 단순화
+- 조건부 BM25 실험의 비진입 결정 기록
 
 완료 조건:
 
 - M2 기준선 대비 합의된 검색 및 답변 지표 개선
 - latency 또는 자원 사용의 허용 범위 유지
 - Intent Classifier 유지 여부와 근거 확정
+
+완료 결과:
+
+- [승인된 M3 품질 기준선](../evaluation/baselines/m3_initial.md)
+- [M3 요구사항 추적표](milestones/m3-retrieval-domain-quality/Traceability.md)
+- Retrieval 평균/p95 2.21초/2.40초, MMR 평균 8.38ms
+- Routing 정확도 중앙값 75/76, Web recall 15/15(3회 전부)
+- Answer source any-hit 100%, 평균 source recall 95.45%
+- Answer 평균/p95 27.51초/37.34초
+
+개발 문서:
+
+- [M3 요구사항](milestones/m3-retrieval-domain-quality/Requirement.md)
+- [M3 개발 계획](milestones/m3-retrieval-domain-quality/Plan.md)
 
 ### M4 — Production Readiness
 

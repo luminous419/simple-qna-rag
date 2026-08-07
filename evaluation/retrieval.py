@@ -32,14 +32,16 @@ from evaluation.metrics import (
     recall_at_k,
 )
 from evaluation.reporting import (
+    build_candidate_metadata,
     build_metadata,
     build_reproducibility_metadata,
+    build_warmup_metadata,
     escape_markdown_table_cell,
     write_report,
 )
 from evaluation.schema import normalize_source_id
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 DEFAULT_K_VALUES: tuple[int, ...] = (1, 3, 5, 10)
 
@@ -70,6 +72,9 @@ def evaluate_retrieval(
     k_values: tuple[int, ...] = DEFAULT_K_VALUES,
     limit: int | None = None,
     tag: str | None = None,
+    *,
+    warmup_cases: int = 0,
+    candidate_id: str | None = None,
 ) -> dict:
     """golden.jsonl의 `relevant_sources`가 있는 사례에 대해 production
     `RAGEngine._retrieve_documents(question, trace=RetrievalTrace())`를 호출하고
@@ -85,6 +90,9 @@ def evaluate_retrieval(
     전파해 호출부(`main()`)가 처리하게 한다. 개별 사례의 검색 실패는 이 함수
     안에서 failure로 기록하고 나머지 사례 평가를 계속한다.
     """
+    if warmup_cases < 0:
+        raise ValueError(f"warmup_cases는 0 이상이어야 합니다: {warmup_cases!r}")
+
     command = [
         "python", "-m", "evaluation.retrieval",
         "--dataset", str(dataset_path),
@@ -94,6 +102,10 @@ def evaluate_retrieval(
         command += ["--limit", str(limit)]
     if tag is not None:
         command += ["--tag", tag]
+    if warmup_cases:
+        command += ["--warmup-cases", str(warmup_cases)]
+    if candidate_id is not None:
+        command += ["--candidate-id", candidate_id]
 
     all_cases = load_jsonl(dataset_path)
     selected_cases = _apply_tag_and_limit(all_cases, tag, limit)
@@ -102,6 +114,11 @@ def evaluate_retrieval(
     recall_mrr_excluded_count = len(selected_cases) - len(eligible_cases)
     ndcg_eligible_count = sum(1 for c in selected_cases if c.relevance_grades)
     ndcg_excluded_count = len(selected_cases) - ndcg_eligible_count
+
+    if warmup_cases > len(eligible_cases):
+        raise ValueError(
+            f"warmup_cases({warmup_cases})가 평가 대상 사례 수({len(eligible_cases)})보다 큽니다"
+        )
 
     engine = None
     success_count = 0
@@ -114,16 +131,36 @@ def evaluate_retrieval(
     stage_candidates_by_name: dict[str, list[int]] = {}
     case_results: list[dict] = []
 
+    mmr_query_embedding_calls = 0
+    mmr_candidate_embedding_calls = 0
+    mmr_vector_lookup_hits = 0
+    mmr_vector_lookup_misses = 0
+    mmr_fallback_case_count = 0
+    mmr_fallback_reasons: dict[str, int] = {}
+
+    warmup_executed = 0
+    warmup_succeeded = 0
+    warmup_failed = 0
+    warmup_case_ids: list[str] = []
+    warmup_engine_id: int | None = None
+
+    if eligible_cases:
+        from simple_qna_rag.rag_engine import RetrievalTrace, get_rag_engine
+
+        engine = get_rag_engine()
+
+        if warmup_cases > 0:
+            warmup_engine_id = id(engine)
+            for case in eligible_cases[:warmup_cases]:
+                warmup_executed += 1
+                warmup_case_ids.append(case.id)
+                try:
+                    engine._retrieve_documents(case.question, trace=RetrievalTrace())
+                    warmup_succeeded += 1
+                except Exception:  # noqa: BLE001 - warm-up 실패는 집계만 하고 계속한다
+                    warmup_failed += 1
+
     for case in eligible_cases:
-        if engine is None:
-            # 지연 로딩: 평가할 사례가 실제로 있을 때만, 그리고 이 함수 내부에서만
-            # get_rag_engine()을 호출한다(M2-NFR-003). import는 여기서 처음
-            # 이뤄지므로 evaluation.retrieval 모듈 자체를 import하는 것만으로는
-            # rag_engine의 모델/vectorstore가 로드되지 않는다.
-            from simple_qna_rag.rag_engine import RetrievalTrace, get_rag_engine
-
-            engine = get_rag_engine()
-
         trace = RetrievalTrace()
         t0 = time.perf_counter()
         try:
@@ -165,6 +202,17 @@ def evaluate_retrieval(
             ndcg_list.append(ndcg_value)
         else:
             case_metrics[f"ndcg@{_MRR_NDCG_K}"] = None
+
+        mmr_query_embedding_calls += trace.counters.get("query_embedding_calls", 0)
+        mmr_candidate_embedding_calls += trace.counters.get("candidate_embedding_calls", 0)
+        mmr_vector_lookup_hits += trace.counters.get("vector_lookup_hits", 0)
+        mmr_vector_lookup_misses += trace.counters.get("vector_lookup_misses", 0)
+        if trace.counters.get("mmr_fallback", 0) > 0:
+            mmr_fallback_case_count += 1
+            for note in trace.notes:
+                if note.startswith("fallback:"):
+                    reason = note[len("fallback:") :]
+                    mmr_fallback_reasons[reason] = mmr_fallback_reasons.get(reason, 0) + 1
 
         for stage_trace in trace.stages:
             stage_latency_by_name.setdefault(stage_trace.name, []).append(stage_trace.latency_ms)
@@ -254,10 +302,37 @@ def evaluate_retrieval(
         "stage_summary": stage_summary,
         "vectorstore_document_count": vectorstore_document_count,
         "case_results": case_results,
+        "measured_case_count": success_count + failure_count,
+        "warmup": build_warmup_metadata(
+            requested_cases=warmup_cases,
+            executed_cases=warmup_executed,
+            succeeded_cases=warmup_succeeded,
+            failed_cases=warmup_failed,
+            case_ids=warmup_case_ids,
+            same_process=True,
+            engine_object_id_matches=(warmup_engine_id is None or warmup_engine_id == id(engine)),
+        ),
+        "mmr_instrumentation": (
+            {
+                "query_embedding_calls_total": mmr_query_embedding_calls,
+                "candidate_embedding_calls_total": mmr_candidate_embedding_calls,
+                "vector_lookup_hits_total": mmr_vector_lookup_hits,
+                "vector_lookup_misses_total": mmr_vector_lookup_misses,
+                "fallback_case_count": mmr_fallback_case_count,
+                "fallback_reasons": mmr_fallback_reasons,
+            }
+            if config.USE_MMR
+            else None
+        ),
     }
     extra.update(reproducibility)
 
     payload = build_metadata(dataset_path, command, extra)
+    payload["schema_version"] = SCHEMA_VERSION
+    payload["retrieval_config"]["mmr_vector_source"] = config.MMR_VECTOR_SOURCE
+    payload["retrieval_config"]["bm25_tokenizer"] = config.BM25_TOKENIZER
+    payload["candidate"] = build_candidate_metadata(candidate_id)
+
     json_path, md_path = write_report(
         payload, output_dir, "retrieval", render_markdown=_render_retrieval_markdown
     )
@@ -372,6 +447,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--limit", type=_positive_int, default=None, help="평가할 최대 사례 수(원본 순서 기준 앞에서부터, 1 이상)"
     )
     parser.add_argument("--tag", type=str, default=None, help="이 tag를 가진 사례만 평가")
+    parser.add_argument(
+        "--warmup-cases",
+        type=int,
+        default=0,
+        help="동일 process/engine에서 먼저 실행하고 집계에서 제외할 앞쪽 사례 수(0 이상)",
+    )
+    parser.add_argument("--candidate-id", type=str, default=None, help="M3 candidate ID(§3.1 정규식)")
     return parser
 
 
@@ -380,14 +462,21 @@ def main(argv: list[str] | None = None) -> int:
     옵션 오류는 argparse의 표준 SystemExit(2) 경로를 그대로 사용한다."""
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
+    if args.warmup_cases < 0:
+        parser.error("--warmup-cases는 0 이상이어야 합니다")
 
     try:
         payload = evaluate_retrieval(
             dataset_path=args.dataset,
             output_dir=args.output,
+            warmup_cases=args.warmup_cases,
+            candidate_id=args.candidate_id,
             limit=args.limit,
             tag=args.tag,
         )
+    except ValueError as exc:
+        print(f"오류: {exc}", file=sys.stderr)
+        return 2
     except DatasetError as exc:
         print(f"오류: {exc}", file=sys.stderr)
         if exc.kind == "io":
