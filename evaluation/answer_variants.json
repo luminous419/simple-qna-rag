@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0.0",
+  "review": {
+    "reviewed_by": "M3 설계 리뷰 (Routing_Simplification_Review_2.md 이전 Design.md §5.5 rev)",
+    "reviewed_at": "2026-08-07",
+    "evidence_report": "evaluation/reports/m2_full/answers/answers_20260804T145621300637Z.json"
+  },
+  "variants": [
+    {
+      "case_id": "dq-rag-001",
+      "assertion_index": 0,
+      "add_any_of": ["결합으로", "의 결합"],
+      "rationale": "'검색과 생성을 통합'의 '통합'과 실제 답변의 '...생성(Generation)의 결합으로...'의 '결합'은 이 문장에서 동일한 관계(검색+생성의 합성)를 가리키며 숫자·부정·단위를 바꾸지 않는다. 원문 표기는 '검색(Information Retrieval) + 생성(Generation)'의 결합'처럼 접속사 '+'를 쓰므로 '검색과 생성을/의 결합' 형태의 조사 결합 문자열은 원문에 존재하지 않아 실제 답변에 등장하는 '결합으로' 표면형으로 범위를 좁혔다(evidence_report 확인)."
+    },
+    {
+      "case_id": "dq-langgraph-reducer-001",
+      "assertion_index": 0,
+      "add_any_of": ["리스트에 병합"],
+      "rationale": "reducer 동작 서술에서 '추가/삽입/병합'은 동일 동작의 표면 변형이다. 실제 답변은 '...하나의 리스트에 병합해 주는 역할...'로 서술하므로 '리스트에 병합'을 실제 표면형 그대로 추가했다(evidence_report 확인)."
+    },
+    {
+      "case_id": "dq-sparse-vs-dense-001",
+      "assertion_index": 1,
+      "add_any_of": ["고차원 임베딩 벡터", "연속 고차원"],
+      "rationale": "'고차원 벡터' 사이에 수식어 '임베딩'이 삽입된 형태로 의미가 같다."
+    },
+    {
+      "case_id": "dq-realestate-procedure-001",
+      "assertion_index": 0,
+      "add_any_of": ["구청의 허가", "구청에 거래 허가"],
+      "rationale": "조사 삽입만 다른 동일 표현이다."
+    }
+  ]
+}

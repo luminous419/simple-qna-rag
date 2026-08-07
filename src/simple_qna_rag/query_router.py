@@ -20,6 +20,37 @@ WEB_SEARCH_KEYWORDS = [
 ]
 
 
+def extract_web_search_query(question: str) -> str:
+    """질문에서 웹검색 키워드/조사를 제거해 검색어를 추출하는 순수 함수
+    (M3-REQ-004 §7.4 — 기존 `route_query()`의 로직을 동작 변경 없이 그대로
+    이동한 것). agent.py의 `_decide_tool()`이 명시 WEB 신호에서 LLM이
+    실패했을 때 검증된 폴백으로 이 함수를 호출한다.
+
+    빈 문자열이 나올 수 있는 입력에 대해서는 원본 질문으로 되돌리는 기존
+    동작을 유지한다.
+    """
+    search_query = question
+
+    # 키워드와 조사를 함께 제거
+    keywords_with_particles = [
+        '웹검색으로', '웹검색해서', '웹검색으로서', '웹검색',
+        '인터넷검색으로', '인터넷검색해서', '인터넷검색으로서', '인터넷검색',
+        '웹에서', '인터넷에서', '온라인에서',
+        '검색해줘', '찾아줘', '알아봐줘'
+    ]
+
+    for keyword in keywords_with_particles:
+        search_query = search_query.replace(keyword, ' ').strip()
+
+    # 남은 불필요한 조사 제거
+    search_query = search_query.replace('으로', ' ').replace('를', ' ').replace('을', ' ').strip()
+
+    # 여러 공백을 하나로
+    search_query = ' '.join(search_query.split())
+
+    return search_query if search_query else question
+
+
 def route_query(question: str) -> Dict[str, Any]:
     """
     질문을 라우팅하여 적절한 처리 수행
@@ -51,24 +82,7 @@ def route_query(question: str) -> Dict[str, Any]:
     if use_web_search:
         print("\n🌐 웹검색 모드 선택")
         # 웹검색 키워드 제거하고 실제 검색어 추출
-        search_query = question
-
-        # 키워드와 조사를 함께 제거
-        keywords_with_particles = [
-            '웹검색으로', '웹검색해서', '웹검색으로서', '웹검색',
-            '인터넷검색으로', '인터넷검색해서', '인터넷검색으로서', '인터넷검색',
-            '웹에서', '인터넷에서', '온라인에서',
-            '검색해줘', '찾아줘', '알아봐줘'
-        ]
-
-        for keyword in keywords_with_particles:
-            search_query = search_query.replace(keyword, ' ').strip()
-
-        # 남은 불필요한 조사 제거
-        search_query = search_query.replace('으로', ' ').replace('를', ' ').replace('을', ' ').strip()
-
-        # 여러 공백을 하나로
-        search_query = ' '.join(search_query.split())
+        search_query = extract_web_search_query(question)
 
         print(f"   추출된 검색어: '{search_query}'")
         result = search_and_format(search_query)

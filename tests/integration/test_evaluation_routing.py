@@ -22,6 +22,7 @@ from evaluation.routing import (
     _offline_mock_decide_tool,
     render_routing_markdown,
     evaluate_routing,
+    evaluate_routing_multi,
     main,
 )
 from evaluation.schema import GoldenCase
@@ -636,3 +637,87 @@ class TestRoutingRegressionMigration:
         text = TEST_AGENT_ROUTING_PATH.read_text(encoding="utf-8")
         assert "routing_regression" in text
         assert "golden.jsonl" in text
+
+
+class TestEvaluateRoutingMulti:
+    """M3-REQ-005 §7.5: --runs N 집계."""
+
+    def test_runs_less_than_one_raises(self):
+        cases = [_make_case("c1", "q1", "document_qa")]
+        with pytest.raises(ValueError):
+            evaluate_routing_multi(cases, _offline_mock_decide_tool, runs=0)
+
+    def test_runs_one_is_backward_compatible(self):
+        cases = [
+            _make_case("c1", "q1", "document_qa"),
+            _make_case("c2", "q2", "web_search"),
+        ]
+        result = evaluate_routing_multi(cases, _offline_mock_decide_tool, runs=1)
+        assert result["run_count"] == 1
+        assert result["per_run"] is None
+        assert result["aggregate"] is None
+        assert result["case_variation"] is None
+        # 기존 최상위 키는 그대로 유지된다.
+        assert "accuracy" in result
+        assert "precision_recall_f1" in result
+
+    def test_runs_three_deterministic_decide_tool_has_no_variation(self):
+        cases = [
+            _make_case("c1", "q1", "document_qa"),
+            _make_case("c2", "q2", "web_search"),
+        ]
+        result = evaluate_routing_multi(cases, _offline_mock_decide_tool, runs=3)
+        assert result["run_count"] == 3
+        assert len(result["per_run"]) == 3
+        for entry in result["case_variation"]:
+            assert entry["distinct_count"] == 1
+            assert entry["changed"] is False
+        assert result["aggregate"]["accuracy"]["min"] == result["aggregate"]["accuracy"]["max"]
+
+    def test_runs_three_with_varying_decide_tool_detects_variation(self):
+        cases = [_make_case("c1", "flaky question", "document_qa")]
+        call_count = {"n": 0}
+
+        def flaky_decide_tool(question):
+            call_count["n"] += 1
+            if call_count["n"] % 2 == 0:
+                return "web_search", "q"
+            return "document_qa", question
+
+        result = evaluate_routing_multi(cases, flaky_decide_tool, runs=3)
+        variation_entry = result["case_variation"][0]
+        assert variation_entry["distinct_count"] == 2
+        assert variation_entry["changed"] is True
+        assert variation_entry["routes"] == ["document_qa", "web_search", "document_qa"]
+
+    def test_recall_denominators_match_actual_case_composition(self):
+        cases = [
+            _make_case("c1", "q1", "document_qa"),
+            _make_case("c2", "q2", "document_qa"),
+            _make_case("c3", "q3", "web_search"),
+        ]
+        result = evaluate_routing_multi(cases, _offline_mock_decide_tool, runs=2)
+        assert result["recall_denominators"] == {"document_qa": 2, "web_search": 1}
+
+    def test_median_run_index_picks_min_index_on_tie(self):
+        cases = [_make_case("c1", "q1", "document_qa")]
+        result = evaluate_routing_multi(cases, _offline_mock_decide_tool, runs=3)
+        # 모두 동일한 accuracy이므로 동률 -> 최소 index.
+        assert result["median_run_index"] == 0
+
+    def test_cli_runs_flag_produces_multi_run_report(self, tmp_path):
+        cases = [
+            _case_dict("c1", "q1", "document_qa"),
+            _case_dict("c2", "q2", "web_search"),
+        ]
+        dataset_path = _write_dataset(tmp_path, cases)
+        output_dir = tmp_path / "out"
+        exit_code = main(
+            ["--dataset", str(dataset_path), "--output", str(output_dir), "--mode", "offline", "--runs", "3"]
+        )
+        assert exit_code == 0
+        json_path = next(output_dir.glob("routing_*.json"))
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+        assert payload["run_count"] == 3
+        assert payload["schema_version"] == "1.1.0"
+        assert payload["candidate"]["candidate_id"] is None

@@ -26,9 +26,12 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+import statistics
+
 from evaluation.dataset import DatasetError, load_jsonl
 from evaluation.metrics import mean_median, percentile, precision_recall_f1
 from evaluation.reporting import (
+    build_candidate_metadata,
     build_metadata,
     build_not_applicable_reproducibility_metadata,
     escape_markdown_table_cell,
@@ -36,7 +39,7 @@ from evaluation.reporting import (
 )
 from evaluation.schema import GoldenCase, Route
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 _VALID_ROUTES = {route.value for route in Route}
 _LABELS = [Route.DOCUMENT_QA.value, Route.WEB_SEARCH.value]
@@ -166,6 +169,7 @@ def evaluate_routing(
     y_pred: list[str] = []
     latencies: list[float] = []
     failures: list[dict] = []
+    case_routes: list[dict] = []
 
     no_tool_count = 0
     unknown_route_count = 0
@@ -184,6 +188,7 @@ def evaluate_routing(
             exception_count += 1
             y_true.append(expected)
             y_pred.append(_EXCEPTION)
+            case_routes.append({"id": case.id, "expected_route": expected, "route": _EXCEPTION})
             failures.append(
                 {
                     "id": case.id,
@@ -203,6 +208,7 @@ def evaluate_routing(
             no_tool_count += 1
             y_true.append(expected)
             y_pred.append(_NO_TOOL)
+            case_routes.append({"id": case.id, "expected_route": expected, "route": _NO_TOOL})
             failures.append(
                 {
                     "id": case.id,
@@ -219,6 +225,7 @@ def evaluate_routing(
             unknown_route_count += 1
             y_true.append(expected)
             y_pred.append(_UNKNOWN_ROUTE)
+            case_routes.append({"id": case.id, "expected_route": expected, "route": tool_name})
             failures.append(
                 {
                     "id": case.id,
@@ -233,6 +240,7 @@ def evaluate_routing(
 
         y_true.append(expected)
         y_pred.append(tool_name)
+        case_routes.append({"id": case.id, "expected_route": expected, "route": tool_name})
         if tool_name == expected:
             correct_count += 1
         else:
@@ -269,6 +277,21 @@ def evaluate_routing(
     else:
         mean_latency, median_latency, p95_latency = None, None, None
 
+    # M3-REQ-004/005 §7.5 단일 recall 분모 계약: 분모는 expected_route 기준이다.
+    # category document_qa 51건은 어떤 recall의 분모도 아니다 — 여기서는
+    # cases 자체의 expected_route 분포로 분모를 계산하므로(하드코딩 상수가
+    # 아님), 전체 76건을 넘기면 자동으로 document_qa=61/web_search=15가
+    # 나오고, --tag/--limit로 부분집합을 평가해도 그 부분집합 기준 분모가
+    # 정확히 나온다.
+    document_qa_total = sum(1 for c in cases if c.expected_route.value == Route.DOCUMENT_QA.value)
+    web_search_total = sum(1 for c in cases if c.expected_route.value == Route.WEB_SEARCH.value)
+    document_route_correct = metrics["confusion_matrix"].get(Route.DOCUMENT_QA.value, {}).get(
+        Route.DOCUMENT_QA.value, 0
+    )
+    web_search_correct = metrics["confusion_matrix"].get(Route.WEB_SEARCH.value, {}).get(
+        Route.WEB_SEARCH.value, 0
+    )
+
     return {
         "total_cases": total_cases,
         "success_count": success_count,
@@ -280,6 +303,14 @@ def evaluate_routing(
         "unknown_route_count": unknown_route_count,
         "exception_count": exception_count,
         "precision_recall_f1": metrics,
+        "recall_denominators": {
+            "document_qa": document_qa_total,
+            "web_search": web_search_total,
+        },
+        "document_route_correct": document_route_correct,
+        "document_route_recall": (document_route_correct / document_qa_total) if document_qa_total else None,
+        "web_search_correct": web_search_correct,
+        "web_search_recall": (web_search_correct / web_search_total) if web_search_total else None,
         "latency_ms": {
             "measured": measure_latency,
             "mean": mean_latency,
@@ -287,7 +318,164 @@ def evaluate_routing(
             "p95": p95_latency,
         },
         "failures": failures,
+        "case_routes": case_routes,
     }
+
+
+def evaluate_routing_multi(
+    cases: list[GoldenCase],
+    decide_tool: Callable[[str], tuple[Optional[str], Optional[str]]],
+    *,
+    runs: int,
+    measure_latency: bool = True,
+) -> dict:
+    """`evaluate_routing()`을 `runs`번 순차 호출하고 per_run/aggregate/
+    case_variation을 만든다(M3-REQ-005, Design.md §7.5). `runs < 1`이면
+    ValueError. `runs == 1`이면 기존 단일-run 반환 dict에 `run_count=1`만
+    추가한다(하위 호환 — 기존 최상위 키 의미는 그대로 유지된다)."""
+    if runs < 1:
+        raise ValueError(f"runs는 1 이상이어야 합니다: {runs!r}")
+
+    run_results = [evaluate_routing(cases, decide_tool, measure_latency=measure_latency) for _ in range(runs)]
+
+    if runs == 1:
+        result = dict(run_results[0])
+        result["run_count"] = 1
+        result["median_run_index"] = 0
+        result["per_run"] = None
+        result["aggregate"] = None
+        result["case_variation"] = None
+        return result
+
+    per_run = []
+    for index, run in enumerate(run_results):
+        per_run.append(
+            {
+                "run_index": index,
+                "accuracy": run["accuracy"],
+                "correct_count": run["correct_count"],
+                "total_cases": run["total_cases"],
+                "document_route_recall": run["document_route_recall"],
+                "document_route_correct": run["document_route_correct"],
+                "web_search_recall": run["web_search_recall"],
+                "web_search_correct": run["web_search_correct"],
+                "failures": run["failures"],
+                "latency_ms": run["latency_ms"],
+            }
+        )
+
+    def _series(key: str) -> dict:
+        values = [run[key] for run in per_run]
+        non_null = [v for v in values if v is not None]
+        return {
+            "values": values,
+            "median": statistics.median(non_null) if non_null else None,
+            "min": min(non_null) if non_null else None,
+            "max": max(non_null) if non_null else None,
+        }
+
+    aggregate = {
+        "accuracy": _series("accuracy"),
+        "document_route_recall": _series("document_route_recall"),
+        "web_search_recall": _series("web_search_recall"),
+        "correct_count": _series("correct_count"),
+        "document_route_correct": _series("document_route_correct"),
+        "web_search_correct": _series("web_search_correct"),
+    }
+
+    # median_run_index: accuracy 값이 중앙값과 같은 run 중 최소 index. 사람
+    # 판독용이며 gate 판정 자체는 지표별 median(aggregate)으로 한다.
+    accuracy_values = [run["accuracy"] for run in per_run]
+    median_accuracy = statistics.median(accuracy_values)
+    median_run_index = min(i for i, v in enumerate(accuracy_values) if v == median_accuracy)
+
+    case_variation = []
+    case_ids = [c["id"] for c in run_results[0]["case_routes"]]
+    routes_by_case: dict[str, list[str]] = {cid: [] for cid in case_ids}
+    expected_by_case: dict[str, str] = {}
+    for run in run_results:
+        for entry in run["case_routes"]:
+            routes_by_case[entry["id"]].append(entry["route"])
+            expected_by_case[entry["id"]] = entry["expected_route"]
+    for case_id in case_ids:
+        routes = routes_by_case[case_id]
+        distinct = sorted(set(routes))
+        case_variation.append(
+            {
+                "id": case_id,
+                "expected_route": expected_by_case[case_id],
+                "routes": routes,
+                "distinct_count": len(distinct),
+                "changed": len(distinct) > 1,
+            }
+        )
+
+    result = dict(run_results[-1])
+    result["run_count"] = runs
+    result["median_run_index"] = median_run_index
+    result["per_run"] = per_run
+    result["aggregate"] = aggregate
+    result["case_variation"] = case_variation
+    return result
+
+
+def build_routing_payload(
+    dataset_path: Path,
+    command: list[str],
+    cases: list[GoldenCase],
+    result: dict,
+    *,
+    mode: str,
+    tag: str | None,
+    limit: int | None,
+    candidate_id: str | None,
+    router_prompt_sha256: str | None,
+) -> dict:
+    """Build the canonical schema-1.1 Routing report payload.
+
+    Both the standalone CLI and the integrated baseline must use this builder
+    so policy metadata cannot silently diverge between execution paths.
+    """
+    from simple_qna_rag import config as _config
+    from simple_qna_rag.routing_signals import classify_explicit_signal
+
+    signal_counts = {"web": 0, "document": 0, "none": 0}
+    signal_error_count = 0
+    for case in cases:
+        try:
+            signal = classify_explicit_signal(case.question)
+        except Exception:  # noqa: BLE001 - report the classifier defect
+            signal_error_count += 1
+            continue
+        signal_counts[signal.value] += 1
+
+    routing_policy = {
+        "signal_override": _config.ROUTING_SIGNAL_OVERRIDE,
+        "corpus_topic_hint": _config.ROUTING_CORPUS_TOPIC_HINT,
+        "signal_counts": signal_counts,
+        "signal_conflict_count": None,
+        "signal_suppressed_count": None,
+        "signal_error_count": signal_error_count,
+    }
+    reproducibility = build_not_applicable_reproducibility_metadata(
+        "routing은 corpus/vectorstore를 사용하지 않음"
+    )
+    payload = build_metadata(
+        dataset_path,
+        command,
+        {
+            "mode": mode,
+            "tag_filter": tag,
+            "limit": limit,
+            "router_prompt_sha256": router_prompt_sha256,
+            "routing_policy": routing_policy,
+            **result,
+            **reproducibility,
+        },
+    )
+    payload["schema_version"] = SCHEMA_VERSION
+    payload["candidate"] = build_candidate_metadata(candidate_id)
+    return payload
 
 
 def _positive_int(value: str) -> int:
@@ -315,6 +503,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--limit", type=_positive_int, default=None, help="평가할 사례 수 상한(원본 순서 유지, 1 이상)"
     )
     parser.add_argument("--tag", type=str, default=None, help="이 태그를 가진 사례만 평가")
+    parser.add_argument(
+        "--runs", type=_positive_int, default=1, help="동일 설정으로 순차 반복할 횟수(M3-REQ-005, 1 이상)"
+    )
+    parser.add_argument("--candidate-id", type=str, default=None, help="M3 candidate ID(§3.1 정규식)")
     return parser
 
 
@@ -340,7 +532,50 @@ def render_routing_markdown(payload: dict) -> str:
     lines.append(f"- 도구 선택 실패(exception): {payload.get('exception_count')}")
     lines.append(f"- 도구 미선택(no_tool): {payload.get('no_tool_count')}")
     lines.append(f"- 알 수 없는 route(unknown_route): {payload.get('unknown_route_count')}")
+    doc_recall = payload.get("document_route_recall")
+    doc_recall_display = "N/A" if doc_recall is None else f"{doc_recall:.1%}"
+    doc_denominator = (payload.get("recall_denominators") or {}).get("document_qa")
+    lines.append(
+        f"- document_route_recall: {doc_recall_display} "
+        f"({payload.get('document_route_correct')}/{doc_denominator})"
+    )
+    web_recall = payload.get("web_search_recall")
+    web_recall_display = "N/A" if web_recall is None else f"{web_recall:.1%}"
+    web_denominator = (payload.get("recall_denominators") or {}).get("web_search")
+    lines.append(
+        f"- web_search_recall: {web_recall_display} "
+        f"({payload.get('web_search_correct')}/{web_denominator})"
+    )
     lines.append("")
+
+    run_count = payload.get("run_count")
+    if run_count and run_count > 1:
+        aggregate = payload.get("aggregate") or {}
+        lines.append(f"## {run_count}회 반복 집계")
+        lines.append("")
+        for metric_name in ("accuracy", "document_route_recall", "web_search_recall"):
+            series = aggregate.get(metric_name) or {}
+            values = series.get("values") or []
+            values_display = ", ".join(f"{v:.1%}" for v in values if v is not None)
+            median = series.get("median")
+            median_display = "N/A" if median is None else f"{median:.1%}"
+            lines.append(f"- {metric_name} median: {median_display} (values: {values_display})")
+        lines.append("")
+        variation = [c for c in (payload.get("case_variation") or []) if c.get("changed")]
+        lines.append(f"### run 간 route가 달라진 사례 ({len(variation)}건)")
+        lines.append("")
+        if variation:
+            lines.append("| id | expected | routes |")
+            lines.append("|---|---|---|")
+            for c in variation:
+                lines.append(
+                    f"| {escape_markdown_table_cell(c.get('id'))} | "
+                    f"{escape_markdown_table_cell(c.get('expected_route'))} | "
+                    f"{escape_markdown_table_cell(', '.join(c.get('routes', [])))} |"
+                )
+        else:
+            lines.append("(없음)")
+        lines.append("")
 
     pr = payload.get("precision_recall_f1") or {}
     lines.append("## 클래스별 Precision/Recall/F1")
@@ -451,42 +686,50 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
+    router_prompt_sha256 = None
     if args.mode == "live":
-        from simple_qna_rag.agent import _decide_tool as decide_tool  # 지연 import (live + opt-in 전용)
+        from simple_qna_rag import agent  # 지연 import (live + opt-in 전용)
+
+        decide_tool = agent._decide_tool
+        router_prompt_sha256 = agent.get_router_prompt_sha256()
     else:
         decide_tool = _offline_mock_decide_tool
 
     try:
-        result = evaluate_routing(cases, decide_tool)
+        result = evaluate_routing_multi(cases, decide_tool, runs=args.runs)
     except ValueError as exc:
         print(f"오류: {exc}", file=sys.stderr)
         return 1
 
     effective_argv = argv if argv is not None else sys.argv[1:]
     command = ["python", "-m", "evaluation.routing", *effective_argv]
-    reproducibility = build_not_applicable_reproducibility_metadata(
-        "routing은 corpus/vectorstore를 사용하지 않음"
-    )
-    payload = build_metadata(
+    payload = build_routing_payload(
         args.dataset,
         command,
-        {
-            "mode": args.mode,
-            "tag_filter": args.tag,
-            "limit": args.limit,
-            **result,
-            **reproducibility,
-        },
+        cases,
+        result,
+        mode=args.mode,
+        tag=args.tag,
+        limit=args.limit,
+        candidate_id=args.candidate_id,
+        router_prompt_sha256=router_prompt_sha256,
     )
 
     json_path, md_path = write_report(payload, args.output, "routing", render_markdown=render_routing_markdown)
-    print(
-        f"라우팅 정확도: {result['accuracy']:.1%} "
-        f"({result['correct_count']}/{result['total_cases']})",
-        file=sys.stderr,
-    )
+    if args.runs > 1:
+        print(
+            f"라우팅 정확도(중앙값): {payload['aggregate']['accuracy']['median']:.1%} "
+            f"(runs={args.runs})",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"라우팅 정확도: {result['accuracy']:.1%} "
+            f"({result['correct_count']}/{result['total_cases']})",
+            file=sys.stderr,
+        )
     if result["failures"]:
-        print(f"실패 {len(result['failures'])}건 (상세는 리포트 참고)", file=sys.stderr)
+        print(f"실패 {len(result['failures'])}건 (마지막 run 기준, 상세는 리포트 참고)", file=sys.stderr)
     print(f"리포트 생성: {json_path}")
     print(f"리포트 생성: {md_path}")
     return 0

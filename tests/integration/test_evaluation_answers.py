@@ -394,6 +394,10 @@ class TestEvaluateAnswers:
         }
 
     def test_intent_match_and_mismatch_and_exclusion(self, tmp_path, monkeypatch):
+        """ANSWER_TEMPLATE_MODE="intent"일 때만 성립하는 기존 채점 계약(Design.md
+        §8.6)을 검증한다 — classifier가 실제로 호출되는 모드이므로 expected_intent가
+        있는 사례만 채점하고 없는 사례는 제외한다."""
+        monkeypatch.setattr(answers_module.config, "ANSWER_TEMPLATE_MODE", "intent")
         match_case = _case(
             id="intent-match",
             question="일치하는 intent 질문",
@@ -426,10 +430,64 @@ class TestEvaluateAnswers:
 
         result = evaluate_answers(dataset_path, tmp_path / "reports")
 
+        assert result["answer_template_mode"] == "intent"
         assert result["intent"]["evaluated_count"] == 2
         assert result["intent"]["correct_count"] == 1
         assert result["intent"]["excluded_count"] == 1
         assert result["intent"]["accuracy"] == 0.5
+        assert result["intent"]["intent_excluded_reason"] is None
+
+    def test_default_template_mode_excludes_intent_entirely(self, tmp_path, monkeypatch):
+        """M2 (Code_Review_Iteration_2.md): ANSWER_TEMPLATE_MODE="default"에서는
+        RAGEngine.query()가 classify_intent()를 호출하지 않고 응답 계약 보존을
+        위해 intent="other"만 반환한다(Design.md §8.6). expected_intent와 비교해
+        채점하면 비활성 classifier가 실패한 classifier로 오독되는 잘못된 0%
+        accuracy가 나온다 — default 모드에서는 intent 채점을 전부 제외하고
+        accuracy=null, evaluated_count=0, excluded_count=eligible 전체,
+        intent_excluded_reason을 명시해야 한다."""
+        monkeypatch.setattr(answers_module.config, "ANSWER_TEMPLATE_MODE", "default")
+        match_case = _case(
+            id="intent-match",
+            question="일치하는 intent 질문",
+            expected_intent="explanation",
+            answer_assertions=[AnswerAssertion(any_of=["사실"])],
+        )
+        mismatch_case = _case(
+            id="intent-mismatch",
+            question="불일치하는 intent 질문",
+            expected_intent="comparison",
+            answer_assertions=[AnswerAssertion(any_of=["사실"])],
+        )
+        no_expected_case = _case(
+            id="intent-none",
+            question="expected_intent가 없는 질문",
+            answer_assertions=[AnswerAssertion(any_of=["사실"])],
+        )
+        dataset_path = self._write_dataset(
+            tmp_path, [match_case, mismatch_case, no_expected_case]
+        )
+        _patch_repro(monkeypatch)
+        fake_engine = FakeEngine(
+            {
+                match_case.question: _success_response("사실이 포함된 답변", intent="other"),
+                mismatch_case.question: _success_response("사실이 포함된 답변", intent="other"),
+                no_expected_case.question: _success_response("사실이 포함된 답변", intent="other"),
+            }
+        )
+        monkeypatch.setattr(answers_module, "_get_engine", lambda: fake_engine)
+
+        result = evaluate_answers(dataset_path, tmp_path / "reports")
+
+        assert result["answer_template_mode"] == "default"
+        assert result["intent"]["evaluated_count"] == 0
+        assert result["intent"]["correct_count"] == 0
+        assert result["intent"]["excluded_count"] == result["case_counts"]["eligible"] == 3
+        assert result["intent"]["accuracy"] is None
+        assert result["intent"]["intent_excluded_reason"] == (
+            "ANSWER_TEMPLATE_MODE=default (classifier 비활성)"
+        )
+        # 사례별 intent_match도 default 모드에서는 채점 대상이 아니므로 항상 None이어야 한다.
+        assert all(c["intent_match"] is None for c in result["case_results"])
 
     def test_source_evaluation_excludes_cases_without_relevant_sources(self, tmp_path, monkeypatch):
         dataset_path = self._write_dataset(tmp_path, [ABSTENTION_CASE])

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -284,6 +285,66 @@ def build_reproducibility_metadata(data_dir: Path, vectorstore_path: Path) -> di
         "corpus_manifest_sha256": manifest["manifest_sha256"],
         "vectorstore_fingerprint": fingerprint,
         "reproducibility_note": None,
+    }
+
+
+_CANDIDATE_ID_RE = re.compile(r"^m3-(?:final|p[0-6][a-z]?(?:-[a-z0-9]+)+)$")
+
+
+def build_candidate_metadata(
+    candidate_id: str | None,
+    label: str | None = None,
+    baseline_ref: str = "evaluation/baselines/m2_initial.json",
+    baseline_dataset_sha256: str = "61b768acd8d33522ef76e3baadd4bf19b44cc25daa79ad7ea255fb0a09d1017a",
+    notes: str | None = None,
+) -> dict:
+    """M3-REQ-001 candidate block (Design.md §3.1, §3.3). `candidate_id`가
+    주어지면 §3.1의 정규식을 만족해야 한다(그렇지 않으면 ValueError로 즉시
+    실패 — 잘못된 candidate ID로 리포트를 만들지 않기 위함). `candidate_id`가
+    `None`이면(candidate 개념이 없는 실행) 모든 필드가 `null`인 block을
+    반환한다."""
+    if candidate_id is not None and not _CANDIDATE_ID_RE.match(candidate_id):
+        raise ValueError(f"candidate_id가 §3.1 정규식과 맞지 않습니다: {candidate_id!r}")
+    phase = None
+    if candidate_id is not None and candidate_id != "m3-final":
+        # "m3-p<phase>..." -> phase 정수 추출
+        digits = candidate_id[len("m3-p"):].split("-", 1)[0]
+        phase = int(digits[0]) if digits and digits[0].isdigit() else None
+    elif candidate_id == "m3-final":
+        phase = 6
+    return {
+        "candidate_id": candidate_id,
+        "label": label,
+        "phase": phase,
+        "baseline_ref": baseline_ref,
+        "baseline_dataset_sha256": baseline_dataset_sha256,
+        "notes": notes,
+    }
+
+
+def build_warmup_metadata(
+    *,
+    requested_cases: int,
+    executed_cases: int,
+    succeeded_cases: int,
+    failed_cases: int,
+    case_ids: list[str],
+    same_process: bool = True,
+    engine_object_id_matches: bool = True,
+) -> dict:
+    """M3-NFR-002 warm-up metadata block (Design.md §3.3, §4.4).
+    `performed = executed_cases > 0 and failed_cases == 0`."""
+    performed = executed_cases > 0 and failed_cases == 0
+    return {
+        "requested_cases": requested_cases,
+        "executed_cases": executed_cases,
+        "succeeded_cases": succeeded_cases,
+        "failed_cases": failed_cases,
+        "case_ids": case_ids,
+        "same_process": same_process,
+        "engine_object_id_matches": engine_object_id_matches,
+        "discarded_from_metrics": True,
+        "performed": performed,
     }
 
 

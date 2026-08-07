@@ -30,18 +30,21 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from evaluation import answer_rules as ar
 from evaluation.answers import evaluate_answers
+from evaluation.compare import evaluate_gates
 from evaluation.dataset import DatasetError, load_jsonl, validate_composition
 from evaluation.reporting import (
+    build_candidate_metadata,
     build_metadata,
     build_not_applicable_reproducibility_metadata,
     escape_markdown_table_cell,
     write_report,
 )
 from evaluation.retrieval import evaluate_retrieval
-from evaluation.routing import evaluate_routing, render_routing_markdown
+from evaluation.routing import build_routing_payload, evaluate_routing_multi, render_routing_markdown
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 _BASE_LIMITATIONS = [
     "assertion coverage(핵심 문구 포함 여부)는 답변의 진실성(faithfulness) 전체를 "
@@ -107,6 +110,10 @@ def run_baseline(
     skip_answers: bool = False,
     limit: int | None = None,
     tag: str | None = None,
+    routing_runs: int = 1,
+    warmup_cases: int = 0,
+    candidate_id: str | None = None,
+    expect_variants_sha256: str | None = None,
 ) -> dict:
     """validate -> retrieval -> routing -> answers 순서로 실행한다.
 
@@ -159,8 +166,23 @@ def run_baseline(
         command += ["--limit", str(limit)]
     if tag is not None:
         command += ["--tag", tag]
+    if routing_runs != 1:
+        command += ["--routing-runs", str(routing_runs)]
+    if warmup_cases:
+        command += ["--warmup-cases", str(warmup_cases)]
+    if candidate_id is not None:
+        command += ["--candidate-id", candidate_id]
+    if expect_variants_sha256 is not None:
+        command += ["--expect-variants-sha256", expect_variants_sha256]
 
-    options = {"skip_routing": skip_routing, "skip_answers": skip_answers, "limit": limit, "tag": tag}
+    options = {
+        "skip_routing": skip_routing,
+        "skip_answers": skip_answers,
+        "limit": limit,
+        "tag": tag,
+        "routing_runs": routing_runs,
+        "warmup_cases": warmup_cases,
+    }
 
     # ---- Stage 1: validate ----
     t0 = time.perf_counter()
@@ -258,7 +280,14 @@ def run_baseline(
     retrieval_output_dir = output_dir / "retrieval"
     retrieval_payload: dict | None = None
     try:
-        retrieval_payload = evaluate_retrieval(dataset_path, retrieval_output_dir, limit=limit, tag=tag)
+        retrieval_payload = evaluate_retrieval(
+            dataset_path,
+            retrieval_output_dir,
+            limit=limit,
+            tag=tag,
+            warmup_cases=warmup_cases,
+            candidate_id=candidate_id,
+        )
     except DatasetError as exc:
         stages["retrieval"] = _stage_failed(
             "retrieval", type(exc).__name__, str(exc),
@@ -311,6 +340,7 @@ def run_baseline(
         )
 
     # ---- Stage 3: routing ----
+    routing_payload_for_gates: dict | None = None
     if skip_routing:
         stages["routing"] = _stage_skipped("routing", "사용자가 --skip-routing으로 명시적으로 제외함")
         stage_durations["routing"] = 0.0
@@ -324,7 +354,9 @@ def run_baseline(
 
         try:
             decide_tool = _resolve_decide_tool()
-            routing_result = evaluate_routing(filtered_cases, decide_tool, measure_latency=True)
+            routing_result = evaluate_routing_multi(
+                filtered_cases, decide_tool, runs=routing_runs, measure_latency=True
+            )
         except ValueError as exc:
             stages["routing"] = _stage_failed(
                 "routing", type(exc).__name__, str(exc),
@@ -336,31 +368,41 @@ def run_baseline(
                 next_action="Ollama가 실행 중인지, agent 설정이 올바른지 확인한 뒤 다시 실행하세요.",
             )
         else:
-            # evaluate_routing() 자체는 성공했다 — 이제 결과를 report로 남기는
-            # 단계다. M2_Phase_7_8_code_review_result.md P1: 이 report 작성
-            # (metadata 생성 + write_report())도 실패할 수 있고(디스크 공간,
-            # 권한 등), 이전에는 이 try 블록 밖에 있어서 예외가 run_baseline()
-            # 밖으로 그대로 전파돼 Answer 단계가 실행되지 않고 이미 성공한
-            # Retrieval 결과도 최종 report에 남지 않았다. evaluate_routing()의
-            # 성공(evaluation_status)과 report 파일 생성 성공(report_status)을
-            # 구분해 기록하되, report는 필수 산출물이므로 report 작성이
-            # 실패하면 단계 최종 상태는 failed로 남긴다.
+            # evaluate_routing_multi() 자체는 성공했다 — 이제 결과를 report로
+            # 남기는 단계다. M2_Phase_7_8_code_review_result.md P1: 이 report
+            # 작성(metadata 생성 + write_report())도 실패할 수 있고(디스크
+            # 공간, 권한 등), 이전에는 이 try 블록 밖에 있어서 예외가
+            # run_baseline() 밖으로 그대로 전파돼 Answer 단계가 실행되지 않고
+            # 이미 성공한 Retrieval 결과도 최종 report에 남지 않았다.
+            # evaluate_routing_multi()의 성공(evaluation_status)과 report 파일
+            # 생성 성공(report_status)을 구분해 기록하되, report는 필수
+            # 산출물이므로 report 작성이 실패하면 단계 최종 상태는 failed로
+            # 남긴다.
             try:
                 routing_output_dir = output_dir / "routing"
                 routing_command = [
                     "python", "-m", "evaluation.routing",
                     "--dataset", str(dataset_path), "--output", str(routing_output_dir), "--mode", "live",
+                    "--runs", str(routing_runs),
                 ]
                 if tag is not None:
                     routing_command += ["--tag", tag]
                 if limit is not None:
                     routing_command += ["--limit", str(limit)]
-                reproducibility = build_not_applicable_reproducibility_metadata(
-                    "routing은 corpus/vectorstore를 사용하지 않음"
-                )
-                routing_payload = build_metadata(
-                    dataset_path, routing_command,
-                    {"mode": "live", "tag_filter": tag, "limit": limit, **routing_result, **reproducibility},
+                if candidate_id is not None:
+                    routing_command += ["--candidate-id", candidate_id]
+                from simple_qna_rag.agent import get_router_prompt_sha256
+
+                routing_payload = build_routing_payload(
+                    dataset_path,
+                    routing_command,
+                    filtered_cases,
+                    routing_result,
+                    mode="live",
+                    tag=tag,
+                    limit=limit,
+                    candidate_id=candidate_id,
+                    router_prompt_sha256=get_router_prompt_sha256(),
                 )
                 json_path, md_path = write_report(
                     routing_payload, routing_output_dir, "routing", render_markdown=render_routing_markdown
@@ -377,13 +419,18 @@ def run_baseline(
                     accuracy=routing_result.get("accuracy"),
                 )
             else:
+                routing_payload_for_gates = routing_payload
                 stages["routing"] = _stage_success(
                     "routing",
                     report_json_path=str(json_path),
                     report_markdown_path=str(md_path),
+                    run_count=routing_result.get("run_count"),
                     total_cases=routing_result.get("total_cases"),
                     correct_count=routing_result.get("correct_count"),
                     accuracy=routing_result.get("accuracy"),
+                    document_route_recall=routing_result.get("document_route_recall"),
+                    web_search_recall=routing_result.get("web_search_recall"),
+                    aggregate=routing_result.get("aggregate"),
                     precision_recall_f1=routing_result.get("precision_recall_f1"),
                     latency_ms=routing_result.get("latency_ms"),
                     failures=routing_result.get("failures"),
@@ -399,7 +446,21 @@ def run_baseline(
         t0 = time.perf_counter()
         answers_output_dir = output_dir / "answers"
         try:
-            answers_payload = evaluate_answers(dataset_path, answers_output_dir, limit=limit, tag=tag)
+            answers_payload = evaluate_answers(
+                dataset_path,
+                answers_output_dir,
+                limit=limit,
+                tag=tag,
+                candidate_id=candidate_id,
+                evaluator_profile="v2",
+                expect_variants_sha256=expect_variants_sha256,
+                warmup_cases=warmup_cases,
+            )
+        except ar.VariantTableError as exc:
+            stages["answers"] = _stage_failed(
+                "answers", type(exc).__name__, str(exc),
+                next_action="evaluation/answer_variants.json이 있는지, --expect-variants-sha256이 일치하는지 확인하세요.",
+            )
         except DatasetError as exc:
             stages["answers"] = _stage_failed(
                 "answers", type(exc).__name__, str(exc),
@@ -489,6 +550,15 @@ def run_baseline(
             "변경되었을 가능성이 있습니다. 두 값과 각 단계 결과는 모두 아래 보존돼 있습니다."
         )
 
+    # ---- gate evaluation (M3-REQ-003, Requirement §4.1) ----
+    gate_evaluation = evaluate_gates(
+        {
+            "retrieval": retrieval_payload if stages["retrieval"]["status"] == "success" else None,
+            "routing": routing_payload_for_gates,
+            "answers": answers_payload if stages["answers"]["status"] == "success" else None,
+        }
+    )
+
     extra = {
         "options": options,
         "overall_success": overall_success,
@@ -501,8 +571,11 @@ def run_baseline(
         "fingerprint_invariant": fingerprint_invariant,
         "total_duration_seconds": total_duration,
         "stage_duration_seconds": stage_durations,
+        "gate_evaluation": gate_evaluation,
     }
     payload = build_metadata(dataset_path, command, extra)
+    payload["schema_version"] = SCHEMA_VERSION
+    payload["candidate"] = build_candidate_metadata(candidate_id)
     write_report(payload, output_dir, "baseline", render_markdown=_render_baseline_markdown)
     return payload
 
@@ -678,6 +751,27 @@ def _render_baseline_markdown(payload: dict) -> str:
         )
     lines.append("")
 
+    # Gate 판정 (Requirement §4.1)
+    gate_evaluation = payload.get("gate_evaluation") or {}
+    lines.append("## Gate 판정 (Requirement §4.1)")
+    lines.append("")
+    lines.append(f"- spec_version: {gate_evaluation.get('spec_version')}")
+    lines.append(f"- overall_pass: {gate_evaluation.get('overall_pass')}")
+    lines.append("")
+    gate_items = gate_evaluation.get("items") or []
+    if gate_items:
+        lines.append("| gate | metric | threshold | pass |")
+        lines.append("|---|---|---|---|")
+        for item in gate_items:
+            metric = item.get("metric")
+            metric_display = "N/A" if metric is None else f"{metric}"
+            threshold = item.get("threshold", item.get("threshold_correct"))
+            lines.append(
+                f"| {escape_markdown_table_cell(item.get('id'))} | {escape_markdown_table_cell(metric_display)} | "
+                f"{escape_markdown_table_cell(threshold)} | {item.get('pass')} |"
+            )
+        lines.append("")
+
     lines.append("## 알려진 해석 한계")
     lines.append("")
     for note in payload.get("reproducibility_limitations") or []:
@@ -717,6 +811,19 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--limit", type=_positive_int, default=None, help="평가 대상 상한(원본 순서 기준, 1 이상)"
     )
     parser.add_argument("--tag", type=str, default=None, help="이 tag를 가진 사례만 평가")
+    parser.add_argument(
+        "--routing-runs", type=_positive_int, default=1, help="Routing을 동일 설정으로 반복할 횟수(1 이상)"
+    )
+    parser.add_argument(
+        "--warmup-cases",
+        type=int,
+        default=0,
+        help="Retrieval/Answer 단계에 전달할 동일 process warm-up 사례 수(0 이상)",
+    )
+    parser.add_argument("--candidate-id", type=str, default=None, help="M3 candidate ID(§3.1 정규식)")
+    parser.add_argument(
+        "--expect-variants-sha256", type=str, default=None, help="Answer evaluator v2 변형 표 SHA-256 고정"
+    )
     return parser
 
 
@@ -743,6 +850,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if args.warmup_cases < 0:
+        parser.error("--warmup-cases는 0 이상이어야 합니다")
+
     try:
         payload = run_baseline(
             args.dataset,
@@ -751,6 +861,10 @@ def main(argv: list[str] | None = None) -> int:
             skip_answers=args.skip_answers,
             limit=args.limit,
             tag=args.tag,
+            routing_runs=args.routing_runs,
+            warmup_cases=args.warmup_cases,
+            candidate_id=args.candidate_id,
+            expect_variants_sha256=args.expect_variants_sha256,
         )
     except ValueError as exc:
         print(f"오류: {exc}", file=sys.stderr)

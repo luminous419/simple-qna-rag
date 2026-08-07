@@ -215,3 +215,63 @@ PROMPT_TEMPLATE = """당신은 문서 기반 RAG 시스템의 답변을 생성�
  질문 (Question): {question}
  
  답변 (Answer):"""
+
+
+# ---------------------------------------------------------------------------
+# M3 flag helpers (Design.md §3.4)
+#
+# 환경변수 파싱 규칙: bool은 {"1","true","yes","on"}(casefold)만 True, 그 외는
+# False, 미설정은 기본값. 잘못된 열거값은 import 시 ValueError로 즉시 실패한다
+# (조용히 기본값으로 되돌아가면 리포트가 실제 실행 설정을 거짓으로 기록하게
+# 되기 때문이다).
+# ---------------------------------------------------------------------------
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().casefold() in _TRUE_VALUES
+
+
+def _env_enum(name: str, default: str, allowed: frozenset[str]) -> str:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    if raw not in allowed:
+        raise ValueError(f"{name}={raw!r}은(는) {sorted(allowed)} 중 하나여야 합니다")
+    return raw
+
+
+# Phase 2 — MMR stored-vector reuse. 기본값 "stored"는 m3-p2a-stored-vector
+# 후보가 §4.1 gate를 전부 만족해(회귀 0, MMR 평균 latency 14,349ms -> 8.07ms)
+# 채택된 결과다. 회귀 시 SIMPLE_QNA_RAG_MMR_VECTOR_SOURCE=embed로 즉시 롤백
+# 가능하다(Design.md §13.3). 검증 실패 시에도 엔진은 자동으로 embed 강등한다.
+MMR_VECTOR_SOURCE = _env_enum(
+    "SIMPLE_QNA_RAG_MMR_VECTOR_SOURCE", "stored", frozenset({"embed", "stored"})
+)
+MMR_VECTOR_VALIDATION_SAMPLE = 3
+MMR_VECTOR_COSINE_FLOOR = 0.99
+MMR_EMBED_CACHE_MAX_ITEMS = 2048
+
+# Phase 3 — routing signal override. 기본값 "True"는 m3-p3a-signal-override
+# 후보가 live 76x3 실행에서 §4.1 gate를 전부 만족해(web_search_recall 15/15
+# 매 run, document_route_recall 61/61 중앙값, accuracy 75/76 중앙값) 채택된
+# 결과다. 회귀 시 SIMPLE_QNA_RAG_ROUTING_SIGNAL_OVERRIDE=0으로 즉시 롤백
+# 가능하다(Design.md §13.3).
+ROUTING_SIGNAL_OVERRIDE = _env_bool("SIMPLE_QNA_RAG_ROUTING_SIGNAL_OVERRIDE", True)
+ROUTING_CORPUS_TOPIC_HINT = _env_bool("SIMPLE_QNA_RAG_ROUTING_CORPUS_TOPIC_HINT", False)
+ROUTING_CORPUS_TOPIC_HINT_MAX_ITEMS = 25
+
+# Phase 4 — Intent template mode
+ANSWER_TEMPLATE_MODE = _env_enum(
+    "SIMPLE_QNA_RAG_ANSWER_TEMPLATE_MODE", "default", frozenset({"intent", "default"})
+)
+INTENT_CONFIDENCE_FLOOR = 0.0  # 0.0 == 비활성(강등 없음)
+
+# Phase 5 — BM25 tokenizer (조건부)
+BM25_TOKENIZER = _env_enum(
+    "SIMPLE_QNA_RAG_BM25_TOKENIZER", "whitespace", frozenset({"whitespace", "char2gram", "bge-subword"})
+)
