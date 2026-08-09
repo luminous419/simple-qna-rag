@@ -33,18 +33,21 @@ def web_search_function(query: str) -> Dict[str, Any]:
     return search_and_format(query)
 
 
-def rag_function(query: str) -> Dict[str, Any]:
+def rag_function(query: str, metrics_registry: Any = None) -> Dict[str, Any]:
     """
     문서 기반 질의응답 도구 함수
 
     Args:
         query: 사용자 질문
+        metrics_registry: agent.py의 web `/rag` 경로가 전달하는 선택적
+            `app.state.metrics_registry`(REQ-004.1). `rag_engine.query()`로
+            그대로 전달한다.
 
     Returns:
         dict: rag_engine.query()의 반환값 (answer/sources/success/intent)
     """
     rag_engine = get_rag_engine()
-    return rag_engine.query(query)
+    return rag_engine.query(query, metrics_registry=metrics_registry)
 
 
 # 웹 검색 도구 정의
@@ -84,28 +87,3 @@ def get_tools():
         List[Tool]: 도구 리스트
     """
     return tools
-
-
-if __name__ == "__main__":
-    # 테스트 코드
-    print("=" * 60)
-    print("LangChain Tools 테스트")
-    print("=" * 60)
-
-    print("\n[도구 목록]")
-    for tool in tools:
-        print(f"\n이름: {tool.name}")
-        print(f"설명: {tool.description}")
-
-    # 웹 검색 도구 테스트
-    print("\n" + "=" * 60)
-    print("웹 검색 도구 테스트")
-    print("=" * 60)
-    test_query = "Python"
-    print(f"\n질문: {test_query}")
-    try:
-        result = web_search_tool.func(test_query)
-        print(f"\n결과:\n{result['answer'][:300]}...")
-        print(f"출처 수: {len(result['sources'])}")
-    except Exception as e:
-        print(f"오류: {e}")

@@ -22,6 +22,7 @@ LLM 호출이 불필요하게 중복됩니다. 따라서 여기서는 LLM에게 
 """
 
 import hashlib
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -37,6 +38,8 @@ from simple_qna_rag.config import (
     ROUTING_SIGNAL_OVERRIDE,
     USE_WEB_SEARCH,
 )
+from simple_qna_rag.observability.logging import log_event
+from simple_qna_rag.observability.metrics import record_fallback, record_stage_duration, record_stage_error
 from simple_qna_rag.query_router import extract_web_search_query
 from simple_qna_rag.query_router import route_query as keyword_fallback_route
 from simple_qna_rag.rag_engine import get_rag_engine
@@ -145,11 +148,12 @@ def _llm_decide_tool(question: str) -> tuple[Optional[str], Optional[str]]:
 
 
 def _log_signal_error(exc: Exception) -> None:
-    print(f"⚠️  라우팅 신호 분류 실패, NONE으로 간주하고 LLM에 위임: {exc}")
+    # M4.1 REPLACE(Design.md §6.1) — 예외 원문은 로그에 남기지 않는다.
+    log_event("routing", decision="signal_classification_error_fallback_to_llm", confidence=0.0)
 
 
 def _log_llm_error(exc: Exception) -> None:
-    print(f"⚠️  라우터 LLM 호출 실패, 결정론적 검색어로 대체: {exc}")
+    log_event("routing", decision="llm_error_fallback_to_keyword_query", confidence=0.0)
 
 
 def _decide_tool(question: str) -> tuple[Optional[str], Optional[str]]:
@@ -192,7 +196,17 @@ def _decide_tool(question: str) -> tuple[Optional[str], Optional[str]]:
     return _llm_decide_tool(question)
 
 
-def route_query(question: str) -> Dict[str, Any]:
+def _call_rag_tool(question: str, metrics_registry: Any) -> Dict[str, Any]:
+    """`rag_tool.func`(== `tools.rag_function`)를 호출한다. registry가 있을
+    때만 `metrics_registry` kwarg를 전달해, registry가 없는 기존 호출자
+    (CLI, 기존 테스트의 `assert_called_once_with(question)`)의 호출 시그니처를
+    그대로 보존한다."""
+    if metrics_registry is None:
+        return rag_tool.func(question)
+    return rag_tool.func(question, metrics_registry=metrics_registry)
+
+
+def route_query(question: str, *, metrics_registry: Any = None) -> Dict[str, Any]:
     """
     LLM 기반 Agent 라우팅 (웹검색 vs 문서 QA)
 
@@ -203,6 +217,9 @@ def route_query(question: str) -> Dict[str, Any]:
 
     Args:
         question: 사용자 질문
+        metrics_registry: `app.state.metrics_registry`(선택, REQ-004.1).
+            web/server.py의 `/rag` 핸들러만 실제로 전달한다 — CLI/키워드
+            폴백 경로는 항상 None이며, 이 경우 아래 계측 호출은 전부 no-op.
 
     Returns:
         dict: {
@@ -214,60 +231,40 @@ def route_query(question: str) -> Dict[str, Any]:
         }
     """
     if not USE_WEB_SEARCH:
-        result = get_rag_engine().query(question)
+        result = get_rag_engine().query(question, metrics_registry=metrics_registry)
         result["search_type"] = "document_qa"
         return result
 
+    t0 = time.perf_counter()
     try:
         tool_name, tool_query = _decide_tool(question)
-    except Exception as e:
-        print(f"⚠️  Agent 라우팅 실패, 키워드 라우터로 폴백: {e}")
+    except Exception:
+        record_stage_duration(metrics_registry, "routing", time.perf_counter() - t0)
+        record_stage_error(metrics_registry, "routing", "internal")
+        log_event("routing", decision="agent_routing_error_fallback_to_keyword", confidence=0.0)
         return keyword_fallback_route(question)
+    record_stage_duration(metrics_registry, "routing", time.perf_counter() - t0)
 
     if tool_name == "web_search":
-        print(f"\n🤖 Agent 선택: web_search (검색어: '{tool_query}')")
+        # M4.1 REPLACE(Design.md §6.1) — 검색어 원문은 로그에 남기지 않는다.
+        log_event("routing", decision="web_search", confidence=1.0)
+        t0 = time.perf_counter()
         result = web_search_tool.func(tool_query)
+        record_stage_duration(metrics_registry, "web_search", time.perf_counter() - t0)
         if not result.get("success"):
-            print("⚠️  웹검색 실패, document_qa로 재시도")
+            log_event("routing", decision="web_search_failed_retry_document_qa", confidence=1.0)
+            record_fallback(metrics_registry, "web_search", "other")
             # document_qa는 항상 원본 질문을 그대로 사용 (LLM이 재작성한 검색어가
             # 아니라 rag_engine/intent_classifier가 학습된 자연어 질문 형태를 기대함)
-            result = rag_tool.func(question)
+            result = _call_rag_tool(question, metrics_registry)
             result["search_type"] = "document_qa"
         return result
 
     if tool_name == "document_qa":
-        print("\n🤖 Agent 선택: document_qa")
-        result = rag_tool.func(question)
+        log_event("routing", decision="document_qa", confidence=1.0)
+        result = _call_rag_tool(question, metrics_registry)
         result["search_type"] = "document_qa"
         return result
 
-    print("⚠️  Agent가 도구를 선택하지 못함, 키워드 라우터로 폴백")
+    log_event("routing", decision="no_tool_selected_fallback_to_keyword", confidence=0.0)
     return keyword_fallback_route(question)
-
-
-if __name__ == "__main__":
-    # 테스트 코드 (키워드 없이도 웹검색/문서QA가 올바르게 갈리는지 확인)
-    test_questions = [
-        "오늘 서울 날씨 좀 웹에서 검색해줘",
-        "RAG에서 MMR이 뭐야?",
-        "최신 파이썬 버전이 몇이야? 인터넷에서 찾아줘",
-        "FAISS와 Elasticsearch를 비교해줘",
-    ]
-
-    print("=" * 60)
-    print("Agent Router 테스트")
-    print("=" * 60)
-
-    for question in test_questions:
-        print(f"\n질문: {question}")
-        try:
-            result = route_query(question)
-            print(f"검색 타입: {result.get('search_type', 'unknown')}")
-            print(f"성공: {result['success']}")
-            print(f"출처 수: {len(result.get('sources', []))}")
-        except Exception as e:
-            print(f"오류: {e}")
-            import traceback
-
-            traceback.print_exc()
-        print("-" * 60)

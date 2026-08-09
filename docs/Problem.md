@@ -92,6 +92,41 @@ M2 Answer 대상 29건에서 intent 정확도는 51.72%였습니다. 특히 `yes
 
 관련 마일스톤: `M4 — Production Readiness`
 
+## P1 — M4 상세 설계 품질 Gate 실패 (M4.1 분할 복구 중단)
+
+2026-08-08 기준 M4 Production Readiness 상세 설계는 기본 4회 리뷰를 모두
+소진했지만 최종 4.2/10, CRITICAL 0건, MAJOR 6건, MINOR 3건으로 Gate를
+통과하지 못했습니다. 조건부 연장 요건인 9.0 이상 및 MAJOR 2건 이하도 충족하지
+못해 구현 단계로 진행할 수 없습니다.
+
+잔여 핵심 문제:
+
+- QueryExecutor callback/loop-shutdown 경계의 worker 소유권과 slot 회수
+- Ollama trickle response까지 제한하는 overall worker deadline
+- legacy index approved-root symlink/provenance 경계
+- clean production container build와 완전한 result/evidence artifact
+- local/live/container 14-gate evidence의 run binding과 atomic assemble
+- 53개 Settings 필드와 acceptance/inventory 단일 원본 불일치
+
+재개 전에는 [M4 중단 보고서](milestones/m4-production-readiness/Stop_Report.md)의
+architecture 결정과 executable prototype 조건을 충족하고 새 설계 리뷰 사이클을
+승인해야 합니다.
+
+2026-08-08 업데이트: 사용자가 권고안을 승인해
+[M4 복구 결정](milestones/m4-production-readiness/Recovery_Decision.md)을 확정했습니다.
+기존 M4 설계는 동결하고 M4.1~M4.3으로 분할했으며, 현재 M4.1의 독립 요구사항과
+계획에 따라 복구를 진행합니다. 이 P1은 M4.1~M4.3 전체 완료 시 닫습니다.
+
+2026-08-08 추가 업데이트: M4.1 독립 설계는 Iteration 1~5에서
+4.7 → 7.6 → 8.8 → 9.2 → 9.3으로 개선됐으나, 최종 CRITICAL 0 / MAJOR 1 /
+MINOR 1로 9.7 Gate를 통과하지 못했습니다. Iteration 4와 5에서 M3 regression
+wrapper의 fingerprint 호출 경로가 실제 API로 실행되지 않는 동일 문제가 재발해
+조건부 연장을 즉시 중단했습니다. 상세 원인과 재개 조건은
+[M4.1 설계 중단 보고서](milestones/m4.1-configuration-observability/Stop_Report.md)에
+기록했습니다. 별도 재개 결정 전 M4.1 구현과 M4.2/M4.3 착수를 금지합니다.
+
+관련 마일스톤: `M4 — Production Readiness`
+
 ## P2 — 규칙 기반 Answer 평가의 false negative
 
 M2 자동 assertion 통과율은 75%였지만, 사람 검토 결과 누락된 8개 assertion은 답변에 의미상 모두 포함돼 있었습니다. 띄어쓰기, 영문 약어, underscore와 동의 표현 차이가 원인이었습니다.

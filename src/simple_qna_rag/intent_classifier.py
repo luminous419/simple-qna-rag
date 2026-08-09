@@ -76,15 +76,14 @@ def load_intent_classifier(model_dir: str = INTENT_MODEL_PATH):
     with open(config_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-    print(f"Intent Classifier 로딩 중: {model_dir}")
-
+    # M4.1 REPLACE(Design.md §6.1) — 모델/임베딩 절대경로는 콘솔/로그에
+    # 출력하지 않는다(REQ-003.3).
     # 임베딩 모델 이름 확인
     embedding_model_name = config.get("embedding_model_name")
     if not embedding_model_name:
         # 이전 버전 호환성: embedding_model 폴더가 있으면 그것을 사용
         embedding_model_path = os.path.join(model_dir, "embedding_model")
         if os.path.exists(embedding_model_path):
-            print(f"   임베딩 모델 로딩 (로컬): {embedding_model_path}")
             embedding_model = SentenceTransformer(embedding_model_path)
         else:
             raise FileNotFoundError(
@@ -93,7 +92,6 @@ def load_intent_classifier(model_dir: str = INTENT_MODEL_PATH):
             )
     else:
         # HuggingFace Hub에서 직접 로드
-        print(f"   임베딩 모델 로딩 (HuggingFace Hub): {embedding_model_name}")
         embedding_model = SentenceTransformer(embedding_model_name)
 
     # 분류 모델 생성
@@ -118,9 +116,6 @@ def load_intent_classifier(model_dir: str = INTENT_MODEL_PATH):
     _classifier_cache["model"] = model
     _classifier_cache["config"] = config
     _classifier_cache["embedding_model"] = embedding_model
-
-    print(f"✅ Intent Classifier 로드 완료")
-    print(f"   라벨: {config['labels']}")
 
     return model, config
 
@@ -176,25 +171,3 @@ def classify_intent_with_confidence(question: str, model_dir: str = INTENT_MODEL
     predicted_label = config["id_to_label"][str(pred_id)]
 
     return predicted_label, confidence
-
-
-if __name__ == "__main__":
-    # 테스트 코드
-    test_questions = [
-        "RAG에서 MMR이 뭐야?",
-        "FAISS와 Elasticsearch를 비교해줘",
-        "Python에서 FAISS를 설치하는 방법을 단계별로 알려줘",
-        "LangChain은 무료로 사용할 수 있나요?",
-        "그게 뭐였지?"
-    ]
-
-    print("=" * 60)
-    print("Intent Classifier 테스트")
-    print("=" * 60)
-
-    for question in test_questions:
-        intent, confidence = classify_intent_with_confidence(question)
-        print(f"\n질문: {question}")
-        print(f"의도: {intent} (신뢰도: {confidence:.4f})")
-
-    print("\n" + "=" * 60)

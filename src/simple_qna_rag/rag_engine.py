@@ -10,7 +10,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List
+from typing import Any, Optional, Dict, List
 
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -44,6 +44,8 @@ from simple_qna_rag.config import (
     ANSWER_TEMPLATE_MODE,
 )
 from simple_qna_rag.intent_classifier import classify_intent
+from simple_qna_rag.observability.logging import log_event
+from simple_qna_rag.observability.metrics import record_fallback, record_stage_duration, record_stage_error
 from simple_qna_rag.prompt_templates import get_template_by_intent
 from simple_qna_rag.vector_index import StoredVectorIndex, VectorIndexValidationError, VectorLookupError
 
@@ -113,7 +115,9 @@ class RAGEngine:
             self.intent_classifier_loaded = False
             self.stored_vector_index = None
             self.mmr_vector_status = {"source": "embed", "reason": None}
-            self._mmr_fallback_logged_reasons: set[str] = set()
+            # M4.1 REQ-004.1 — 쿼리당 발생한 fallback을 `query()`가 배출할 때까지
+            # 담아두는 큐. registry가 없을 때(CLI 등)도 안전하게 비워진다.
+            self._pending_fallback_events: list[tuple[str, str]] = []
             RAGEngine._initialized = True
 
     def initialize(self) -> bool:
@@ -124,16 +128,13 @@ class RAGEngine:
             bool: 초기화 성공 여부
         """
         try:
-            print("=" * 60)
-            print("🚀 RAG 엔진 초기화 시작")
-            print("=" * 60)
-
             # 1. 벡터스토어 로드
             self.vectorstore = self._load_vectorstore()
 
             # 1.5. MMR 저장 벡터 인덱스 구축(M3-REQ-002, 채택 시에만).
             # 검증 실패는 엔진 초기화 자체를 실패시키지 않고 embed 경로로
-            # 강등한다(Design.md §3.5).
+            # 강등한다(Design.md §3.5). `mmr_vector_status`가 판정 결과의
+            # single source다 — 콘솔 출력은 하지 않는다(M4.1 REPLACE, §6.1).
             if MMR_VECTOR_SOURCE == "stored":
                 try:
                     self.stored_vector_index = StoredVectorIndex.build(
@@ -142,19 +143,12 @@ class RAGEngine:
                         cosine_floor=MMR_VECTOR_COSINE_FLOOR,
                     )
                     self.mmr_vector_status = {"source": "stored", "reason": None}
-                    print(
-                        f"✅ MMR 저장 벡터 인덱스 구축 완료 "
-                        f"(문서 {self.stored_vector_index.stats.document_count}개, "
-                        f"검증 표본 {self.stored_vector_index.stats.validated_samples}개)"
-                    )
                 except VectorIndexValidationError as exc:
                     self.stored_vector_index = None
                     self.mmr_vector_status = {"source": "embed", "reason": exc.reason}
-                    print(f"⚠️  MMR 저장 벡터 인덱스 검증 실패({exc.reason}) — embed 경로로 강등합니다: {exc}")
 
             # 2. BM25 검색기 생성 (하이브리드 검색 사용 시)
             if USE_HYBRID_SEARCH:
-                print(f"\n🔧 BM25 검색기 생성 중...")
                 self.bm25_retriever = self._create_bm25_retriever(self.vectorstore)
 
             # 3. LLM 초기화
@@ -163,25 +157,22 @@ class RAGEngine:
             # 4. Dense Retriever 설정
             self.dense_retriever = self._setup_retriever()
 
-            print("\n" + "=" * 60)
-            print("✅ RAG 엔진 초기화 완료")
-            print("=" * 60)
             return True
 
-        except Exception as e:
-            print(f"❌ RAG 엔진 초기화 실패: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            # M4.1 REPLACE(Design.md §6.1) — 예외 원문/traceback은 로그에 남기지
+            # 않는다. 실패는 `get_rag_engine()`의 고정 문자열 RuntimeError로
+            # 안전하게 상위(readiness 503)로 전파된다.
             return False
 
     def _load_vectorstore(self) -> FAISS:
         """벡터스토어 로드"""
-        print(f"📂 벡터스토어 로딩 중: {VECTORSTORE_PATH}")
-
+        # M4.1 REQ-003.3 — 사용자 절대 경로(VECTORSTORE_PATH)는 콘솔/로그에
+        # 출력하지 않는다.
         if not os.path.exists(VECTORSTORE_PATH):
             raise FileNotFoundError(
-                f"벡터스토어가 존재하지 않습니다: {VECTORSTORE_PATH}\n"
-                f"먼저 simple-qna-rag-index를 실행하여 문서를 등록해주세요."
+                "벡터스토어가 존재하지 않습니다. "
+                "먼저 simple-qna-rag-index를 실행하여 문서를 등록해주세요."
             )
 
         embeddings = HuggingFaceEmbeddings(
@@ -196,7 +187,6 @@ class RAGEngine:
             allow_dangerous_deserialization=True
         )
 
-        print(f"✅ 벡터스토어 로드 완료 (FAISS IndexFlatIP)")
         return vectorstore
 
     def _create_bm25_retriever(self, vectorstore: FAISS):
@@ -206,8 +196,6 @@ class RAGEngine:
         all_docs = list(vectorstore.docstore._dict.values())
         tokenized_docs = [doc.page_content.split() for doc in all_docs]
         bm25 = BM25Okapi(tokenized_docs)
-
-        print(f"✅ BM25 인덱스 생성 완료 (문서 {len(all_docs)}개)")
 
         class BM25Retriever:
             def __init__(self, bm25_index, documents):
@@ -224,11 +212,8 @@ class RAGEngine:
         return BM25Retriever(bm25, all_docs)
 
     def _initialize_llm(self):
-        """LLM 초기화"""
-        print(f"🔧 LLM 초기화 중: {OLLAMA_MODEL}")
-        print(f"ℹ️  Ollama가 실행 중이고 {OLLAMA_MODEL} 모델이 설치되어 있어야 합니다.")
-        print(f"ℹ️  OLLAMA_BASE_URL: {OLLAMA_BASE_URL}")
-
+        """LLM 초기화. M4.1 REPLACE(Design.md §6.1) — OLLAMA_BASE_URL은
+        credential을 포함할 수 있으므로 콘솔/로그에 출력하지 않는다."""
         llm = OllamaLLM(
             model=OLLAMA_MODEL,
             base_url=OLLAMA_BASE_URL,
@@ -241,46 +226,17 @@ class RAGEngine:
 
         # 간단한 테스트
         _ = llm.invoke("test")
-        print(f"✅ LLM 초기화 완료")
 
         return llm
 
     def _setup_retriever(self):
         """Dense Retriever 설정"""
         if USE_HYBRID_SEARCH:
-            print(f"🔍 3-Stage Retrieval 파이프라인 설정")
-            print(f"   Stage 1 - Hybrid Search:")
-            print(f"      - Dense (FAISS): {DENSE_TOP_K}개")
-            print(f"      - Sparse (BM25): {BM25_TOP_K}개")
-            print(f"      - RRF 융합 후: {RRF_TOP_K}개")
-
             dense_retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
                 search_kwargs={"k": DENSE_TOP_K}
             )
-
-            if USE_MMR:
-                print(f"   Stage 2 - MMR (다양성 확보):")
-                print(f"      - lambda={MMR_LAMBDA} (0=최대 다양성, 1=최대 관련성)")
-                print(f"      - 출력: {MMR_K}개")
-
-            if USE_RERANKER:
-                stage_num = 3 if USE_MMR else 2
-                print(f"   Stage {stage_num} - Re-ranker:")
-                print(f"      - 모델: {RERANKER_MODEL}")
-                print(f"      - 최종 출력: {RERANKER_TOP_K}개")
-
-            # 전체 파이프라인 요약
-            pipeline_parts = [f"Hybrid({BM25_TOP_K}+{DENSE_TOP_K})", f"RRF({RRF_TOP_K})"]
-            if USE_MMR:
-                pipeline_parts.append(f"MMR({MMR_K})")
-            if USE_RERANKER:
-                pipeline_parts.append(f"Re-rank({RERANKER_TOP_K})")
-            print(f"   파이프라인: {' → '.join(pipeline_parts)}")
-
         elif USE_MMR:
-            print(f"🔍 Retriever 설정: MMR (다양성 확보)")
-            print(f"   - k={MMR_K}, fetch_k={MMR_FETCH_K}, lambda={MMR_LAMBDA}")
             dense_retriever = self.vectorstore.as_retriever(
                 search_type="mmr",
                 search_kwargs={
@@ -289,25 +245,12 @@ class RAGEngine:
                     "lambda_mult": MMR_LAMBDA
                 }
             )
-
-            if USE_RERANKER:
-                print(f"🔍 Re-ranker 활성화:")
-                print(f"   - 모델: {RERANKER_MODEL}")
-                print(f"   - 최종 문서 수: {RERANKER_TOP_K}")
         else:
-            print(f"🔍 Retriever 설정: Similarity (유사도)")
-            print(f"   - k={RETRIEVAL_K}")
             dense_retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
                 search_kwargs={"k": RETRIEVAL_K}
             )
 
-            if USE_RERANKER:
-                print(f"🔍 Re-ranker 활성화:")
-                print(f"   - 모델: {RERANKER_MODEL}")
-                print(f"   - 최종 문서 수: {RERANKER_TOP_K}")
-
-        print(f"✅ Retriever 설정 완료")
         return dense_retriever
 
     def _reciprocal_rank_fusion(self, bm25_docs, dense_docs, top_k: int = 20, k: int = 60):
@@ -339,9 +282,7 @@ class RAGEngine:
         from sentence_transformers import CrossEncoder
 
         if not hasattr(self, 'reranker_model'):
-            print(f"🔧 Re-ranker 모델 로딩 중: {RERANKER_MODEL}")
             self.reranker_model = CrossEncoder(RERANKER_MODEL, max_length=512)
-            print(f"✅ Re-ranker 모델 로드 완료")
 
         pairs = [[query, doc.page_content] for doc in documents]
         scores = self.reranker_model.predict(pairs)
@@ -367,7 +308,7 @@ class RAGEngine:
                 _bump(trace, "vector_lookup_misses", len(documents))
                 _bump(trace, "mmr_fallback")
                 _note(trace, f"fallback:{exc.reason}")
-                self._log_mmr_fallback_once(exc.reason)
+                self._record_mmr_fallback(exc.reason)
 
         vectors = np.array(
             [self.vectorstore.embeddings.embed_query(d.page_content) for d in documents],
@@ -376,11 +317,12 @@ class RAGEngine:
         _bump(trace, "candidate_embedding_calls", len(documents))
         return vectors
 
-    def _log_mmr_fallback_once(self, reason: str) -> None:
-        """trace와 독립적인, 엔진 인스턴스 단위 경고 중복 억제."""
-        if reason not in self._mmr_fallback_logged_reasons:
-            self._mmr_fallback_logged_reasons.add(reason)
-            print(f"⚠️  MMR 저장 벡터 폴백({reason}) — legacy embed 경로로 대체합니다.")
+    def _record_mmr_fallback(self, reason: str) -> None:
+        """M4.1 REQ-004.1 — MMR 저장 벡터 → embed 폴백을 `query()`가 이번
+        요청의 `rag_fallback_total{kind="mmr_vector_source"}` 계측으로 배출할
+        수 있도록 큐에 담는다(trace와 독립, M3 RetrievalTrace는 변경하지 않는
+        별도 projection). 콘솔 출력은 하지 않는다(M4.1 REPLACE, §6.1)."""
+        self._pending_fallback_events.append(("mmr_vector_source", reason))
 
     def _apply_mmr(
         self,
@@ -612,12 +554,17 @@ class RAGEngine:
         )
         return qa_chain.invoke({"context": context, "question": question})
 
-    def query(self, question: str) -> Dict[str, any]:
+    def query(self, question: str, *, metrics_registry: Any = None) -> Dict[str, any]:
         """
         질문에 대한 답변 생성 (Intent 분류 → 템플릿 선택 → 답변 생성)
 
         Args:
             question: 사용자 질문
+            metrics_registry: `app.state.metrics_registry`(선택). 주어지면
+                retrieval/generation stage duration/error와 저장 벡터
+                fallback을 실제 계측한다(REQ-004.1). None(CLI 등 registry가
+                없는 호출자)이면 계측 호출은 전부 no-op이다 — 시그니처와
+                반환값은 이전과 100% 동일하다.
 
         Returns:
             dict: {
@@ -627,13 +574,13 @@ class RAGEngine:
                 "intent": str  # 분류된 의도
             }
         """
+        stage_error_logged = False
         try:
             if not self.llm:
                 raise RuntimeError("RAG 엔진이 초기화되지 않았습니다.")
 
             # Intent Classifier 첫 로딩 메시지 (한 번만)
             if not self.intent_classifier_loaded:
-                print("\n🔧 Intent Classifier 로딩 중...")
                 self.intent_classifier_loaded = True
 
             # 1. Intent 분류 — ANSWER_TEMPLATE_MODE="default"이면 classifier를
@@ -646,27 +593,65 @@ class RAGEngine:
             else:
                 try:
                     intent = classify_intent(question)
-                    print(f"🎯 Intent 분류 결과: {intent}")
                 except FileNotFoundError:
                     # Intent Classifier 모델이 없으면 기본 템플릿 사용
-                    print("⚠️  Intent Classifier 모델을 찾을 수 없습니다. 기본 템플릿을 사용합니다.")
-                    print("   train_intent_classifier.py를 실행하여 모델을 학습하세요.")
+                    log_event("generation", stage="generation", duration_ms=0.0, error_code="internal")
+                    record_stage_error(metrics_registry, "generation", "internal")
                     intent = "other"
-                except Exception as e:
-                    print(f"⚠️  Intent 분류 실패: {e}. 기본 템플릿을 사용합니다.")
+                except Exception:
+                    log_event("generation", stage="generation", duration_ms=0.0, error_code="internal")
+                    record_stage_error(metrics_registry, "generation", "internal")
                     intent = "other"
 
             # 2. Intent에 맞는 템플릿 선택
             template_str = get_template_by_intent(intent)
 
-            # 3. 문서 검색
-            retrieved_docs = self._retrieve_documents(question)
+            # 3. 문서 검색 — retrieval stage duration/error 실계측(REQ-004.1).
+            # `_retrieve_documents()` 시그니처/내부는 그대로 두고(M3
+            # RetrievalTrace 불변), 이 메서드 바깥에서만 타이밍한다.
+            t0 = time.perf_counter()
+            try:
+                retrieved_docs = self._retrieve_documents(question)
+            except Exception:
+                duration_ms = (time.perf_counter() - t0) * 1000
+                log_event(
+                    "retrieval", stage="retrieval", duration_ms=duration_ms, error_code="internal"
+                )
+                record_stage_error(metrics_registry, "retrieval", "internal")
+                stage_error_logged = True
+                raise
+            duration_ms = (time.perf_counter() - t0) * 1000
+            log_event("retrieval", stage="retrieval", duration_ms=duration_ms)
+            record_stage_duration(metrics_registry, "retrieval", duration_ms / 1000)
+
+            # 3.5. 이번 검색에서 발생한 MMR 저장 벡터 fallback을 배출한다
+            # (kind="mmr_vector_source", REQ-004.1 stored fallback).
+            # `getattr` 방어: `object.__new__(RAGEngine)`으로 `__init__`을
+            # 우회하는 일부 단위 테스트 seam에는 이 속성이 없다.
+            pending_fallbacks = getattr(self, "_pending_fallback_events", None)
+            if pending_fallbacks:
+                for kind, reason in pending_fallbacks:
+                    record_fallback(metrics_registry, kind, reason)
+                pending_fallbacks.clear()
 
             # 4. 컨텍스트 생성
             context = self.build_context(retrieved_docs)
 
-            # 5. 답변 생성
-            answer = self.generate_answer(question, context, template_str)
+            # 5. 답변 생성 — generation stage duration/error 실계측.
+            t0 = time.perf_counter()
+            try:
+                answer = self.generate_answer(question, context, template_str)
+            except Exception:
+                duration_ms = (time.perf_counter() - t0) * 1000
+                log_event(
+                    "generation", stage="generation", duration_ms=duration_ms, error_code="internal"
+                )
+                record_stage_error(metrics_registry, "generation", "internal")
+                stage_error_logged = True
+                raise
+            duration_ms = (time.perf_counter() - t0) * 1000
+            log_event("generation", stage="generation", duration_ms=duration_ms)
+            record_stage_duration(metrics_registry, "generation", duration_ms / 1000)
 
             # 6. 출처 정보 포맷 (전체 반환, UI에서 제어)
             sources = self.format_sources(retrieved_docs)
@@ -679,9 +664,12 @@ class RAGEngine:
             }
 
         except Exception as e:
-            print(f"❌ 질의 처리 실패: {e}")
-            import traceback
-            traceback.print_exc()
+            # M4.1 REPLACE(Design.md §6.1) — 예외 원문/traceback은 로그에 남기지
+            # 않는다(exception_text/절대경로 금지). 응답 body의 오류 메시지는
+            # 기존 client 계약(REQ-006.1) 보존을 위해 str(e)를 유지한다.
+            if not stage_error_logged:
+                log_event("generation", stage="generation", duration_ms=0.0, error_code="internal")
+                record_stage_error(metrics_registry, "generation", "internal")
             return {
                 "answer": f"오류가 발생했습니다: {str(e)}",
                 "sources": [],
@@ -702,3 +690,15 @@ def get_rag_engine() -> RAGEngine:
         if not _rag_engine.initialize():
             raise RuntimeError("RAG 엔진 초기화 실패")
     return _rag_engine
+
+
+def _from_settings(cls, settings) -> RAGEngine:
+    """web bootstrap DI seam(Design.md §3.2 `engine_factory`). `settings`는
+    이미 검증된 process-wide 캐시(config.py facade와 동일 인스턴스, §4.3
+    `set_settings_for_process`)를 가리키므로, 이 메서드는 기존 싱글톤 초기화
+    경로(`get_rag_engine()`)를 그대로 재사용한다 — RAGEngine 내부를 Settings
+    주입식으로 다시 쓰지 않는다(제품 코드 최소 변경 원칙)."""
+    return get_rag_engine()
+
+
+RAGEngine.from_settings = classmethod(_from_settings)

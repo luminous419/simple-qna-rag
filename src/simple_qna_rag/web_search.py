@@ -5,7 +5,7 @@
 DuckDuckGo를 사용하여 웹 검색을 수행하고 결과를 포맷팅합니다.
 """
 
-import traceback
+import time
 from typing import List, Dict, Optional
 from ddgs import DDGS
 
@@ -14,6 +14,7 @@ from simple_qna_rag.config import (
     WEB_SEARCH_TIMEOUT,
     WEB_SEARCH_REGION
 )
+from simple_qna_rag.observability.logging import log_event
 
 
 def search_web(query: str, max_results: Optional[int] = None) -> List[Dict[str, str]]:
@@ -38,10 +39,8 @@ def search_web(query: str, max_results: Optional[int] = None) -> List[Dict[str, 
     if max_results is None:
         max_results = WEB_SEARCH_MAX_RESULTS
 
+    t0 = time.perf_counter()
     try:
-        print(f"\n🔍 웹 검색 시작: '{query}'")
-        print(f"   최대 결과 수: {max_results}")
-
         # DuckDuckGo 검색 실행
         # 주의: text()의 timelimit은 검색 결과의 최신성 필터(d/w/m/y)이며 요청 타임아웃이
         # 아님. 실제 HTTP 요청 타임아웃은 DDGS() 생성자의 timeout 인자로 설정한다.
@@ -62,14 +61,17 @@ def search_web(query: str, max_results: Optional[int] = None) -> List[Dict[str, 
                 "summary": result.get("body", "요약 없음")
             }
             formatted_results.append(formatted_result)
-            print(f"   {i}. {formatted_result['title'][:50]}...")
 
-        print(f"✅ 웹 검색 완료: {len(formatted_results)}개 결과 반환")
+        # M4.1 REPLACE(Design.md §6.1) — query/title/summary 원문은 로그에
+        # 남기지 않는다. duration만 구조화 이벤트로 발행한다(REQ-004.1).
+        duration_ms = (time.perf_counter() - t0) * 1000
+        log_event("web_search", stage="web_search", duration_ms=duration_ms)
         return formatted_results
 
-    except Exception as e:
-        print(f"❌ 웹 검색 실패: {e}")
-        traceback.print_exc()
+    except Exception:
+        # M4.1 REPLACE(Design.md §6.1) — 예외 원문/traceback은 로그에 남기지 않는다.
+        duration_ms = (time.perf_counter() - t0) * 1000
+        log_event("web_search", stage="web_search", duration_ms=duration_ms, error_code="upstream")
         return []
 
 
@@ -141,23 +143,3 @@ def search_and_format(query: str, max_results: Optional[int] = None) -> Dict[str
         "success": True,
         "search_type": "web_search"
     }
-
-
-if __name__ == "__main__":
-    # 테스트 코드
-    test_queries = [
-        "RAG 시스템",
-        "LangChain",
-        "Python FAISS"
-    ]
-
-    print("=" * 60)
-    print("웹 검색 모듈 테스트")
-    print("=" * 60)
-
-    for query in test_queries:
-        print(f"\n질문: {query}")
-        result = search_and_format(query, max_results=3)
-        print(f"\n답변:\n{result['answer']}")
-        print(f"\n출처 수: {len(result['sources'])}")
-        print("-" * 60)

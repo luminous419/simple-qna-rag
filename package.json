@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "description": "정적 프론트엔드(web/static/*.js)에 대한 tests/frontend 회귀 테스트 (Vitest + jsdom)",
+  "engines": {
+    "node": ">=22.22.2 <23"
+  },
   "scripts": {
     "test": "vitest run",
     "sync-vendor": "node scripts/sync-vendor.js",

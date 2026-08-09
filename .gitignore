@@ -52,3 +52,6 @@ node_modules/
 # 임시 파일
 *.tmp
 *.bak
+
+# M4.1 — CI가 생성하는 dependency snapshot artifact (커밋 대상 아님, Design.md §8.3)
+/dependency_snapshot.json

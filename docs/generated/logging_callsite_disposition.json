@@ -1,0 +1,583 @@
+{
+  "entries": [
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/_settings_bootstrap.py",
+      "identity": "cli/_settings_bootstrap.py::load_settings_or_exit#1",
+      "kind": "print",
+      "line": 24,
+      "scope": "load_settings_or_exit"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::ProgressTracker.start.print_progress#1",
+      "kind": "print",
+      "line": 143,
+      "scope": "ProgressTracker.start.print_progress"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::ProgressTracker.stop#1",
+      "kind": "print",
+      "line": 162,
+      "scope": "ProgressTracker.stop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#1",
+      "kind": "print",
+      "line": 176,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#10",
+      "kind": "print",
+      "line": 256,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#2",
+      "kind": "print",
+      "line": 177,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#3",
+      "kind": "print",
+      "line": 186,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#4",
+      "kind": "print",
+      "line": 187,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#5",
+      "kind": "print",
+      "line": 191,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#6",
+      "kind": "print",
+      "line": 218,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#7",
+      "kind": "print",
+      "line": 250,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#8",
+      "kind": "print",
+      "line": 254,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::create_vectorstore#9",
+      "kind": "print",
+      "line": 255,
+      "scope": "create_vectorstore"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#1",
+      "kind": "print",
+      "line": 49,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#2",
+      "kind": "print",
+      "line": 52,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#3",
+      "kind": "print",
+      "line": 54,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#4",
+      "kind": "print",
+      "line": 55,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#5",
+      "kind": "print",
+      "line": 70,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#6",
+      "kind": "print",
+      "line": 72,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#7",
+      "kind": "print",
+      "line": 84,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#8",
+      "kind": "print",
+      "line": 86,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::load_documents#9",
+      "kind": "print",
+      "line": 88,
+      "scope": "load_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#1",
+      "kind": "print",
+      "line": 286,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#10",
+      "kind": "print",
+      "line": 312,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#11",
+      "kind": "print",
+      "line": 313,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#12",
+      "kind": "print",
+      "line": 314,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#13",
+      "kind": "print",
+      "line": 315,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#14",
+      "kind": "print",
+      "line": 316,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#15",
+      "kind": "print",
+      "line": 317,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#16",
+      "kind": "print",
+      "line": 320,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#2",
+      "kind": "print",
+      "line": 287,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#3",
+      "kind": "print",
+      "line": 288,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#4",
+      "kind": "print",
+      "line": 294,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#5",
+      "kind": "print",
+      "line": 295,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#6",
+      "kind": "print",
+      "line": 302,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#7",
+      "kind": "print",
+      "line": 309,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#8",
+      "kind": "print",
+      "line": 310,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::main#9",
+      "kind": "print",
+      "line": 311,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::split_documents#1",
+      "kind": "print",
+      "line": 102,
+      "scope": "split_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/index_documents.py",
+      "identity": "cli/index_documents.py::split_documents#2",
+      "kind": "print",
+      "line": 112,
+      "scope": "split_documents"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::main#1",
+      "kind": "print",
+      "line": 111,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::main#2",
+      "kind": "print",
+      "line": 112,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::main#3",
+      "kind": "print",
+      "line": 113,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::main#4",
+      "kind": "print",
+      "line": 123,
+      "scope": "main"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#1",
+      "kind": "print",
+      "line": 43,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#10",
+      "kind": "print",
+      "line": 73,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#11",
+      "kind": "print",
+      "line": 74,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#12",
+      "kind": "print",
+      "line": 75,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#13",
+      "kind": "print",
+      "line": 79,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#14",
+      "kind": "print",
+      "line": 80,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#15",
+      "kind": "print",
+      "line": 81,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#16",
+      "kind": "print",
+      "line": 82,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#17",
+      "kind": "print",
+      "line": 84,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#18",
+      "kind": "print",
+      "line": 86,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#19",
+      "kind": "print",
+      "line": 89,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#2",
+      "kind": "print",
+      "line": 44,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#20",
+      "kind": "print",
+      "line": 92,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#21",
+      "kind": "print",
+      "line": 93,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#3",
+      "kind": "print",
+      "line": 45,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#4",
+      "kind": "print",
+      "line": 46,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#5",
+      "kind": "print",
+      "line": 47,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#6",
+      "kind": "print",
+      "line": 56,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#7",
+      "kind": "print",
+      "line": 61,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#8",
+      "kind": "print",
+      "line": 65,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/query.py",
+      "identity": "cli/query.py::run_query_loop#9",
+      "kind": "print",
+      "line": 72,
+      "scope": "run_query_loop"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/web.py",
+      "identity": "cli/web.py::_run_check_config#1",
+      "kind": "print",
+      "line": 50,
+      "scope": "_run_check_config"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "cli/web.py",
+      "identity": "cli/web.py::_run_check_config#2",
+      "kind": "print",
+      "line": 55,
+      "scope": "_run_check_config"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "observability/logging.py",
+      "identity": "observability/logging.py::<module>#1",
+      "kind": "logging",
+      "line": 157,
+      "scope": "<module>"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "observability/logging.py",
+      "identity": "observability/logging.py::<module>#2",
+      "kind": "logging",
+      "line": 160,
+      "scope": "<module>"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "observability/logging.py",
+      "identity": "observability/logging.py::log_event#1",
+      "kind": "logging",
+      "line": 230,
+      "scope": "log_event"
+    },
+    {
+      "disposition": "KEEP_CLI",
+      "file": "observability/logging.py",
+      "identity": "observability/logging.py::log_event_strict#1",
+      "kind": "logging",
+      "line": 242,
+      "scope": "log_event_strict"
+    }
+  ],
+  "schema_version": "1.0.0",
+  "totals": {
+    "by_disposition": {
+      "KEEP_CLI": 71
+    },
+    "by_kind": {
+      "logging": 4,
+      "print": 67
+    },
+    "count": 71
+  }
+}
