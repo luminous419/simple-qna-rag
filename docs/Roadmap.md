@@ -33,9 +33,9 @@ M2.5 Repo Structure   완료
         |
 M3 Retrieval Quality  완료
         |
-M4.1 Config & Observe 설계 Gate 중단               <-- 현재 위치
+M4.1 Config & Observe 운영 acceptance 미완료
         |
-M4.2 Safe Serving     예정
+M4.2 Safe Serving     예외 승인, 착수 가능          <-- 현재 위치
         |
 M4.3 Artifact/Deploy  예정
         |
@@ -188,7 +188,7 @@ Production Readiness입니다.
 
 ### M4 — Production Readiness
 
-**상태: 분할 복구 중단** — M4.1 설계 Iteration 5 Gate 미통과
+**상태: 분할 진행 중** — M4.1 운영 acceptance 부채를 보존하고 M4.2 착수 예외 승인
 
 목표: 단일 사용자 로컬 데모를 넘어 반복 가능하고 관측 가능한 내부 서비스 운영
 
@@ -234,13 +234,19 @@ Production Readiness입니다.
 - [M4.1 요구사항](milestones/m4.1-configuration-observability/Requirement.md)
 - [M4.1 개발 계획](milestones/m4.1-configuration-observability/Plan.md)
 - [M4.1 설계 중단 보고서](milestones/m4.1-configuration-observability/Stop_Report.md)
+- [M4.1 운영 acceptance 예외 결정](milestones/m4.1-configuration-observability/Operational_Acceptance_Exception.md)
 
 분할 실행:
 
-- **M4.1 Configuration & Observability Foundation — 설계 Gate 중단**:
-  Iteration 5에서 9.3/10, MAJOR 1건. 동일 fingerprint 호출 문제가 두 회 연속
-  재발해 조건부 연장을 중단했으며 별도 재개 결정 전 구현하지 않음
-- **M4.2 Safe Serving Boundary — 예정**: blocking offload, bounded queue,
+- **M4.1 Configuration & Observability Foundation — 구현 병합 / 운영 acceptance 미완료**:
+  recovery cycle에서 Code Review Iteration 5의 MAJOR 3건을 폐쇄하고 PR #15를
+  `master`에 병합했다. hosted Python/frontend CI는 통과했으나 self-hosted live
+  14-gate가 Linux X64 에뮬레이션의 45분 제한을 초과해 최종 aggregate와 receipt를
+  확보하지 못했다. M4.1은 완료로 표시하지 않으며 이 항목은 M4 release 차단
+  기술부채로 유지한다.
+- **M4.2 Safe Serving Boundary — 예외 승인, 착수 가능**: 사용자가 2026-08-10
+  M4.1 운영 acceptance 미완료 위험을 수용하고 정상 선행조건의 한정 예외를
+  승인했다. blocking offload, bounded queue,
   timeout/cancel/orphan, graceful drain, 입력·네트워크 경계와 부하 검증
 - **M4.3 Artifact & Deployment Safety — 예정**: versioned index, provenance,
   atomic activation/rollback, production container, 단일-workflow 전체 Gate
