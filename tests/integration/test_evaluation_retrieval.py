@@ -307,7 +307,7 @@ class TestMmrStoredVectorFallbackMatrix:
 
         engine.vectorstore = SimpleNamespace(embeddings=_Embeddings())
         engine.stored_vector_index = stored_index
-        engine._mmr_fallback_logged_reasons = set()
+        engine._pending_fallback_events = []
         return engine
 
     @pytest.mark.parametrize("reason", ["lookup_miss", "dimension_mismatch", "non_finite"])

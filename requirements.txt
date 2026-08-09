@@ -33,5 +33,8 @@ pydantic>=2,<3
 # 웹검색
 ddgs>=9.0.0
 
+# Observability
+prometheus-client==0.23.1
+
 # 테스트
 pytest>=8.0.0

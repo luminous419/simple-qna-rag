@@ -9,6 +9,7 @@ Query Router (키워드 기반 라우터)
 from typing import Dict, Any
 
 from simple_qna_rag.config import USE_WEB_SEARCH
+from simple_qna_rag.observability.logging import log_event
 from simple_qna_rag.rag_engine import get_rag_engine
 from simple_qna_rag.web_search import search_and_format
 
@@ -80,48 +81,20 @@ def route_query(question: str) -> Dict[str, Any]:
     use_web_search = any(keyword in question_lower for keyword in WEB_SEARCH_KEYWORDS)
 
     if use_web_search:
-        print("\n🌐 웹검색 모드 선택")
-        # 웹검색 키워드 제거하고 실제 검색어 추출
+        # M4.1 REPLACE(Design.md §6.1) — 추출된 검색어 원문은 로그에 남기지 않는다.
+        log_event("routing", decision="web_search", confidence=1.0)
         search_query = extract_web_search_query(question)
 
-        print(f"   추출된 검색어: '{search_query}'")
         result = search_and_format(search_query)
         if not result.get("success"):
-            print("⚠️  웹검색 실패, document_qa로 재시도")
+            log_event("routing", decision="web_search_failed_retry_document_qa", confidence=1.0)
             rag_engine = get_rag_engine()
             result = rag_engine.query(question)
             result["search_type"] = "document_qa"
         return result
     else:
-        print("\n📚 문서 QA 모드 선택")
+        log_event("routing", decision="document_qa", confidence=1.0)
         rag_engine = get_rag_engine()
         result = rag_engine.query(question)
         result["search_type"] = "document_qa"
         return result
-
-
-if __name__ == "__main__":
-    # 테스트 코드
-    test_questions = [
-        "웹검색으로 Python을 찾아줘",
-        "인터넷검색으로 RAG 시스템을 검색해줘",
-        "RAG에서 MMR이 뭐야?",  # 문서 QA
-    ]
-
-    print("=" * 60)
-    print("Query Router 테스트")
-    print("=" * 60)
-
-    for question in test_questions:
-        print(f"\n질문: {question}")
-        try:
-            result = route_query(question)
-            print(f"\n검색 타입: {result.get('search_type', 'unknown')}")
-            print(f"답변 길이: {len(result['answer'])} 자")
-            print(f"성공: {result['success']}")
-            print(f"출처 수: {len(result.get('sources', []))}")
-        except Exception as e:
-            print(f"오류: {e}")
-            import traceback
-            traceback.print_exc()
-        print("-" * 60)

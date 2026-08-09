@@ -18,14 +18,15 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from simple_qna_rag.config import (
-    EMBEDDING_MODEL_NAME,
-    VECTORSTORE_PATH,
-    DATA_DIR,
-    CHUNK_SIZE,
-    CHUNK_OVERLAP,
-    NORMALIZE_EMBEDDINGS,
-)
+# M4.1: config.py(및 그 아래 settings.py)는 exit-2 CLI group의 관례를 따라
+# main()에서 override 적용 직후에만 지연 import한다(Design.md §5.1) — 이
+# 모듈 top-level에서 더 이상 config를 import하지 않는다(M2-03 필수 수정).
+EMBEDDING_MODEL_NAME: str
+VECTORSTORE_PATH: str
+DATA_DIR: str
+CHUNK_SIZE: int
+CHUNK_OVERLAP: int
+NORMALIZE_EMBEDDINGS: bool
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -261,12 +262,27 @@ def main():
     """
     메인 함수: 문서 로드 -> 분할 -> 벡터스토어 생성 -> 저장
     """
-    global DATA_DIR, VECTORSTORE_PATH
+    global EMBEDDING_MODEL_NAME, VECTORSTORE_PATH, DATA_DIR, CHUNK_SIZE, CHUNK_OVERLAP, NORMALIZE_EMBEDDINGS
     args = build_parser().parse_args()
+    cli_overrides = {}
     if args.documents_dir:
-        DATA_DIR = str(Path(args.documents_dir).expanduser().resolve())
+        cli_overrides["SIMPLE_QNA_RAG_DOCUMENTS_DIR"] = args.documents_dir
     if args.vectorstore_dir:
-        VECTORSTORE_PATH = str(Path(args.vectorstore_dir).expanduser().resolve())
+        cli_overrides["SIMPLE_QNA_RAG_VECTORSTORE_DIR"] = args.vectorstore_dir
+
+    from simple_qna_rag.cli._settings_bootstrap import load_settings_or_exit
+
+    load_settings_or_exit(cli_overrides)
+
+    from simple_qna_rag import config as _config
+
+    EMBEDDING_MODEL_NAME = _config.EMBEDDING_MODEL_NAME
+    VECTORSTORE_PATH = _config.VECTORSTORE_PATH
+    DATA_DIR = _config.DATA_DIR
+    CHUNK_SIZE = _config.CHUNK_SIZE
+    CHUNK_OVERLAP = _config.CHUNK_OVERLAP
+    NORMALIZE_EMBEDDINGS = _config.NORMALIZE_EMBEDDINGS
+
     print("=" * 60)
     print("📚 문서 등록 프로그램 시작")
     print("=" * 60)

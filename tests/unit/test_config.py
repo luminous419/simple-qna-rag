@@ -67,10 +67,22 @@ def test_env_bool_true_values(monkeypatch, value):
     assert _env_bool("TEST_FLAG", False) is True
 
 
-@pytest.mark.parametrize("value", ["0", "false", "no", "off", "", "garbage"])
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", "FALSE", "Off"])
 def test_env_bool_false_values(monkeypatch, value):
     monkeypatch.setenv("TEST_FLAG", value)
     assert _env_bool("TEST_FLAG", True) is False
+
+
+@pytest.mark.parametrize("value", ["", "garbage"])
+def test_env_bool_invalid_values_raise(monkeypatch, value):
+    # M4.1 Design.md §4.3 — `_env_bool` now delegates to the FieldSpec bool
+    # parser, which is stricter than the pre-M4.1 "silently False" behavior:
+    # unrecognized values raise instead of guessing (env unset/"" is the only
+    # falsy special case handled separately by `Settings.from_sources()`;
+    # `_env_bool` itself, called directly with a garbage/empty string, raises).
+    monkeypatch.setenv("TEST_FLAG", value)
+    with pytest.raises(ValueError):
+        _env_bool("TEST_FLAG", True)
 
 
 def test_env_bool_unset_uses_default(monkeypatch):

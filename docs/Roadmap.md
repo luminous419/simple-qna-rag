@@ -33,7 +33,11 @@ M2.5 Repo Structure   완료
         |
 M3 Retrieval Quality  완료
         |
-M4 Production Ready   예정                         <-- 현재 위치
+M4.1 Config & Observe 설계 Gate 중단               <-- 현재 위치
+        |
+M4.2 Safe Serving     예정
+        |
+M4.3 Artifact/Deploy  예정
         |
 M5 Scale & Advanced   조건부
 ```
@@ -184,7 +188,7 @@ Production Readiness입니다.
 
 ### M4 — Production Readiness
 
-**상태: 예정**
+**상태: 분할 복구 중단** — M4.1 설계 Iteration 5 Gate 미통과
 
 목표: 단일 사용자 로컬 데모를 넘어 반복 가능하고 관측 가능한 내부 서비스 운영
 
@@ -204,6 +208,42 @@ Production Readiness입니다.
 - 새 환경에서 문서화된 절차로 동일한 서비스를 재현할 수 있습니다.
 - 합의된 동시 요청, latency, 오류율 기준을 충족합니다.
 - 장애 원인과 처리 단계를 로그 및 메트릭으로 확인할 수 있습니다.
+
+확정 범위:
+
+- 단일 typed settings와 시작 전 fail-closed 검증
+- Python transitive dependency lock, Node 지원 버전 및 실행 fingerprint
+- payload-safe JSON 로그, bounded metrics와 request/stage 상관관계
+- readiness/liveness, graceful drain, bounded blocking offload와 overload 계약
+- provenance manifest를 가진 versioned index의 staging·원자 활성화·rollback
+- 비루트 OCI container, 내부 배포 및 reverse proxy 보안 운영 가이드
+- M3 14개 품질 gate와 dataset/corpus/vectorstore fingerprint 보존
+
+조건부/제외 범위:
+
+- TLS·인증·사용자별 rate limiting은 신뢰망 밖 노출 시 reverse proxy에서 필수
+- 외부 metrics backend, vector DB, 작업 큐, Kubernetes와 autoscaling은 M5 검토
+- 대형 모델 메모리를 중복하는 multi-worker를 M4 기본값으로 사용하지 않음
+
+개발 문서:
+
+- [M4 요구사항](milestones/m4-production-readiness/Requirement.md)
+- [M4 개발 계획](milestones/m4-production-readiness/Plan.md)
+- [M4 중단 보고서](milestones/m4-production-readiness/Stop_Report.md)
+- [M4 복구 결정](milestones/m4-production-readiness/Recovery_Decision.md)
+- [M4.1 요구사항](milestones/m4.1-configuration-observability/Requirement.md)
+- [M4.1 개발 계획](milestones/m4.1-configuration-observability/Plan.md)
+- [M4.1 설계 중단 보고서](milestones/m4.1-configuration-observability/Stop_Report.md)
+
+분할 실행:
+
+- **M4.1 Configuration & Observability Foundation — 설계 Gate 중단**:
+  Iteration 5에서 9.3/10, MAJOR 1건. 동일 fingerprint 호출 문제가 두 회 연속
+  재발해 조건부 연장을 중단했으며 별도 재개 결정 전 구현하지 않음
+- **M4.2 Safe Serving Boundary — 예정**: blocking offload, bounded queue,
+  timeout/cancel/orphan, graceful drain, 입력·네트워크 경계와 부하 검증
+- **M4.3 Artifact & Deployment Safety — 예정**: versioned index, provenance,
+  atomic activation/rollback, production container, 단일-workflow 전체 Gate
 
 ### M5 — Scale & Advanced Capabilities
 

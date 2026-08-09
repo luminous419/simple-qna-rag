@@ -148,6 +148,58 @@ def test_answers_warmup_not_performed_blocks_answer_latency_gate() -> None:
     assert item["pass"] is None
 
 
+def test_single_run_routing_uses_raw_document_route_correct_count() -> None:
+    # CR-I2-MAJ-02: a single-run (aggregate=None) routing report already
+    # carries the raw document_route_correct count at the top level
+    # (evaluate_routing() -> build_routing_payload()) — the gate must read it
+    # directly instead of discarding it via the aggregate/recall path.
+    payload = _full_pass_payload()
+    payload["routing"] = {
+        "aggregate": None,
+        "per_run": None,
+        "correct_count": 70,
+        "document_route_correct": 61,
+        "web_search_correct": 15,
+        "precision_recall_f1": {"document_qa": {"recall": 1.0}},
+    }
+    result = compare.evaluate_gates(payload)
+    item = next(i for i in result["items"] if i["id"] == "routing_document_route_recall_median")
+    assert item["pass"] is True
+    assert item["metric"] == 61
+
+
+def test_single_run_routing_document_route_correct_below_threshold_fails() -> None:
+    payload = _full_pass_payload()
+    payload["routing"] = {
+        "aggregate": None,
+        "per_run": None,
+        "correct_count": 70,
+        "document_route_correct": 53,
+        "web_search_correct": 15,
+        "precision_recall_f1": {"document_qa": {"recall": 53 / 61}},
+    }
+    result = compare.evaluate_gates(payload)
+    item = next(i for i in result["items"] if i["id"] == "routing_document_route_recall_median")
+    assert item["pass"] is False
+    assert item["metric"] == 53
+
+
+def test_single_run_routing_missing_raw_count_yields_pass_none() -> None:
+    # Genuinely absent (not just derivable-but-discarded) still yields
+    # pass=None rather than a fabricated value.
+    payload = _full_pass_payload()
+    payload["routing"] = {
+        "aggregate": None,
+        "per_run": None,
+        "correct_count": 70,
+        "web_search_correct": 15,
+        "precision_recall_f1": {"document_qa": {"recall": 1.0}},
+    }
+    result = compare.evaluate_gates(payload)
+    item = next(i for i in result["items"] if i["id"] == "routing_document_route_recall_median")
+    assert item["pass"] is None
+
+
 def test_source_any_hit_must_equal_one() -> None:
     payload = _full_pass_payload()
     payload["answers"]["source"]["any_hit_rate"] = 0.99

@@ -137,11 +137,12 @@ def _routing_gate_inputs(routing: dict | None) -> dict:
         doc_correct = _get(routing, "aggregate/document_route_correct/median")
     else:
         accuracy_correct = routing.get("correct_count")
-        doc_correct = _get(routing, "precision_recall_f1/document_qa/recall")
-        if doc_correct is not None and isinstance(doc_correct, float):
-            # legacy single-run reports don't carry a raw count; treat as
-            # not comparable via CountGate (percentage != count).
-            doc_correct = None
+        # single-run reports already carry the raw count at the top level
+        # (evaluate_routing() -> build_routing_payload() via **result) — use
+        # it directly instead of deriving from precision_recall_f1's recall
+        # ratio, which CountGate can't compare against a correct/denominator
+        # pair (CR-I2-MAJ-02).
+        doc_correct = routing.get("document_route_correct")
 
     web_recall_ok: bool | None = None
     if per_run:

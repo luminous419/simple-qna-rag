@@ -1,55 +1,36 @@
 #!/usr/bin/env python3
-"""
-FastAPI 기반 웹 서버
+"""FastAPI 기반 웹 서버 — M4.1 bootstrap/lifespan/health redesign (Design.md §3).
 
-RAG 엔진을 백엔드로 사용하는 웹 인터페이스 제공
+`create_app()`은 `Bootstrap`(§3.2, config.py/settings.py 미import)만으로
+health route를 최우선 등록한다 — Settings 로딩이나 RAG 엔진 초기화가
+실패해도 이 모듈의 import와 `create_app()` 호출 자체는 항상 성공한다.
+Settings/엔진 로딩은 lifespan(§3.3) 안에서만 시도되고, 실패는 예외로
+전파되지 않으며 `/health/ready` 503으로 표현된다.
 """
 
-import argparse
-from typing import Optional
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from typing import Any, Callable, Optional
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 import uvicorn
 
-from simple_qna_rag.agent import route_query
-from simple_qna_rag.config import STATIC_DIR, TEMPLATES_DIR
-from simple_qna_rag.rag_engine import get_rag_engine
+from simple_qna_rag.observability.health import evaluate_readiness
+from simple_qna_rag.observability.logging import SERVICE_VERSION, log_event
+from simple_qna_rag.observability.metrics import build_metrics_registry, clamp_readiness_reason
+from simple_qna_rag.observability.request_context import RequestContextMiddleware
+from simple_qna_rag.settings import Settings, SettingsError, get_settings
+from simple_qna_rag.web.bootstrap import Bootstrap, load_bootstrap
 
-# FastAPI 앱 생성
-app = FastAPI(
-    title="Simple Q&A RAG System",
-    description="문서 질의응답 시스템 웹 인터페이스",
-    version="1.0.0"
-)
-
-# 템플릿 설정
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
-
-# 정적 파일(프론트엔드 JS) 서빙
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-# RAG 엔진 초기화 (앱 시작 시 한 번만)
-rag_engine = None
+_HEALTH_DEPRECATION_SUNSET = "Fri, 06 Nov 2026 00:00:00 GMT"
 
 
-@app.on_event("startup")
-async def startup_event():
-    """서버 시작 시 RAG 엔진 초기화"""
-    global rag_engine
-    print("\n🚀 웹 서버 시작 중...")
-    try:
-        rag_engine = get_rag_engine()
-        print("✅ RAG 엔진 로드 완료")
-    except Exception as e:
-        print(f"❌ RAG 엔진 초기화 실패: {e}")
-        raise
-
-
-# Request/Response 모델
 class QueryRequest(BaseModel):
     question: str
 
@@ -62,76 +43,161 @@ class QueryResponse(BaseModel):
     intent: Optional[str] = None
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    """메인 페이지"""
-    return templates.TemplateResponse("index.html", {"request": request})
+def _mount_static_and_templates(app: FastAPI, bootstrap: Bootstrap) -> str | None:
+    try:
+        if not bootstrap.static_dir.is_dir():
+            raise NotADirectoryError
+        app.mount("/static", StaticFiles(directory=bootstrap.static_dir), name="static")
+        if not bootstrap.templates_dir.is_dir():
+            raise NotADirectoryError
+        app.state.templates = Jinja2Templates(directory=bootstrap.templates_dir)
+    except (FileNotFoundError, NotADirectoryError):
+        return "static_mount_failed"
+    return None
 
 
-@app.post("/rag", response_model=QueryResponse)
-async def rag_query(request: QueryRequest):
-    """
-    RAG 질의 API
+def _default_engine_factory(settings: Any) -> Any:
+    # Lazy import — importing rag_engine.py transitively imports config.py,
+    # which materializes Settings eagerly. Deferring this import until after
+    # `settings_loader()` has already succeeded (see `_make_lifespan` below)
+    # guarantees config.py's own `get_settings()` call hits the already-valid
+    # process cache instead of re-validating and potentially raising.
+    from simple_qna_rag.rag_engine import RAGEngine
 
-    Args:
-        request: QueryRequest (question: str)
+    return RAGEngine.from_settings(settings)
 
-    Returns:
-        QueryResponse: {
-            answer: str,
-            sources: list,
-            success: bool
-        }
-    """
-    if not rag_engine:
+
+def _make_lifespan(
+    settings_loader: Callable[[], Any], engine_factory: Callable[[Any], Any]
+):
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        try:
+            app.state.settings = settings_loader()
+            app.state.settings_error = None
+        except SettingsError as exc:
+            app.state.settings = None
+            app.state.settings_error = str(exc)
+
+        if app.state.settings is not None:
+            try:
+                app.state.engine = engine_factory(app.state.settings)
+                app.state.engine_error = None
+            except Exception as exc:  # noqa: BLE001 - expressed via health, never re-raised
+                app.state.engine = None
+                app.state.engine_error = str(exc)
+        else:
+            app.state.engine, app.state.engine_error = None, None
+
+        _, reason = evaluate_readiness(
+            getattr(app.state, "bootstrap_error", None),
+            app.state.settings_error,
+            app.state.engine_error,
+        )
+        registry = app.state.metrics_registry
+        registry.rag_readiness.labels(reason=clamp_readiness_reason(reason)).set(1)
+        log_event("startup", reason=reason, metrics_registry=registry)
+        yield
+
+    return lifespan
+
+
+def _register_health_routes(app: FastAPI) -> None:
+    @app.get("/health/live")
+    async def health_live() -> JSONResponse:
+        return JSONResponse(status_code=200, content={"status": "ok"})
+
+    @app.get("/health/ready")
+    async def health_ready(request: Request) -> JSONResponse:
+        status_code, reason = evaluate_readiness(
+            getattr(request.app.state, "bootstrap_error", None),
+            getattr(request.app.state, "settings_error", None),
+            getattr(request.app.state, "engine_error", None),
+        )
         return JSONResponse(
-            status_code=500,
-            content={
-                "answer": "RAG 엔진이 초기화되지 않았습니다.",
-                "sources": [],
-                "success": False
-            }
+            status_code=status_code,
+            content={"status": "ok" if status_code == 200 else "not_ready", "reason": reason},
         )
 
-    print(f"\n📝 질문 수신: {request.question}")
+    @app.get("/health")
+    async def health_deprecated(request: Request) -> JSONResponse:
+        """1-release deprecated alias(REQ-005.3) — body shape/semantics는
+        M4.1 이전 버전과 동일하게 보존한다: 엔진이 없어도 status는 항상
+        "healthy"였다."""
+        engine = getattr(request.app.state, "engine", None)
+        response = JSONResponse(
+            content={"status": "healthy", "rag_engine_initialized": engine is not None}
+        )
+        response.headers["Deprecation"] = "true"
+        response.headers["Sunset"] = _HEALTH_DEPRECATION_SUNSET
+        return response
 
-    # Agent 기반 라우팅 (웹검색 또는 문서 QA를 LLM이 선택)
-    result = route_query(request.question)
-
-    print(f"✅ 답변 생성 완료 (타입: {result.get('search_type', 'unknown')})")
-
-    return QueryResponse(**result)
-
-
-@app.get("/health")
-async def health_check():
-    """헬스 체크"""
-    return {
-        "status": "healthy",
-        "rag_engine_initialized": rag_engine is not None
-    }
-
-
-def start_server(host: str = "0.0.0.0", port: int = 8000):
-    """웹 서버 시작"""
-    print(f"\n🌐 웹 서버 시작: http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    @app.get("/metrics")
+    async def metrics_endpoint(request: Request) -> Response:
+        registry = request.app.state.metrics_registry
+        return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="simple-qna-rag-web",
-        description="Simple Q&A RAG FastAPI 서버를 실행합니다.",
+def _register_api_routes(app: FastAPI) -> None:
+    @app.get("/", response_class=HTMLResponse)
+    async def home(request: Request):
+        templates = getattr(request.app.state, "templates", None)
+        if templates is None:
+            return HTMLResponse("static assets unavailable", status_code=503)
+        return templates.TemplateResponse(request, "index.html", {"request": request})
+
+    @app.post("/rag", response_model=QueryResponse)
+    async def rag_query(payload: QueryRequest, request: Request):
+        if getattr(request.app.state, "engine", None) is None:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "answer": "RAG 엔진이 초기화되지 않았습니다.",
+                    "sources": [],
+                    "success": False,
+                },
+            )
+
+        from simple_qna_rag.agent import route_query  # lazy — engine already proved importable
+
+        registry = getattr(request.app.state, "metrics_registry", None)
+        result = route_query(payload.question, metrics_registry=registry)
+        return QueryResponse(**result)
+
+
+def create_app(
+    bootstrap: Bootstrap | None = None,
+    settings_loader: Callable[[], Any] | None = None,
+    engine_factory: Callable[[Any], Any] | None = None,
+) -> FastAPI:
+    bootstrap = bootstrap if bootstrap is not None else load_bootstrap()
+    settings_loader = settings_loader if settings_loader is not None else get_settings
+    engine_factory = engine_factory if engine_factory is not None else _default_engine_factory
+
+    app = FastAPI(
+        title="Simple Q&A RAG System",
+        description="문서 질의응답 시스템 웹 인터페이스",
+        version=SERVICE_VERSION,
+        lifespan=_make_lifespan(settings_loader, engine_factory),
     )
-    parser.add_argument("--host", default="0.0.0.0", help="바인딩 host")
-    parser.add_argument("--port", type=int, default=8000, help="바인딩 port")
-    return parser
+    app.add_middleware(RequestContextMiddleware)
+    app.state.metrics_registry = build_metrics_registry()
+    _register_health_routes(app)
+    app.state.bootstrap_error = _mount_static_and_templates(app, bootstrap)
+    _register_api_routes(app)
+    return app
 
 
-def main() -> None:
-    args = build_parser().parse_args()
-    start_server(host=args.host, port=args.port)
+# Module-level `app` — importable regardless of Settings validity (M1-01),
+# and required by the CI smoke test `python -c "from ...web.server import app"`.
+app = create_app()
 
 
-if __name__ == "__main__":
-    main()
+def start_server(
+    host: str = "0.0.0.0", port: int = 8000, cli_overrides: dict[str, str] | None = None
+) -> None:
+    cli_overrides = cli_overrides or {}
+    server_app = create_app(
+        settings_loader=lambda: Settings.from_sources(cli_overrides=cli_overrides)
+    )
+    uvicorn.run(server_app, host=host, port=port)

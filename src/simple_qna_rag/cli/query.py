@@ -7,7 +7,6 @@ RAG 코어 엔진을 사용
 """
 
 import argparse
-import os
 import sys
 
 def build_parser() -> argparse.ArgumentParser:
@@ -97,10 +96,16 @@ def run_query_loop(rag_engine):
 def main():
     """메인 함수"""
     args = build_parser().parse_args()
+    cli_overrides = {}
     if args.vectorstore_dir:
-        os.environ["SIMPLE_QNA_RAG_VECTORSTORE_DIR"] = args.vectorstore_dir
+        cli_overrides["SIMPLE_QNA_RAG_VECTORSTORE_DIR"] = args.vectorstore_dir
     if args.model_dir:
-        os.environ["SIMPLE_QNA_RAG_MODEL_DIR"] = args.model_dir
+        cli_overrides["SIMPLE_QNA_RAG_MODEL_DIR"] = args.model_dir
+
+    from simple_qna_rag.cli._settings_bootstrap import load_settings_or_exit
+
+    load_settings_or_exit(cli_overrides)
+
     from simple_qna_rag.rag_engine import get_rag_engine
 
     print("=" * 60)
