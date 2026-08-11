@@ -102,10 +102,7 @@ async def test_abandoned_holds_slot_until_future_done(m42_receipt):
         await handle.result()
     assert (executor.snapshot().running, executor.snapshot().orphaned) == (1, 1)
     release.set()
-    for _ in range(100):
-        if executor.snapshot().running == 0:
-            break
-        await asyncio.sleep(0)
+    assert await executor.wait_drained(2)
     assert (executor.snapshot().running, executor.snapshot().orphaned) == (0, 0)
     executor.snapshot()
     executor.shutdown()

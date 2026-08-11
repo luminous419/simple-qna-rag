@@ -92,10 +92,7 @@ async def _prove_orders(app, executor, blocker_factory=None):
         if blocker is not None:
             blocker[0].set()
             await blocker[1].result()
-        for _ in range(100):
-            if executor.snapshot().running == 0:
-                break
-            await asyncio.sleep(0)
+        assert await executor.wait_drained(2)
         after = executor.snapshot()
         winner = state["rag_arbiter"]["winner"]
         winners[order] = winner
