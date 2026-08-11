@@ -15,6 +15,7 @@ from simple_qna_rag.config import (
     WEB_SEARCH_REGION
 )
 from simple_qna_rag.observability.logging import log_event
+from simple_qna_rag.observability.deadline import current_deadline
 
 
 def search_web(query: str, max_results: Optional[int] = None) -> List[Dict[str, str]]:
@@ -44,7 +45,12 @@ def search_web(query: str, max_results: Optional[int] = None) -> List[Dict[str, 
         # DuckDuckGo 검색 실행
         # 주의: text()의 timelimit은 검색 결과의 최신성 필터(d/w/m/y)이며 요청 타임아웃이
         # 아님. 실제 HTTP 요청 타임아웃은 DDGS() 생성자의 timeout 인자로 설정한다.
-        with DDGS(timeout=WEB_SEARCH_TIMEOUT) as ddgs:
+        deadline = current_deadline()
+        remaining = deadline.remaining() if deadline is not None else float(WEB_SEARCH_TIMEOUT)
+        if remaining <= 0:
+            log_event("web_search", stage="web_search", duration_ms=0.0, error_code="timeout")
+            return []
+        with DDGS(timeout=min(float(WEB_SEARCH_TIMEOUT), remaining)) as ddgs:
             results = list(ddgs.text(
                 query=query,
                 region=WEB_SEARCH_REGION,

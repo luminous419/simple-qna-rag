@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from simple_qna_rag.settings import Settings, SettingsError
+from simple_qna_rag.settings import Settings, SettingsError, get_settings
 from simple_qna_rag.web.bootstrap import Bootstrap
 from simple_qna_rag.web.server import create_app
 
@@ -26,7 +26,7 @@ def test_health_live_is_always_200_even_when_everything_else_fails():
 
 def test_health_ready_ok_when_all_states_clear():
     app = _app_with(
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=lambda settings: object(),
     )
     with TestClient(app) as client:
@@ -51,7 +51,7 @@ def test_health_ready_engine_init_failed():
         raise RuntimeError("model load failed")
 
     app = _app_with(
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=_raise_engine,
     )
     with TestClient(app) as client:
@@ -71,7 +71,7 @@ def test_health_ready_static_mount_failed_takes_precedence(tmp_path):
 
     app = _app_with(
         bootstrap=bootstrap,
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=_raise_engine,
     )
     with TestClient(app) as client:
@@ -82,7 +82,7 @@ def test_health_ready_static_mount_failed_takes_precedence(tmp_path):
 
 def test_deprecated_health_alias_headers_and_body_shape():
     app = _app_with(
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=lambda settings: object(),
     )
     with TestClient(app) as client:
@@ -113,7 +113,7 @@ def test_deprecated_health_alias_still_healthy_status_when_engine_missing():
 
 def test_metrics_endpoint_exposes_readiness_gauge():
     app = _app_with(
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=lambda settings: object(),
     )
     with TestClient(app) as client:

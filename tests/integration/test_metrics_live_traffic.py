@@ -22,7 +22,7 @@ from langchain_core.runnables import RunnableLambda
 from prometheus_client.parser import text_string_to_metric_families
 
 from simple_qna_rag import agent, rag_engine
-from simple_qna_rag.settings import Settings
+from simple_qna_rag.settings import Settings, get_settings
 from simple_qna_rag.web.server import create_app
 
 REQUEST_COUNT = 1000
@@ -44,7 +44,7 @@ def _fake_engine() -> rag_engine.RAGEngine:
 
 def _ready_app():
     return create_app(
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=lambda settings: object(),
     )
 

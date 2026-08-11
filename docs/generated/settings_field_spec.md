@@ -47,6 +47,14 @@
 | 39 | `ANSWER_TEMPLATE_MODE` | Literal | 'default' | — | SIMPLE_QNA_RAG_ANSWER_TEMPLATE_MODE | str | — | 없음 | rag_engine.py | PASS | None | None |
 | 40 | `INTENT_CONFIDENCE_FLOOR` | float | 0.0 | — | SIMPLE_QNA_RAG_INTENT_CONFIDENCE_FLOOR | float | — | 0<=x<=1 | — | PASS | None | None |
 | 41 | `BM25_TOKENIZER` | Literal | 'whitespace' | — | SIMPLE_QNA_RAG_BM25_TOKENIZER | str | — | 없음 | tests/unit/test_config.py | PASS | None | None |
+| 42 | `QUERY_CONCURRENCY_LIMIT` | int | 1 | — | SIMPLE_QNA_RAG_QUERY_CONCURRENCY_LIMIT | int | — | _check | web/concurrency.py | PASS | None | None |
+| 43 | `QUERY_QUEUE_LIMIT` | int | 4 | — | SIMPLE_QNA_RAG_QUERY_QUEUE_LIMIT | int | — | _check | web/concurrency.py | PASS | None | None |
+| 44 | `QUERY_QUEUE_TIMEOUT_SECONDS` | float | 5.0 | — | SIMPLE_QNA_RAG_QUERY_QUEUE_TIMEOUT_SECONDS | float | — | _check, model: QUERY_QUEUE_TIMEOUT_SECONDS < QUERY_EXECUTION_TIMEOUT_SECONDS | web/concurrency.py | PASS | None | None |
+| 45 | `QUERY_EXECUTION_TIMEOUT_SECONDS` | float | 90.0 | — | SIMPLE_QNA_RAG_QUERY_EXECUTION_TIMEOUT_SECONDS | float | — | _check, model: QUERY_QUEUE_TIMEOUT_SECONDS < QUERY_EXECUTION_TIMEOUT_SECONDS | web/concurrency.py | PASS | None | None |
+| 46 | `SHUTDOWN_GRACE_SECONDS` | float | 30.0 | — | SIMPLE_QNA_RAG_SHUTDOWN_GRACE_SECONDS | float | — | _check | web/server.py | PASS | None | None |
+| 47 | `MAX_REQUEST_BODY_BYTES` | int | 16384 | — | SIMPLE_QNA_RAG_MAX_REQUEST_BODY_BYTES | int | — | _check | web/body_limit.py | PASS | None | None |
+| 48 | `MAX_QUESTION_CHARS` | int | 4000 | — | SIMPLE_QNA_RAG_MAX_QUESTION_CHARS | int | — | _check | web/server.py | PASS | None | None |
+| 49 | `UPSTREAM_CONNECT_TIMEOUT_SECONDS` | float | 5.0 | — | SIMPLE_QNA_RAG_UPSTREAM_CONNECT_TIMEOUT_SECONDS | float | — | _check | observability/deadline.py | PASS | None | None |
 
 ## MODEL_VALIDATORS
 
@@ -55,3 +63,4 @@
 | 1 | CHUNK_OVERLAP < CHUNK_SIZE | #10, #9 | 200 < 1000 | PASS |
 | 2 | MMR_K <= MMR_FETCH_K | #16, #15 | 20 <= 100 | PASS |
 | 3 | RERANKER_TOP_K <= RRF_TOP_K | #26, #22 | 10 <= 50 | PASS |
+| 4 | QUERY_QUEUE_TIMEOUT_SECONDS < QUERY_EXECUTION_TIMEOUT_SECONDS | #44, #45 | 5.0 < 90.0 | PASS |

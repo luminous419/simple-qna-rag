@@ -43,6 +43,7 @@ from simple_qna_rag.config import (
     MMR_VECTOR_COSINE_FLOOR,
     ANSWER_TEMPLATE_MODE,
 )
+from simple_qna_rag.observability.deadline import current_deadline, ollama_call_client
 from simple_qna_rag.intent_classifier import classify_intent
 from simple_qna_rag.observability.logging import log_event
 from simple_qna_rag.observability.metrics import record_fallback, record_stage_duration, record_stage_error
@@ -542,6 +543,19 @@ class RAGEngine:
         반환한다(§8.2). `query()`와 Intent A/B 평가기가 이 메서드 하나만
         공유하므로, 프롬프트 조립 규칙이 evaluator에 복제되지 않는다
         (M3-NFR-004)."""
+        deadline = current_deadline()
+        if deadline is not None and isinstance(self.llm, OllamaLLM):
+            from simple_qna_rag.config import UPSTREAM_CONNECT_TIMEOUT_SECONDS
+
+            rendered = template_str.format(context=context, question=question)
+            with ollama_call_client(
+                host=OLLAMA_BASE_URL, connect_timeout=UPSTREAM_CONNECT_TIMEOUT_SECONDS
+            ) as client:
+                response = client.generate(
+                    model=OLLAMA_MODEL, prompt=rendered, stream=False,
+                    options={"temperature": 0.1},
+                )
+            return response["response"] if isinstance(response, dict) else response.response
         prompt = PromptTemplate(
             template=template_str,
             input_variables=["context", "question"]

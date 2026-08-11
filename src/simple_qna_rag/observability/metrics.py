@@ -17,8 +17,12 @@ STATUSES = frozenset({"2xx", "4xx", "5xx"})
 STAGES = frozenset({"routing", "web_search", "retrieval", "generation"})
 ERROR_CODES = frozenset({"timeout", "upstream", "validation", "internal"})
 READINESS_REASONS = frozenset(
-    {"ok", "settings_invalid", "engine_init_failed", "static_mount_failed", "other"}
+    {"ok", "settings_invalid", "engine_init_failed", "static_mount_failed", "draining",
+     "orphan_workers", "queue_saturated", "other"}
 )
+TICKET_OUTCOMES = frozenset({"completed", "rejected", "queue_timeout", "execution_timeout", "cancelled"})
+ADMISSION_REJECT_REASONS = frozenset({"not_ready", "overloaded", "submit_failed"})
+INPUT_REJECT_REASONS = frozenset({"payload_too_large", "invalid_request"})
 FALLBACK_KINDS = frozenset({"web_search", "mmr_vector_source"})
 FALLBACK_REASONS = frozenset({"low_confidence", "empty_retrieval", "validation_failed", "other"})
 
@@ -87,6 +91,35 @@ def record_fallback(registry: Any, kind: str, reason: str) -> None:
     ).inc()
 
 
+def record_ticket_outcome(registry: Any, result: str) -> None:
+    if registry is not None:
+        registry.rag_query_outcomes_total.labels(
+            result=_clamp_label(result, TICKET_OUTCOMES, "rejected")
+        ).inc()
+
+
+def record_admission_rejected(registry: Any, reason: str) -> None:
+    if registry is not None:
+        registry.rag_admission_rejected_total.labels(
+            reason=_clamp_label(reason, ADMISSION_REJECT_REASONS, "submit_failed")
+        ).inc()
+
+
+def record_input_rejected(registry: Any, reason: str) -> None:
+    if registry is not None:
+        registry.rag_input_rejected_total.labels(
+            reason=_clamp_label(reason, INPUT_REJECT_REASONS, "invalid_request")
+        ).inc()
+
+
+def sync_executor_gauges(registry: Any, snapshot: Any) -> None:
+    if registry is None or snapshot is None:
+        return
+    registry.rag_queue_depth.set(snapshot.queued)
+    registry.rag_running.set(snapshot.running)
+    registry.rag_orphaned_workers.set(snapshot.orphaned)
+
+
 _process_metrics_configured = False
 
 
@@ -148,6 +181,18 @@ def build_metrics_registry(registry: CollectorRegistry | None = None) -> Collect
         "logging_dropped_fields_total",
         "log_event() calls that dropped a disallowed field.",
         registry=reg,
+    )
+    reg.rag_queue_depth = Gauge("rag_queue_depth", "Queued RAG queries.", registry=reg)
+    reg.rag_running = Gauge("rag_running", "Running RAG workers.", registry=reg)
+    reg.rag_orphaned_workers = Gauge("rag_orphaned_workers", "Abandoned running workers.", registry=reg)
+    reg.rag_query_outcomes_total = Counter(
+        "rag_query_outcomes_total", "Accepted query terminal outcomes.", ["result"], registry=reg
+    )
+    reg.rag_admission_rejected_total = Counter(
+        "rag_admission_rejected_total", "Admission rejections.", ["reason"], registry=reg
+    )
+    reg.rag_input_rejected_total = Counter(
+        "rag_input_rejected_total", "Input rejections.", ["reason"], registry=reg
     )
 
     return reg

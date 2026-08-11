@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from simple_qna_rag.settings import Settings
+from simple_qna_rag.settings import Settings, get_settings
 from simple_qna_rag.web import bootstrap as bootstrap_module
 from simple_qna_rag.web.bootstrap import Bootstrap, load_bootstrap
 from simple_qna_rag.web.server import create_app
@@ -31,7 +31,7 @@ def test_row1_subprocess_create_app_with_default_bootstrap_exits_0():
 def _ready_app(bootstrap: Bootstrap):
     return create_app(
         bootstrap=bootstrap,
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=lambda settings: object(),
     )
 

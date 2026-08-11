@@ -134,7 +134,7 @@ def _simulate_1000_requests(reg: CollectorRegistry) -> None:
     reg.logging_dropped_fields_total.inc()
 
 
-def test_1000_unique_requests_sample_count_is_bounded_and_equals_102():
+def test_1000_unique_requests_sample_count_is_bounded_and_equals_108():
     reg = M.build_metrics_registry()
     _simulate_1000_requests(reg)
 
@@ -145,5 +145,5 @@ def test_1000_unique_requests_sample_count_is_bounded_and_equals_102():
     families = list(text_string_to_metric_families(text))
     sample_count = sum(len(f.samples) for f in families)
 
-    assert sample_count == 102
+    assert sample_count == 108
     assert sample_count <= 150
