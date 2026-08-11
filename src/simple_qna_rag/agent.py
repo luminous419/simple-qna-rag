@@ -33,12 +33,14 @@ from simple_qna_rag.config import (
     DATA_DIR,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
+    UPSTREAM_CONNECT_TIMEOUT_SECONDS,
     ROUTING_CORPUS_TOPIC_HINT,
     ROUTING_CORPUS_TOPIC_HINT_MAX_ITEMS,
     ROUTING_SIGNAL_OVERRIDE,
     USE_WEB_SEARCH,
 )
 from simple_qna_rag.observability.logging import log_event
+from simple_qna_rag.observability.deadline import current_deadline, ollama_call_client
 from simple_qna_rag.observability.metrics import record_fallback, record_stage_duration, record_stage_error
 from simple_qna_rag.query_router import extract_web_search_query
 from simple_qna_rag.query_router import route_query as keyword_fallback_route
@@ -135,6 +137,29 @@ def _llm_decide_tool(question: str) -> tuple[Optional[str], Optional[str]]:
     신호 판정을 LLM보다 먼저 수행하는 `_decide_tool()`이 이 함수를 감싼다
     (Design.md §7.4).
     """
+    if current_deadline() is not None:
+        tools = [
+            {"type": "function", "function": {"name": "web_search", "description": "Search web", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+            {"type": "function", "function": {"name": "document_qa", "description": "Answer from documents", "parameters": {"type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]}}},
+        ]
+        with ollama_call_client(
+            host=OLLAMA_BASE_URL, connect_timeout=UPSTREAM_CONNECT_TIMEOUT_SECONDS
+        ) as client:
+            response = client.chat(
+                model=OLLAMA_MODEL,
+                messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": question}],
+                tools=tools, stream=False, options={"temperature": 0.1},
+            )
+        message = response["message"] if isinstance(response, dict) else response.message
+        calls = message.get("tool_calls", []) if isinstance(message, dict) else message.tool_calls
+        if not calls:
+            return None, None
+        call = calls[0]
+        function = call.get("function", call) if isinstance(call, dict) else call.function
+        name = function.get("name") if isinstance(function, dict) else function.name
+        args = function.get("arguments", {}) if isinstance(function, dict) else function.arguments
+        query = next(iter(args.values()), question) if args else question
+        return name, query
     llm = _get_router_llm()
     messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=question)]
     response = llm.invoke(messages)

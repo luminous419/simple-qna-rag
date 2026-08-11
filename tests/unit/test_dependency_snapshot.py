@@ -40,7 +40,7 @@ def test_snapshot_canonical_json_key_order_is_sorted():
 
 def test_snapshot_package_count_matches_lock():
     snapshot = ds.build_snapshot()
-    assert snapshot["package_count"] == 103
+    assert snapshot["package_count"] == 102
 
 
 def test_snapshot_is_deterministic_for_same_lock_content():

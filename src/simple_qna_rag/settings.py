@@ -15,6 +15,7 @@ not duplicate any default/validation logic defined here.
 from __future__ import annotations
 
 import os
+import math
 import typing
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -114,6 +115,23 @@ def _check_unit_interval(v: object) -> object:
     return v
 
 
+def _make_range_validator(
+    lo: float, hi: float, *, lo_inclusive: bool = True,
+    hi_inclusive: bool = True, finite: bool = False,
+) -> Callable[[object], object]:
+    def _check(value: object) -> object:
+        number = float(value)  # validators are only attached to numeric fields
+        if finite and not math.isfinite(number):
+            raise ValueError("must be finite")
+        lower_ok = number >= lo if lo_inclusive else number > lo
+        upper_ok = number <= hi if hi_inclusive else number < hi
+        if not lower_ok or not upper_ok:
+            raise ValueError("value outside allowed range")
+        return value
+
+    return _check
+
+
 _VALIDATOR_LABELS: dict[Callable[[object], object], str] = {
     _check_positive: ">0",
     _check_unit_interval: "0<=x<=1",
@@ -143,6 +161,12 @@ def _check_reranker_le_rrf(self: Any) -> Any:
     return self
 
 
+def _check_queue_timeout_lt_execution_timeout(self: Any) -> Any:
+    if self.QUERY_QUEUE_TIMEOUT_SECONDS >= self.QUERY_EXECUTION_TIMEOUT_SECONDS:
+        raise ValueError("QUERY_QUEUE_TIMEOUT_SECONDS must be < QUERY_EXECUTION_TIMEOUT_SECONDS")
+    return self
+
+
 MODEL_VALIDATORS: tuple[ModelValidatorSpec, ...] = (
     ModelValidatorSpec(
         callable=_check_chunk_overlap_lt_chunk_size,
@@ -161,6 +185,14 @@ MODEL_VALIDATORS: tuple[ModelValidatorSpec, ...] = (
         constraint="RERANKER_TOP_K <= RRF_TOP_K",
         related_fields=("RERANKER_TOP_K", "RRF_TOP_K"),
         default_rendering=lambda d: f"{d['RERANKER_TOP_K']} <= {d['RRF_TOP_K']}",
+    ),
+    ModelValidatorSpec(
+        callable=_check_queue_timeout_lt_execution_timeout,
+        constraint="QUERY_QUEUE_TIMEOUT_SECONDS < QUERY_EXECUTION_TIMEOUT_SECONDS",
+        related_fields=("QUERY_QUEUE_TIMEOUT_SECONDS", "QUERY_EXECUTION_TIMEOUT_SECONDS"),
+        default_rendering=lambda d: (
+            f"{d['QUERY_QUEUE_TIMEOUT_SECONDS']} < {d['QUERY_EXECUTION_TIMEOUT_SECONDS']}"
+        ),
     ),
 )
 
@@ -564,9 +596,36 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
         parser=str,
         consumers=("tests/unit/test_config.py",),
     ),
+    FieldSpec(name="QUERY_CONCURRENCY_LIMIT", annotation=int, default=1,
+              env_alias="SIMPLE_QNA_RAG_QUERY_CONCURRENCY_LIMIT", parser=int,
+              validators=(_make_range_validator(1, 2),), consumers=("web/concurrency.py",)),
+    FieldSpec(name="QUERY_QUEUE_LIMIT", annotation=int, default=4,
+              env_alias="SIMPLE_QNA_RAG_QUERY_QUEUE_LIMIT", parser=int,
+              validators=(_make_range_validator(0, 64),), consumers=("web/concurrency.py",)),
+    FieldSpec(name="QUERY_QUEUE_TIMEOUT_SECONDS", annotation=float, default=5.0,
+              env_alias="SIMPLE_QNA_RAG_QUERY_QUEUE_TIMEOUT_SECONDS", parser=float,
+              validators=(_make_range_validator(0, 30, lo_inclusive=False, finite=True),),
+              consumers=("web/concurrency.py",)),
+    FieldSpec(name="QUERY_EXECUTION_TIMEOUT_SECONDS", annotation=float, default=90.0,
+              env_alias="SIMPLE_QNA_RAG_QUERY_EXECUTION_TIMEOUT_SECONDS", parser=float,
+              validators=(_make_range_validator(1, 600, finite=True),),
+              consumers=("web/concurrency.py",)),
+    FieldSpec(name="SHUTDOWN_GRACE_SECONDS", annotation=float, default=30.0,
+              env_alias="SIMPLE_QNA_RAG_SHUTDOWN_GRACE_SECONDS", parser=float,
+              validators=(_make_range_validator(0, 120, finite=True),), consumers=("web/server.py",)),
+    FieldSpec(name="MAX_REQUEST_BODY_BYTES", annotation=int, default=16384,
+              env_alias="SIMPLE_QNA_RAG_MAX_REQUEST_BODY_BYTES", parser=int,
+              validators=(_make_range_validator(256, 1_048_576),), consumers=("web/body_limit.py",)),
+    FieldSpec(name="MAX_QUESTION_CHARS", annotation=int, default=4000,
+              env_alias="SIMPLE_QNA_RAG_MAX_QUESTION_CHARS", parser=int,
+              validators=(_make_range_validator(1, 32_000),), consumers=("web/server.py",)),
+    FieldSpec(name="UPSTREAM_CONNECT_TIMEOUT_SECONDS", annotation=float, default=5.0,
+              env_alias="SIMPLE_QNA_RAG_UPSTREAM_CONNECT_TIMEOUT_SECONDS", parser=float,
+              validators=(_make_range_validator(0, 30, lo_inclusive=False, finite=True),),
+              consumers=("observability/deadline.py",)),
 )
 
-assert len(FIELD_SPECS) == 41, f"FIELD_SPECS must have 41 fields, got {len(FIELD_SPECS)}"
+assert len(FIELD_SPECS) == 49, f"FIELD_SPECS must have 49 fields, got {len(FIELD_SPECS)}"
 
 
 # ---------------------------------------------------------------------------

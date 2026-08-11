@@ -42,7 +42,7 @@ def test_lock_every_package_has_hashes():
         assert "--hash=sha256:" in lines[i + 1]
 
 
-def test_lock_package_count_is_103():
+def test_lock_package_count_is_102():
     lines = _lock_text().splitlines()
     package_lines = [line for line in lines if line and line[0].isalnum() and "==" in line]
-    assert len(package_lines) == 103
+    assert len(package_lines) == 102

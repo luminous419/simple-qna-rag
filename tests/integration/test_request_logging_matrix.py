@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from simple_qna_rag.observability import logging as L
-from simple_qna_rag.settings import Settings, SettingsError
+from simple_qna_rag.settings import Settings, SettingsError, get_settings
 from simple_qna_rag.web.server import create_app
 
 _FORBIDDEN_KEYS = {"question", "answer", "context", "sources_content", "prompt", "exception_text"}
@@ -39,7 +39,7 @@ def _events_for(sink, event_name):
 
 def _ready_app(engine_obj=object()):
     return create_app(
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=lambda settings: engine_obj,
     )
 
@@ -69,13 +69,13 @@ def test_row2_nonexistent_route_404(sink):
     assert ends[0]["status_code"] == 404
 
 
-def test_row3_validation_failure_422(sink):
+def test_row3_validation_failure_400(sink):
     with TestClient(_ready_app()) as client:
         r = client.post("/rag", json={"not_question": "x"})
-    assert r.status_code == 422
+    assert r.status_code == 400
     ends = _events_for(sink, "request_end")
     assert len(ends) == 1
-    assert ends[0]["status_code"] == 422
+    assert ends[0]["status_code"] == 400
 
 
 def test_row4_engine_not_ready_503(sink):

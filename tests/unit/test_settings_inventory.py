@@ -9,8 +9,8 @@ from simple_qna_rag.settings import FIELD_SPECS, Settings, _topo_sorted
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_field_specs_has_exactly_41_fields():
-    assert len(FIELD_SPECS) == 41
+def test_field_specs_has_exactly_49_fields():
+    assert len(FIELD_SPECS) == 49
 
 
 def test_field_names_match_settings_model_fields():
@@ -61,7 +61,7 @@ def test_generate_field_spec_rendering_is_deterministic():
     assert b1 == b2
 
 
-def test_model_validators_table_has_3_rows_5_columns():
+def test_model_validators_table_has_4_rows_5_columns():
     from simple_qna_rag.settings import MODEL_VALIDATORS, render_model_validators_table
 
     table = render_model_validators_table(MODEL_VALIDATORS, FIELD_SPECS)
@@ -69,4 +69,4 @@ def test_model_validators_table_has_3_rows_5_columns():
     header = lines[0]
     assert header.count("|") == 6  # 5 columns -> 6 pipe chars
     data_rows = lines[2:]
-    assert len(data_rows) == 3
+    assert len(data_rows) == 4

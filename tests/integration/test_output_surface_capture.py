@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-from simple_qna_rag.settings import Settings, SettingsError
+from simple_qna_rag.settings import Settings, SettingsError, get_settings
 from simple_qna_rag.web.server import create_app
 
 _SECRET_QUESTION = "what is my extremely private secret question about launch codes?"
@@ -27,7 +27,7 @@ _SECRET_SOURCE_CONTENT = "raw doc excerpt with confidential figures"
 
 def _ready_app():
     return create_app(
-        settings_loader=lambda: Settings.from_sources(),
+        settings_loader=get_settings,
         engine_factory=lambda settings: object(),
     )
 
@@ -63,10 +63,10 @@ def test_nonexistent_route_404_no_leak(capsys):
     _assert_clean(captured.out + captured.err)
 
 
-def test_validation_failure_422_no_leak(capsys):
+def test_validation_failure_400_no_leak(capsys):
     with TestClient(_ready_app()) as client:
         r = client.post("/rag", json={"not_question": _SECRET_QUESTION})
-    assert r.status_code == 422
+    assert r.status_code == 400
     captured = capsys.readouterr()
     _assert_clean(captured.out + captured.err)
 
