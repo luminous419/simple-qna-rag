@@ -1,8 +1,8 @@
 # M4.3 Artifact & Deployment Safety — Code Review Iteration 3
 
-Reviewer: Fresh Codex independent code review worker  
-Reviewed revision: `765bde38058b958ffc22e8459524f0bb7b23f0c2`  
-Exact range: `5b91840699ad268ab27cbe05ad8ad4a8bb1957d9..765bde38058b958ffc22e8459524f0bb7b23f0c2`  
+Reviewer: Fresh Codex independent code review worker
+Reviewed revision: `765bde38058b958ffc22e8459524f0bb7b23f0c2`
+Exact range: `5b91840699ad268ab27cbe05ad8ad4a8bb1957d9..765bde38058b958ffc22e8459524f0bb7b23f0c2`
 Verdict: **FAIL — 8.8/10** (`CRITICAL 0`, `MAJOR 2`, `MINOR 0`, `TRIVIAL 0`)
 
 ## Scope and conclusion
@@ -109,4 +109,3 @@ Severity count is `CRITICAL 0 / MAJOR 2 / MINOR 0 / TRIVIAL 0`; score is **8.8/1
 The code-quality gate requires `CRITICAL=0`, `MAJOR=0`, and score >=9.7, so Iteration 3
 is **FAIL**. The Linux lock hosted failure is closed, but the OCI scanner failure is not
 safely closed until both bypasses and their negative regression tests are addressed.
-

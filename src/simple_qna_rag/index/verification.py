@@ -248,7 +248,13 @@ def _construct_faiss_from_verified_bytes(verified: VerifiedVersion, embeddings):
     native_index = faiss_native.deserialize_index(
         np.frombuffer(verified.faiss_bytes, dtype=np.uint8))
     docstore, index_to_docstore_id = pickle.loads(verified.pkl_bytes)
-    return FAISS(embeddings.embed_query, native_index, docstore, index_to_docstore_id)
+    # Pass the Embeddings object itself, not its bound `.embed_query` — FAISS
+    # only populates its `.embeddings` property (and skips a deprecation
+    # warning) when `embedding_function` is an actual `Embeddings` instance;
+    # a raw callable makes `.embeddings` return None, which crashes any
+    # caller that reads `vectorstore.embeddings` directly (e.g.
+    # StoredVectorIndex.build() for MMR_VECTOR_SOURCE="stored").
+    return FAISS(embeddings, native_index, docstore, index_to_docstore_id)
 
 
 def load_verified_faiss(index_root: Path, version_id: str, *, embeddings,

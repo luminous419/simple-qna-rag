@@ -474,3 +474,86 @@ Iteration 1 이후의 독립 리뷰
   불변식도 그대로 유지했다. 변경된 파일은 `requirements.lock`,
   `scripts/scan_image_layers.py`, `scripts/container_smoke.py`,
   `tests/unit/test_scan_image_layers.py` 4개뿐이다.
+
+## 12. Hosted CI Remediation Iteration 3(별도 세션, PR #18)
+
+Iteration 2 이후의 독립 리뷰
+[Code_Review_Iteration_4.md](Code_Review_Iteration_4.md)(판정 PASS
+9.7/10)가 지적한 `CR-I4-MIN-01`/`CR-I4-MIN-02` 2개 MINOR finding과,
+hosted run
+[31609022196](https://github.com/luminous419/simple-qna-rag/actions/runs/31609022196)의
+`container` job 실제 재발(`scan_image_layers.py`가 실제 Debian
+symlink 신뢰 저장소와 certifi 코멘트 포맷을 오탐, `forbidden_count=153`)를
+고쳤다. 스캐너 수정 이후 실제 이미지로 `container_smoke.py`를 처음
+끝까지 로컬 실행해 검증하는 과정에서, 원래 범위 밖이지만 같은 hosted
+`container` job을 막는 3개의 추가 결함(설정 바인딩 불일치, FAISS
+embeddings 배선, 테스트 픽스처 docstore 타입, 실패한 엔진의 artifact
+reason 유실 — 총 5개 세부 지점)을 발견해 함께 고쳤다. 상세는
+[Hosted_CI_Remediation_Iteration_3.md](Hosted_CI_Remediation_Iteration_3.md)
+참조. 요약:
+
+- `classify_member()`에 `is_link`/`link_target_verified`를 추가하고,
+  `scan()`이 레이어를 순서대로 처리하며 whiteout-aware OCI union
+  파일시스템 상태(`_MergedEntry`/`_update_merged_state`)를 누적
+  구축하도록 재작성했다 — 신뢰 경로의 symlink/hardlink는
+  `_resolve_trusted_link_content()`가 `_MAX_LINK_HOPS=40` bounded,
+  cycle-safe(visited-path set), 절대/상대 경로 탈출 차단으로 resolve하고,
+  체인의 끝이 신뢰 경로의 genuine regular 멤버이고 그 바이트가
+  `is_verified_ca_bundle()`을 독립 통과할 때만 예외를 받는다. 대상이
+  다른 레이어에 있으면 outer tar를 재오픈해 조회한다(OCI
+  layer-state-aware). Debian `/etc/ssl/certs/*`의 실제 2단계 symlink
+  체인(`docker run`으로 직접 확인)을 이렇게 지원한다.
+- `is_verified_ca_bundle()`의 grammar에 정확히 7개의 알려진 certifi
+  코멘트 필드 접두사(`# Issuer:` 등, 512바이트 캡)만 `BEGIN
+  CERTIFICATE` 블록 바로 앞에 허용하도록 추가했다 — 인식되지 않는
+  코멘트나 블록 뒤 코멘트는 여전히 전체 `fullmatch`를 깨뜨려 거부되므로
+  CR-I3-MAJ-01이 닫은 시크릿-뒤에-붙이기 취약점이 코멘트 경로로
+  재도입되지 않는다. 실제 설치된 `certifi` 패키지의 `cacert.pem`
+  전체(145블록)가 이 grammar를 fullmatch함을 직접 확인했다.
+- `tests/unit/test_scan_image_layers.py`에 신규/강화 테스트를
+  추가했다(39→51) — certifi 코멘트 accept/reject, Debian 2-hop
+  체인/`usr/lib/ssl/cert.pem`/cross-layer resolution e2e allow,
+  dangling/cycle/whiteout-마스킹/절대 경로 탈출/신뢰 경로 밖 hardlink
+  target e2e reject, CR-I4-MIN-01 하드링크 오라클 강화(정확한 두
+  violation record assert).
+- 원래 범위 밖에서 실제 이미지 e2e 검증 중 발견한 결함(상세는
+  Hosted_CI_Remediation_Iteration_3.md §3): (1) `_settings_binding_snapshot()`이
+  `deterministic_test` 모드에서도 실제 `EMBEDDING_MODEL_NAME`을 보고해
+  fixture의 고정 문자열과 항상 불일치 — 단일 진실 공급원
+  상수(`DETERMINISTIC_TEST_EMBEDDING_MODEL_NAME`)로 통일; (2)
+  trust-verified FAISS 재구성이 `embeddings.embed_query`(raw
+  callable)를 넘겨 `vectorstore.embeddings`가 `None`이 됨 — `embeddings`
+  객체 자체를 넘기도록 수정; (3) 테스트 시임의
+  `DeterministicTestEmbeddings`가 duck-typed일 뿐 실제
+  `langchain_core.embeddings.Embeddings`를 상속하지 않아 FAISS의
+  `isinstance` 체크가 항상 실패 — 상속하도록 수정(production `src/`에는
+  영향 없음, 이 파일은 이미지에 COPY되지 않음); (4)
+  `container_smoke.py` fixture의 docstore가 `Document` 대신 raw
+  string을 저장 — `Document(page_content=t)`로 수정; (5)
+  `get_rag_engine()`이 실패 시 artifact reason 없는 평범한
+  `RuntimeError`만 던지고 `server.py`가 이미 `None`이 된
+  `app.state.engine`에서 그 reason을 읽으려 해 negative-control이
+  구조적으로 항상 일반 `engine_init_failed`만 보고 — 새 예외
+  `EngineArtifactError(.reason)`를 던지고 `server.py`가 캐치한 예외
+  자체에서 읽도록 배선을 고쳤다.
+- 재검증: 실제 linux/amd64 `production` 이미지에 `scan_image_layers.py`
+  실행 결과 `forbidden_count: 0`(153에서), 같은 이미지에
+  `container_smoke.py` 처음부터 끝까지 로컬 실행 결과 `status: PASS`
+  (수정 전 `status: FAIL`) — hosted CI가 지금까지 한 번도 실제로 통과한
+  적 없는 `container` job의 전체 파이프라인을 로컬에서 최초로
+  end-to-end 검증했다. 전체 로컬 pytest suite 1220 passed, 1
+  skipped(1206→1220). Linux lock `compile_lock.sh --verify` PASS,
+  drift 없음(lock 파일 변경 없음). 결정론적 acceptance
+  repeat=10 PASS(17/17 node), negative control
+  REJECTED_AS_EXPECTED.
+- 이 remediation은 §9~11까지의 어떤 결정도 재검토하지 않았고,
+  `M4.1_BLOCKED=true`/M3 `NOT_RUN`/`overall_release_ready=false`
+  불변식도 그대로 유지했다. 변경된 파일은
+  `scripts/scan_image_layers.py`, `tests/unit/test_scan_image_layers.py`,
+  `src/simple_qna_rag/rag_engine.py`,
+  `src/simple_qna_rag/index/verification.py`,
+  `tests/support/simple_qna_rag_test_seam/deterministic_embeddings.py`,
+  `scripts/container_smoke.py`, `src/simple_qna_rag/web/server.py`,
+  `tests/unit/test_container_smoke_bare_script.py`(신규),
+  `docs/milestones/m4.3-artifact-deployment-safety/Code_Review_Iteration_3.md`
+  (CR-I4-MIN-02 whitespace) 9개다.

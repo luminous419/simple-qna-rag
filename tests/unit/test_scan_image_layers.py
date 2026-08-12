@@ -567,7 +567,12 @@ def test_scan_flags_hardlink_bypass_end_to_end(monkeypatch, tmp_path):
     """Full scan() path (not just classify_member directly): a layer
     containing a real secret plus an allowlisted-looking hardlink to it
     must surface as a violation, proving the fix closes the gap the
-    reviewer reproduced against scan()'s actual call site."""
+    reviewer reproduced against scan()'s actual call site.
+
+    CR-I4-MIN-01: the oracle asserts the *exact* violation record for the
+    hardlink member itself (not just "some credential exists somewhere"),
+    so this test cannot pass if the hardlink is mistakenly exempted while
+    some unrelated fixture member happens to also be a credential."""
     layer_buf = io.BytesIO()
     with tarfile.open(fileobj=layer_buf, mode="w") as tf:
         data = b"super-secret-key-bytes"
@@ -599,6 +604,286 @@ def test_scan_flags_hardlink_bypass_end_to_end(monkeypatch, tmp_path):
 
     monkeypatch.setattr(scanner, "export_image", fake_export_image)
     result = scanner.scan("fake:image")
-    categories = {v["category"] for v in result["violations"]}
-    assert "credential" in categories
-    assert result["forbidden_count"] >= 1
+    by_member = {v["member"]: v for v in result["violations"]}
+    assert by_member["etc/ssl/certs/innocent.pem"] == {
+        "layer": "layer.tar",
+        "member": "etc/ssl/certs/innocent.pem",
+        "category": "credential",
+        "pattern": ".pem",
+    }
+    assert by_member["app/secrets/key.pem"] == {
+        "layer": "layer.tar",
+        "member": "app/secrets/key.pem",
+        "category": "credential",
+        "pattern": ".pem",
+    }
+    assert result["forbidden_count"] == 2
+
+
+# --- Hosted-CI remediation iteration 3: real Debian/certifi shapes --------
+#
+# Code_Review_Iteration_4.md's hosted run 31609022196 showed the
+# iteration-2 conservative link rejection produces false positives against
+# the *real* Debian base image (docker run inspection of the built
+# `production` target confirmed the shapes below), and that the
+# iteration-2 strict grammar rejects the *real* certifi cacert.pem, whose
+# upstream format interleaves fixed comment lines before each certificate.
+# Everything below proves the iteration-3 fix accepts these exact real
+# shapes while staying fail-closed against dangling targets, cycles,
+# traversal, whiteout ambiguity, and comment-disguised secrets.
+
+_CERTIFI_STYLE_BLOCK = (
+    b'# Issuer: CN=Entrust Root Certification Authority O=Entrust, Inc.\n'
+    b'# Subject: CN=Entrust Root Certification Authority O=Entrust, Inc.\n'
+    b'# Label: "Entrust Root Certification Authority"\n'
+    b"# Serial: 1164660820\n"
+    b"# MD5 Fingerprint: d6:a5:c3:ed:5d:dd:3e:00:c1:3d:87:92:1f:1d:3f:e4\n"
+    b"# SHA1 Fingerprint: b3:1e:b1:b7:40:e3:6c:84:02:da:dc:37:d4:4d:f5:d4:67:49:52:f9\n"
+    b"# SHA256 Fingerprint: 73:c1:76:43:4f:1b:c6:d5:ad:f4:5b:0e:76:e7:27:28:7c:8d:e5\n"
+) + _REAL_CA_CERT_PEM
+
+
+def test_is_verified_ca_bundle_accepts_real_certifi_comment_format():
+    """The exact upstream certifi shape (fixed metadata comments
+    immediately before each CERTIFICATE block, blank line between
+    entries) must verify — this is the iteration-2 regression that broke
+    the real pip-vendored and top-level certifi/cacert.pem."""
+    bundle = _CERTIFI_STYLE_BLOCK + b"\n" + _CERTIFI_STYLE_BLOCK
+    assert scanner.is_verified_ca_bundle(bundle) is True
+
+
+def test_is_verified_ca_bundle_rejects_unrecognized_comment_field():
+    """A comment that isn't one of the seven recognized certifi field
+    prefixes (e.g. a smuggled note or a disguised secret) must still break
+    full consumption — the comment allowance is narrow, not general."""
+    tampered = _CERTIFI_STYLE_BLOCK.replace(b"# Label:", b"# NotARealField:")
+    assert scanner.is_verified_ca_bundle(tampered) is False
+
+
+def test_is_verified_ca_bundle_rejects_secret_disguised_as_comment():
+    data = b"# API_TOKEN=supersecret-not-a-real-field\n" + _REAL_CA_CERT_PEM
+    assert scanner.is_verified_ca_bundle(data) is False
+
+
+def test_is_verified_ca_bundle_rejects_comment_after_cert_block():
+    """Recognized comment lines are only permitted immediately *before* a
+    BEGIN CERTIFICATE block, matching the real certifi layout — a comment
+    trailing a block (not leading the next one) still fails full
+    consumption."""
+    data = _REAL_CA_CERT_PEM + b"# Label: \"trailing, not leading\"\n"
+    assert scanner.is_verified_ca_bundle(data) is False
+
+
+def _make_image(layers: list[tuple[str, bytes]]) -> bytes:
+    """Build a minimal `docker save`-shaped tar: named layer tars plus a
+    manifest.json referencing them in order."""
+    image_buf = io.BytesIO()
+    with tarfile.open(fileobj=image_buf, mode="w") as outer:
+        for name, data in layers:
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            outer.addfile(info, io.BytesIO(data))
+        manifest = json.dumps([{"Layers": [name for name, _ in layers]}]).encode("utf-8")
+        manifest_info = tarfile.TarInfo(name="manifest.json")
+        manifest_info.size = len(manifest)
+        outer.addfile(manifest_info, io.BytesIO(manifest))
+    return image_buf.getvalue()
+
+
+def _make_layer_bytes(entries: list[tuple[str, str, bytes | str]]) -> bytes:
+    """entries: (name, kind, payload) where kind is "reg"/"sym"/"hard" and
+    payload is file bytes for "reg" or a linkname string for "sym"/"hard"."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        for name, kind, payload in entries:
+            if kind == "reg":
+                data = payload
+                info = tarfile.TarInfo(name=name)
+                info.size = len(data)
+                tf.addfile(info, io.BytesIO(data))
+            elif kind == "sym":
+                info = tarfile.TarInfo(name=name)
+                info.type = tarfile.SYMTYPE
+                info.linkname = payload
+                tf.addfile(info)
+            elif kind == "hard":
+                info = tarfile.TarInfo(name=name)
+                info.type = tarfile.LNKTYPE
+                info.linkname = payload
+                tf.addfile(info)
+            else:
+                raise ValueError(kind)
+    return buf.getvalue()
+
+
+def test_scan_allows_debian_two_hop_symlink_chain_end_to_end(monkeypatch):
+    """Real Debian shape confirmed against the built production image:
+    `etc/ssl/certs/<hash>.0` -> `<CN>.pem` (relative, same dir) ->
+    `/usr/share/ca-certificates/mozilla/<CN>.crt` (absolute, regular file
+    with genuine CA content). Both link hops must resolve and verify with
+    zero violations — this is the exact false-positive hosted run
+    31609022196 hit 153 times."""
+    layer = _make_layer_bytes([
+        (
+            "usr/share/ca-certificates/mozilla/GlobalSign_Root_R46.crt",
+            "reg",
+            _REAL_CA_CERT_PEM,
+        ),
+        (
+            "etc/ssl/certs/GlobalSign_Root_R46.pem",
+            "sym",
+            "/usr/share/ca-certificates/mozilla/GlobalSign_Root_R46.crt",
+        ),
+        ("etc/ssl/certs/002c0b4f.0", "sym", "GlobalSign_Root_R46.pem"),
+    ])
+    image_bytes = _make_image([("layer.tar", layer)])
+
+    monkeypatch.setattr(
+        scanner, "export_image", lambda image, out_tar: out_tar.write_bytes(image_bytes)
+    )
+    result = scanner.scan("fake:debian")
+    assert result["violations"] == []
+    assert result["forbidden_count"] == 0
+
+
+def test_scan_allows_usr_lib_ssl_symlink_to_ca_certificates_crt(monkeypatch):
+    """Real Debian shape: `/usr/lib/ssl/cert.pem` -> absolute
+    `/etc/ssl/certs/ca-certificates.crt` (a genuine regular bundle)."""
+    layer = _make_layer_bytes([
+        ("etc/ssl/certs/ca-certificates.crt", "reg", _REAL_CA_CERT_PEM),
+        ("usr/lib/ssl/cert.pem", "sym", "/etc/ssl/certs/ca-certificates.crt"),
+    ])
+    image_bytes = _make_image([("layer.tar", layer)])
+
+    monkeypatch.setattr(
+        scanner, "export_image", lambda image, out_tar: out_tar.write_bytes(image_bytes)
+    )
+    result = scanner.scan("fake:usrlibssl")
+    assert result["violations"] == []
+
+
+def test_scan_allows_cross_layer_symlink_resolution(monkeypatch):
+    """OCI-layer-state-aware resolution: the regular CA file is written in
+    an earlier layer and the symlink pointing at it is written in a later
+    layer — real Docker images commonly split base-OS and later
+    RUN-layer changes this way. Resolution must look across layers, not
+    just within the symlink's own layer."""
+    target_layer = _make_layer_bytes([
+        (
+            "usr/share/ca-certificates/mozilla/GlobalSign_Root_R46.crt",
+            "reg",
+            _REAL_CA_CERT_PEM,
+        ),
+    ])
+    link_layer = _make_layer_bytes([
+        (
+            "etc/ssl/certs/GlobalSign_Root_R46.pem",
+            "sym",
+            "/usr/share/ca-certificates/mozilla/GlobalSign_Root_R46.crt",
+        ),
+    ])
+    image_bytes = _make_image([("layer1.tar", target_layer), ("layer2.tar", link_layer)])
+
+    monkeypatch.setattr(
+        scanner, "export_image", lambda image, out_tar: out_tar.write_bytes(image_bytes)
+    )
+    result = scanner.scan("fake:crosslayer")
+    assert result["violations"] == []
+
+
+def test_scan_rejects_dangling_symlink_at_trusted_path(monkeypatch):
+    layer = _make_layer_bytes([
+        ("etc/ssl/certs/dangling.pem", "sym", "/etc/ssl/certs/does-not-exist.crt"),
+    ])
+    image_bytes = _make_image([("layer.tar", layer)])
+
+    monkeypatch.setattr(
+        scanner, "export_image", lambda image, out_tar: out_tar.write_bytes(image_bytes)
+    )
+    result = scanner.scan("fake:dangling")
+    assert [v["member"] for v in result["violations"]] == ["etc/ssl/certs/dangling.pem"]
+
+
+def test_scan_rejects_symlink_cycle_at_trusted_path(monkeypatch):
+    layer = _make_layer_bytes([
+        ("etc/ssl/certs/a.pem", "sym", "b.pem"),
+        ("etc/ssl/certs/b.pem", "sym", "a.pem"),
+    ])
+    image_bytes = _make_image([("layer.tar", layer)])
+
+    monkeypatch.setattr(
+        scanner, "export_image", lambda image, out_tar: out_tar.write_bytes(image_bytes)
+    )
+    result = scanner.scan("fake:cycle")
+    assert {v["member"] for v in result["violations"]} == {
+        "etc/ssl/certs/a.pem",
+        "etc/ssl/certs/b.pem",
+    }
+    assert result["forbidden_count"] == 2
+
+
+def test_scan_rejects_symlink_target_whited_out_before_this_layer(monkeypatch):
+    """Deletion/whiteout ambiguity: the regular CA file is written in
+    layer 1, deleted (whiteout) in layer 2, and a symlink pointing at that
+    now-masked path is written in layer 3 — the merged state as of layer 3
+    must not still see the deleted file, so the symlink is dangling and
+    stays credential."""
+    layer1 = _make_layer_bytes([
+        ("etc/ssl/certs/real.crt", "reg", _REAL_CA_CERT_PEM),
+    ])
+    layer2 = _make_layer_bytes([
+        ("etc/ssl/certs/.wh.real.crt", "reg", b""),
+    ])
+    layer3 = _make_layer_bytes([
+        ("etc/ssl/certs/pointer.pem", "sym", "real.crt"),
+    ])
+    image_bytes = _make_image(
+        [("layer1.tar", layer1), ("layer2.tar", layer2), ("layer3.tar", layer3)]
+    )
+
+    monkeypatch.setattr(
+        scanner, "export_image", lambda image, out_tar: out_tar.write_bytes(image_bytes)
+    )
+    result = scanner.scan("fake:whiteout-dangling")
+    assert [v["member"] for v in result["violations"]] == ["etc/ssl/certs/pointer.pem"]
+
+
+def test_scan_rejects_hardlink_to_genuine_ca_content_outside_trust_store(monkeypatch):
+    """Defense in depth: even when the hardlink's ultimate target is
+    genuinely verifiable CA content, the resolved member's own path must
+    also be a trust-store location — a hardlink cannot borrow trust from
+    real CA bytes stashed at an arbitrary app path. (The target itself,
+    a `.pem` outside the allowlist, is independently flagged too — see
+    test_real_ca_content_outside_trust_store_path_is_still_credential —
+    so both members are expected violations here.)"""
+    layer = _make_layer_bytes([
+        ("app/vendor/real_ca_copy.pem", "reg", _REAL_CA_CERT_PEM),
+        ("etc/ssl/certs/borrowed.pem", "hard", "app/vendor/real_ca_copy.pem"),
+    ])
+    image_bytes = _make_image([("layer.tar", layer)])
+
+    monkeypatch.setattr(
+        scanner, "export_image", lambda image, out_tar: out_tar.write_bytes(image_bytes)
+    )
+    result = scanner.scan("fake:untrusted-target-path")
+    assert {v["member"] for v in result["violations"]} == {
+        "etc/ssl/certs/borrowed.pem",
+        "app/vendor/real_ca_copy.pem",
+    }
+    assert result["forbidden_count"] == 2
+
+
+def test_scan_rejects_symlink_absolute_traversal_still_normalizes_outside_root(monkeypatch):
+    """A trust-store symlink whose absolute target normalizes to a path
+    escaping the image root (defense against a crafted `..`-laden absolute
+    target) must not resolve."""
+    layer = _make_layer_bytes([
+        ("etc/ssl/certs/escape.pem", "sym", "/../../../../etc/shadow"),
+    ])
+    image_bytes = _make_image([("layer.tar", layer)])
+
+    monkeypatch.setattr(
+        scanner, "export_image", lambda image, out_tar: out_tar.write_bytes(image_bytes)
+    )
+    result = scanner.scan("fake:escape")
+    assert [v["member"] for v in result["violations"]] == ["etc/ssl/certs/escape.pem"]

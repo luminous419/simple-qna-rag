@@ -38,6 +38,40 @@ path outside the allowlist, any non-regular member, or any content that
 fails to parse still classifies as `credential`. The allowlist can only
 narrow what `.pem`/`.crt` reports as forbidden, never widen it — see
 `_is_trusted_ca_path` and `is_verified_ca_bundle`.
+
+Hosted-CI remediation iteration 3 (Code_Review_Iteration_4.md hosted run
+31609022196) found the iteration-2 conservative link rejection produced
+false positives against the *real* Debian base image: `/etc/ssl/certs/*`
+is almost entirely `openssl rehash`-style symlinks (a numeric-hash link to
+a CN-named link to a regular `.crt` under
+`/usr/share/ca-certificates/...`), and `/usr/lib/ssl/cert.pem` is a
+symlink to `/etc/ssl/certs/ca-certificates.crt`. It also found
+`is_verified_ca_bundle`'s strict grammar rejected the *real* certifi
+`cacert.pem`, whose upstream format interleaves each `BEGIN CERTIFICATE`
+block with seven fixed `# Issuer:`/`# Subject:`/`# Label:`/`# Serial:`/
+`# MD5 Fingerprint:`/`# SHA1 Fingerprint:`/`# SHA256 Fingerprint:`
+comment lines. Both were confirmed against real exported image bytes
+(`docker run` inspection of the built `production` target), not assumed.
+
+The fix keeps both allowlist gates fail-closed while covering these real
+shapes: `is_verified_ca_bundle`'s grammar now accepts *only* those seven
+known certifi comment-line prefixes (length-capped) immediately before a
+`BEGIN CERTIFICATE` block — any other comment text, or a comment anywhere
+else in the stream, still breaks the full-consumption match, so a secret
+disguised as `# note: ...` is still rejected. Separately,
+`classify_member` gained a `link_target_verified` parameter: `scan()` now
+builds an OCI-union (whiteout-aware, layer-ordered) merged filesystem
+state as it walks layers, and for a symlink/hardlink at a trust-store
+path, `_resolve_trusted_link_content` chases the link chain — bounded to
+`_MAX_LINK_HOPS` hops, cycle-detected via a visited-path set, rejecting
+any hop that normalizes outside the image root — and only reports a
+verified target when the chain lands on a *genuine regular member* that
+is itself at a trust-store path (never widening the allowlist to
+non-trust-store targets) whose bytes independently pass
+`is_verified_ca_bundle`. A dangling target, a cycle, a traversal/absolute
+escape, a non-regular final member, a whiteout-masked path, or content
+that fails verification all still classify as `credential` — the link
+itself is never trusted by path or name alone.
 """
 
 from __future__ import annotations
@@ -87,15 +121,34 @@ _TRUSTED_CA_PATH_SUFFIXES: tuple[str, ...] = (
 )
 _WS = r"[ \t\r\n]*"
 _B64_LINE = r"[A-Za-z0-9+/=]+"
+# The upstream certifi cacert.pem (github.com/certifi/python-certifi,
+# generated from Mozilla's included-cert list) precedes every certificate
+# with exactly these seven metadata fields, in this order, one per line.
+# Confirmed against the real installed package: every block has all seven,
+# longest observed comment line is 159 bytes. The 512-byte cap is a
+# generous margin over any legitimate Issuer/Subject DN while still
+# bounding how much text a single recognized-prefix line can carry — this
+# is the "narrowly justified" comment allowance, not a general one: any
+# line that is not one of these seven exact prefixes (e.g. a smuggled
+# `# note: ...` or `# SECRET=...`) fails to match and breaks the full
+# fullmatch below, so it is still rejected like any other stray byte.
+_CERTIFI_COMMENT_FIELD = (
+    r"# (?:Issuer|Subject|Label|Serial"
+    r"|MD5 Fingerprint|SHA1 Fingerprint|SHA256 Fingerprint): [^\r\n]{0,512}"
+)
+_COMMENT_LINE = rf"(?:{_CERTIFI_COMMENT_FIELD})\r?\n"
 _CERT_BLOCK = (
+    rf"(?:{_COMMENT_LINE})*"
     r"-----BEGIN CERTIFICATE-----\r?\n"
     rf"(?:{_B64_LINE}\r?\n)+"
     r"-----END CERTIFICATE-----"
 )
 # Full-input fullmatch: the entire byte stream must be one or more complete
-# BEGIN/END CERTIFICATE blocks separated by nothing but whitespace — any
+# BEGIN/END CERTIFICATE blocks (each optionally preceded by recognized
+# certifi metadata comment lines) separated by nothing but whitespace — any
 # prepended/appended/interleaved text (secrets, other PEM labels, malformed
-# bytes, unmatched delimiters) breaks the match and the file is rejected.
+# bytes, unmatched delimiters, unrecognized comments) breaks the match and
+# the file is rejected.
 _STRICT_PEM_BUNDLE_RE = re.compile(rf"^{_WS}(?:{_CERT_BLOCK}{_WS})+$")
 
 
@@ -148,6 +201,8 @@ def classify_member(
     read_content: Callable[[], bytes] | None = None,
     *,
     is_regular_file: bool = True,
+    is_link: bool = False,
+    link_target_verified: bool = False,
 ) -> tuple[str, str] | None:
     """Classify a tar member path as forbidden, or None if clean.
 
@@ -160,29 +215,164 @@ def classify_member(
     (`TarInfo.isfile()`/`isreg()`) and gates the CA-bundle content
     exemption: it is granted only to a genuine regular file, whose bytes
     can be read directly and structurally verified as a pure certificate
-    bundle by `is_verified_ca_bundle`. A symlink, hardlink, device, FIFO,
+    bundle by `is_verified_ca_bundle`.
+
+    `is_link` (`TarInfo.issym()` or `TarInfo.islnk()`) and
+    `link_target_verified` gate a second, independent exemption for a
+    symlink/hardlink at a trust-store path: this function never resolves
+    or reads the link's target itself (a hardlink shares another member's
+    raw bytes and a symlink's target is a separate, independently-scanned
+    tar member), so `link_target_verified=True` must come from the
+    caller having already performed bounded, cycle-safe, non-traversing
+    resolution against the actual OCI layer state (see `scan()` and
+    `_resolve_trusted_link_content`) and independently verified the
+    resolved regular member's bytes. Absent that pre-verified evidence
+    (the default for both parameters), a symlink, hardlink, device, FIFO,
     or directory at an otherwise-trusted CA path is never exempted by path
-    alone — a hardlink shares another member's raw bytes with no
-    verification of its own, and a symlink's target is a separate,
-    independently-scanned tar member whose own classification is what
-    actually gates it. Such non-regular members fall through to the
-    generic forbidden-pattern check below, so a `.pem`/`.crt`-named link
-    still classifies as `credential` even at a trust-store-shaped path.
+    alone and falls through to the generic forbidden-pattern check below,
+    so a `.pem`/`.crt`-named link still classifies as `credential` even at
+    a trust-store-shaped path.
     """
     norm = normalize_member_path(name)
     if norm.split("/", 1)[0] == "..":
         return ("path_traversal", name)
-    if is_regular_file and _is_trusted_ca_path(norm) and read_content is not None:
-        try:
-            data = read_content()
-        except (OSError, tarfile.TarError):
-            data = None
-        if data is not None and is_verified_ca_bundle(data):
+    if _is_trusted_ca_path(norm):
+        if is_regular_file and read_content is not None:
+            try:
+                data = read_content()
+            except (OSError, tarfile.TarError):
+                data = None
+            if data is not None and is_verified_ca_bundle(data):
+                return None
+        elif is_link and link_target_verified:
             return None
     for pattern, category in FORBIDDEN_PATTERNS:
         if pattern.rstrip("/") in norm:
             return (category, pattern)
     return None
+
+
+_MAX_LINK_HOPS = 40  # generous bound, matching typical OS ELOOP limits
+
+
+class _MergedEntry:
+    """One path's state in the OCI-union (whiteout-aware) merged view of
+    the image filesystem as of a given point in the layer stack."""
+
+    __slots__ = ("kind", "linkname", "layer_path", "member_name")
+
+    def __init__(self, kind: str, linkname: str, layer_path: str, member_name: str) -> None:
+        self.kind = kind  # "reg" | "symlink" | "hardlink" | "other"
+        self.linkname = linkname
+        self.layer_path = layer_path
+        self.member_name = member_name
+
+
+def _update_merged_state(
+    merged_state: dict[str, _MergedEntry], layer_path: str, members: list[tarfile.TarInfo]
+) -> None:
+    """Apply one layer's members to `merged_state` in place, OCI-union
+    semantics: this layer's own whiteouts are resolved against the state
+    inherited from earlier layers first, then this layer's own
+    regular/symlink/hardlink/other writes are recorded — so a write always
+    wins over a same-layer whiteout of the same path, and a write is
+    visible even inside a directory the same layer opaque-whites out.
+    Whiteout markers themselves are never entries in the merged state.
+    """
+    opaque_dirs: list[str] = []
+    exact_deletes: list[str] = []
+    writes: list[tuple[str, tarfile.TarInfo]] = []
+    for member in members:
+        norm = normalize_member_path(member.name)
+        base = posixpath.basename(norm)
+        if base == ".wh..wh..opq":
+            opaque_dirs.append(posixpath.dirname(norm))
+        elif base.startswith(".wh."):
+            exact_deletes.append(
+                normalize_member_path(posixpath.join(posixpath.dirname(norm), base[len(".wh."):]))
+            )
+        else:
+            writes.append((norm, member))
+
+    for directory in opaque_dirs:
+        prefix = f"{directory}/" if directory else ""
+        for path in list(merged_state):
+            if directory == "" or path.startswith(prefix):
+                del merged_state[path]
+    for path in exact_deletes:
+        merged_state.pop(path, None)
+
+    for norm, member in writes:
+        if member.isfile():
+            kind = "reg"
+        elif member.issym():
+            kind = "symlink"
+        elif member.islnk():
+            kind = "hardlink"
+        else:
+            kind = "other"
+        merged_state[norm] = _MergedEntry(kind, member.linkname, layer_path, member.name)
+
+
+def _resolve_trusted_link_content(
+    merged_state: dict[str, _MergedEntry],
+    read_layer_member: Callable[[str, str], bytes | None],
+    start_norm: str,
+    linkname: str,
+    is_hardlink: bool,
+) -> bytes | None:
+    """Bounded, cycle-safe resolution of a symlink/hardlink chain rooted at
+    an already-trusted-path member. Returns the ultimate regular member's
+    raw bytes only if every hop stays inside the image root, never repeats
+    a path (no cycles), resolves within `_MAX_LINK_HOPS`, and lands on a
+    genuine regular member recorded in the merged OCI filesystem state
+    whose own normalized path is *also* a trust-store path — this never
+    widens the allowlist to a target outside the recognized locations, it
+    only lets a trust-store-internal link (e.g. Debian's
+    `etc/ssl/certs/<hash>.0 -> <name>.pem -> /usr/share/ca-certificates/...`
+    chain) reach the regular member whose bytes actually get verified.
+    Returns None on any dangling target, cycle, traversal/absolute escape,
+    non-regular or untrusted-path final member, or whiteout-masked path —
+    the caller always falls back to the fail-closed generic pattern check.
+    """
+    current_norm = start_norm
+    current_link = linkname
+    current_is_hardlink = is_hardlink
+    visited = {start_norm}
+    for _ in range(_MAX_LINK_HOPS):
+        if current_is_hardlink:
+            # Tar hardlinks name another member of the same archive by its
+            # own archive path, not a symlink-style path relative to the
+            # link's parent directory.
+            target_norm = normalize_member_path(current_link)
+        elif current_link.startswith("/"):
+            target_norm = normalize_member_path(current_link)
+        else:
+            target_norm = normalize_member_path(
+                posixpath.join(posixpath.dirname(current_norm), current_link)
+            )
+        if target_norm.split("/", 1)[0] == "..":
+            return None  # absolute-root or relative traversal escape
+        if target_norm in visited:
+            return None  # cycle
+        visited.add(target_norm)
+
+        entry = merged_state.get(target_norm)
+        if entry is None:
+            return None  # dangling, including whiteout-masked paths
+
+        if entry.kind == "reg":
+            if not _is_trusted_ca_path(target_norm):
+                return None
+            return read_layer_member(entry.layer_path, entry.member_name)
+        if entry.kind == "symlink":
+            current_norm, current_link, current_is_hardlink = target_norm, entry.linkname, False
+            continue
+        if entry.kind == "hardlink":
+            current_norm, current_link, current_is_hardlink = target_norm, entry.linkname, True
+            continue
+        return None  # device/FIFO/directory target — never verifiable
+    return None  # hop budget exhausted
 
 
 def is_whiteout(name: str) -> bool:
@@ -199,10 +389,45 @@ def scan(image: str) -> dict:
             layer_paths = [entry for cfg in manifest for entry in cfg["Layers"]]
             violations = []
             layer_reports = []
+            # Cumulative OCI-union filesystem state, layers [0..i] applied
+            # in order — built incrementally so a trust-store symlink can
+            # be resolved against every layer up to and including its own
+            # (never a later one), matching real union-filesystem semantics
+            # and never using information that would not yet exist at that
+            # point in the image build.
+            merged_state: dict[str, _MergedEntry] = {}
             for layer_path in layer_paths:
-                members = []
                 with tarfile.open(fileobj=outer.extractfile(layer_path)) as layer:
-                    for member in layer.getmembers():
+                    members = layer.getmembers()
+                    _update_merged_state(merged_state, layer_path, members)
+                    member_index = {m.name: m for m in members}
+
+                    def read_layer_member(
+                        target_layer_path: str,
+                        target_member_name: str,
+                        _layer=layer,
+                        _layer_path=layer_path,
+                        _index=member_index,
+                        _outer=outer,
+                    ) -> bytes | None:
+                        if target_layer_path == _layer_path:
+                            info = _index.get(target_member_name)
+                            if info is None:
+                                return None
+                            fileobj = _layer.extractfile(info)
+                            return fileobj.read() if fileobj is not None else None
+                        other_fileobj = _outer.extractfile(target_layer_path)
+                        if other_fileobj is None:
+                            return None
+                        with tarfile.open(fileobj=other_fileobj) as other_layer:
+                            try:
+                                info = other_layer.getmember(target_member_name)
+                            except KeyError:
+                                return None
+                            target_fileobj = other_layer.extractfile(info)
+                            return target_fileobj.read() if target_fileobj is not None else None
+
+                    for member in members:
                         if is_whiteout(member.name):
                             continue
                         read_content = None
@@ -210,16 +435,33 @@ def scan(image: str) -> dict:
                             def read_content(_layer=layer, _member=member) -> bytes:
                                 fileobj = _layer.extractfile(_member)
                                 return fileobj.read() if fileobj is not None else b""
+                        is_link = member.issym() or member.islnk()
+                        link_target_verified = False
+                        if is_link and _is_trusted_ca_path(normalize_member_path(member.name)):
+                            target_bytes = _resolve_trusted_link_content(
+                                merged_state,
+                                read_layer_member,
+                                normalize_member_path(member.name),
+                                member.linkname,
+                                member.islnk(),
+                            )
+                            link_target_verified = (
+                                target_bytes is not None and is_verified_ca_bundle(target_bytes)
+                            )
                         hit = classify_member(
-                            member.name, read_content, is_regular_file=member.isfile()
+                            member.name,
+                            read_content,
+                            is_regular_file=member.isfile(),
+                            is_link=is_link,
+                            link_target_verified=link_target_verified,
                         )
                         if hit:
                             violations.append({
                                 "layer": layer_path, "member": member.name,
                                 "category": hit[0], "pattern": hit[1],
                             })
-                        members.append(member.name)
-                layer_reports.append({"layer": layer_path, "member_count": len(members)})
+                    member_count = sum(1 for m in members if not is_whiteout(m.name))
+                layer_reports.append({"layer": layer_path, "member_count": member_count})
             return {
                 "schema": "m43-layer-scan-v1", "image": image,
                 "layers": layer_reports, "violations": violations,

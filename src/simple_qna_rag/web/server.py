@@ -345,6 +345,7 @@ def _make_lifespan(
                 app.state.settings = candidate
                 app.state.settings_error = None
                 grace = candidate.SHUTDOWN_GRACE_SECONDS
+                app.state.engine_artifact_reason = None
                 try:
                     app.state.engine = engine_factory(candidate)
                     app.state.engine_error = None
@@ -359,10 +360,11 @@ def _make_lifespan(
                 except Exception as exc:  # fail-soft engine diagnostic
                     app.state.engine = None
                     app.state.engine_error = str(exc)
-
-                app.state.engine_artifact_reason = getattr(
-                    app.state.engine, "_artifact_error_reason", None
-                )
+                    # engine_factory never returns the failed instance on
+                    # failure (get_rag_engine() discards it), so the only
+                    # way to recover a disclosed artifact reason is off the
+                    # exception itself — see rag_engine.EngineArtifactError.
+                    app.state.engine_artifact_reason = getattr(exc, "reason", None)
                 _, reason = evaluate_readiness(
                     getattr(app.state, "bootstrap_error", None),
                     app.state.settings_error,

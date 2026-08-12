@@ -2,8 +2,7 @@
 
 Used only by `container_smoke.py`'s hosted Linux plumbing check
 (build -> activate -> serve -> query 200) so it never needs to download or
-initialize a real embedding model inside the container. Implements only the
-LangChain `Embeddings` protocol (`embed_documents`/`embed_query`).
+initialize a real embedding model inside the container.
 
 This file is intentionally outside `src/` — the production image never
 COPYs `tests/`, so this module cannot be imported from a production
@@ -16,8 +15,17 @@ from __future__ import annotations
 import hashlib
 import math
 
+from langchain_core.embeddings import Embeddings
 
-class DeterministicTestEmbeddings:
+
+class DeterministicTestEmbeddings(Embeddings):
+    """Subclasses the real `Embeddings` ABC (not just duck-typed) — FAISS's
+    `embeddings` property, and any other `isinstance(..., Embeddings)`
+    check downstream (e.g. `StoredVectorIndex.build()`'s canary embed via
+    `vectorstore.embeddings`), only recognizes an actual `Embeddings`
+    instance; a duck-typed lookalike is silently treated as a raw callable
+    and `vectorstore.embeddings` resolves to `None`."""
+
     DIMENSION = 32  # arbitrary fixed value, unrelated to any production model dimension
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:

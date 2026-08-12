@@ -258,9 +258,11 @@ def _build_fixture_index(index_root: Path) -> None:
     import pickle
     import hashlib
     from langchain_community.docstore.in_memory import InMemoryDocstore
+    from langchain_core.documents import Document
 
     from simple_qna_rag.index import lifecycle
     from simple_qna_rag.index.manifest import canonical_json_bytes
+    from simple_qna_rag.rag_engine import DETERMINISTIC_TEST_EMBEDDING_MODEL_NAME
 
     texts = ["container smoke fixture document one", "container smoke fixture document two"]
     embeddings = DeterministicTestEmbeddings()
@@ -268,11 +270,21 @@ def _build_fixture_index(index_root: Path) -> None:
     index = faiss.IndexFlatIP(vectors.shape[1])
     index.add(vectors)
     faiss_bytes = faiss.serialize_index(index).tobytes()
-    docstore = InMemoryDocstore({str(i): t for i, t in enumerate(texts)})
+    # Real production docstores hold Document objects (langchain text
+    # splitter output — see cli/index_lifecycle.py/cli/index_documents.py),
+    # never raw strings — StoredVectorIndex.build()'s canary re-embed reads
+    # document.page_content, which a bare str does not have.
+    docstore = InMemoryDocstore(
+        {str(i): Document(page_content=t) for i, t in enumerate(texts)}
+    )
     pkl_bytes = pickle.dumps((docstore, {i: str(i) for i in range(len(texts))}))
 
     binding = {
-        "embedding_model_name": "deterministic-test-fixture",
+        # Must equal rag_engine.py's _settings_binding_snapshot() output for
+        # this provider (imported, not duplicated) — a mismatch here is
+        # exactly the settings_mismatch trust-boundary rejection this
+        # fixture exists to avoid.
+        "embedding_model_name": DETERMINISTIC_TEST_EMBEDDING_MODEL_NAME,
         "embedding_provider": "deterministic_test",
         "normalize_embeddings": True,
         "chunk_size": 1000,

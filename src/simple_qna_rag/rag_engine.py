@@ -59,6 +59,20 @@ from simple_qna_rag.vector_index import StoredVectorIndex, VectorIndexValidation
 
 _TEST_SEAM_MODULE = "simple_qna_rag_test_seam.deterministic_embeddings"
 
+# When EMBEDDING_PROVIDER="deterministic_test", _build_embeddings() below
+# never reads EMBEDDING_MODEL_NAME at all — the test seam's embedding
+# identity is fixed and provider-driven, not model-name-driven. A trust
+# boundary snapshot that echoed the ambient EMBEDDING_MODEL_NAME anyway
+# (whatever a deployment happens to have configured for its normal
+# huggingface provider) would make _settings_binding_snapshot() disagree
+# with any index built while this fixed identity was active, rejecting a
+# genuinely consistent deterministic-test index as "settings_mismatch".
+# This sentinel is the single source of truth for that identity — the
+# fixture builder in scripts/container_smoke.py imports it too, so the
+# manifest baked at build time and the snapshot read back at load time can
+# never independently drift from each other again.
+DETERMINISTIC_TEST_EMBEDDING_MODEL_NAME = "deterministic-test-fixture"
+
 
 class IndexTrustError(RuntimeError):
     """Raised when `INDEX_ROOT/current` resolves to a version that fails
@@ -74,6 +88,20 @@ class TestEmbeddingSeamUnavailable(RuntimeError):
     """Raised when `EMBEDDING_PROVIDER="deterministic_test"` but the test
     seam module is not importable — the expected outcome in every
     production image, which never COPYs `tests/` (Design.md §5.2-a)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class EngineArtifactError(RuntimeError):
+    """Raised by get_rag_engine() when RAGEngine.initialize() fails with a
+    disclosed artifact reason (an IndexTrustError/TestEmbeddingSeamUnavailable
+    caught inside initialize() and recorded as `self._artifact_error_reason`).
+    get_rag_engine() never returns the failed instance, so `.reason` here is
+    the only way a caller — server.py's `_make_lifespan`, which only sees
+    this exception, not the discarded RAGEngine — can recover the reason for
+    `evaluate_readiness()`'s `artifact_{reason}` branch."""
 
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
@@ -100,7 +128,11 @@ def _build_embeddings():
 
 def _settings_binding_snapshot() -> dict:
     return {
-        "embedding_model_name": EMBEDDING_MODEL_NAME,
+        "embedding_model_name": (
+            DETERMINISTIC_TEST_EMBEDDING_MODEL_NAME
+            if EMBEDDING_PROVIDER == "deterministic_test"
+            else EMBEDDING_MODEL_NAME
+        ),
         "embedding_provider": EMBEDDING_PROVIDER,
         "normalize_embeddings": NORMALIZE_EMBEDDINGS,
         "chunk_size": CHUNK_SIZE,
@@ -787,9 +819,16 @@ def get_rag_engine() -> RAGEngine:
     """RAG 엔진 싱글톤 인스턴스 반환"""
     global _rag_engine
     if _rag_engine is None:
-        _rag_engine = RAGEngine()
-        if not _rag_engine.initialize():
+        candidate = RAGEngine()
+        if not candidate.initialize():
+            # Do not cache a failed instance — a later call must retry
+            # initialize() rather than silently returning the same broken
+            # engine forever (the module global stays None on failure).
+            reason = candidate._artifact_error_reason
+            if reason is not None:
+                raise EngineArtifactError(reason)
             raise RuntimeError("RAG 엔진 초기화 실패")
+        _rag_engine = candidate
     return _rag_engine
 
 
