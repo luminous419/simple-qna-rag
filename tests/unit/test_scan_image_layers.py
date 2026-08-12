@@ -632,14 +632,24 @@ def test_scan_flags_hardlink_bypass_end_to_end(monkeypatch, tmp_path):
 # shapes while staying fail-closed against dangling targets, cycles,
 # traversal, whiteout ambiguity, and comment-disguised secrets.
 
+# Exact real comment stanza for the same Entrust root as _REAL_CA_CERT_PEM,
+# copied verbatim from the installed certifi package's cacert.pem (all
+# seven fields, correct order, byte-exact fingerprint lengths) — Code
+# Review Iteration 5 (CR-I5-MAJ-01) requires the grammar to enforce exact
+# field count/order/length, so this fixture must be genuine, not a
+# hand-abbreviated approximation (a shortened, e.g. non-32-byte, SHA256
+# value would now correctly fail to match).
 _CERTIFI_STYLE_BLOCK = (
-    b'# Issuer: CN=Entrust Root Certification Authority O=Entrust, Inc.\n'
-    b'# Subject: CN=Entrust Root Certification Authority O=Entrust, Inc.\n'
+    b"# Issuer: CN=Entrust Root Certification Authority O=Entrust, Inc. "
+    b"OU=www.entrust.net/CPS is incorporated by reference/(c) 2006 Entrust, Inc.\n"
+    b"# Subject: CN=Entrust Root Certification Authority O=Entrust, Inc. "
+    b"OU=www.entrust.net/CPS is incorporated by reference/(c) 2006 Entrust, Inc.\n"
     b'# Label: "Entrust Root Certification Authority"\n'
     b"# Serial: 1164660820\n"
     b"# MD5 Fingerprint: d6:a5:c3:ed:5d:dd:3e:00:c1:3d:87:92:1f:1d:3f:e4\n"
     b"# SHA1 Fingerprint: b3:1e:b1:b7:40:e3:6c:84:02:da:dc:37:d4:4d:f5:d4:67:49:52:f9\n"
-    b"# SHA256 Fingerprint: 73:c1:76:43:4f:1b:c6:d5:ad:f4:5b:0e:76:e7:27:28:7c:8d:e5\n"
+    b"# SHA256 Fingerprint: 73:c1:76:43:4f:1b:c6:d5:ad:f4:5b:0e:76:e7:27:28:"
+    b"7c:8d:e5:76:16:c1:e6:e6:14:1a:2b:2c:bc:7d:8e:4c\n"
 ) + _REAL_CA_CERT_PEM
 
 
@@ -672,6 +682,225 @@ def test_is_verified_ca_bundle_rejects_comment_after_cert_block():
     consumption."""
     data = _REAL_CA_CERT_PEM + b"# Label: \"trailing, not leading\"\n"
     assert scanner.is_verified_ca_bundle(data) is False
+
+
+# --- Code Review Iteration 5 (CR-I5-MAJ-01): exact certifi stanza grammar -
+#
+# The iteration-3 grammar (`(?:_COMMENT_LINE)*` with a `[^\r\n]{0,512}`
+# value class per recognized prefix) accepted any number and order of the
+# seven prefixes with unbounded free-text values — direct adversarial
+# probes with duplicated/reordered/token-bearing "recognized-prefix"
+# comments all still matched (Code_Review_Iteration_5.md CR-I5-MAJ-01).
+# The fix encodes the seven fields as one fixed, non-repeating, exactly
+# once each sequence with field-specific bounded grammar (see the module
+# docstring). Everything below proves: a full real installed certifi
+# bundle still verifies end to end; missing/duplicate/reordered/extra
+# fields are all rejected; and every one of the seven fields rejects
+# token/path/key-value/private-material payloads under its own grammar.
+
+_CERTIFI_ISSUER_SUBJECT = (
+    b"CN=Entrust Root Certification Authority O=Entrust, Inc. "
+    b"OU=www.entrust.net/CPS is incorporated by reference/(c) 2006 Entrust, Inc."
+)
+
+# Exact real entry copied from the real linux/amd64 production image's
+# `pip/_vendor/certifi/cacert.pem` (docker cp against a container built
+# from this exact revision's deploy/Dockerfile). Verifying this exact
+# byte-for-byte real stanza is what actually caught the CR-I5-MAJ-01
+# remediation's own regression: the first Issuer/Subject-only alphabet
+# (no underscore) rejected this genuine, untampered entry — pip's
+# vendored certifi renders `OU=...CPS_2048...` with a literal underscore
+# — producing a real `forbidden_count: 1` false positive against the
+# actual built image. `_ISSUER_SUBJECT_VALUE` now includes underscore.
+_REAL_PIP_VENDORED_CERTIFI_ENTRUST_2048_ENTRY = (
+    b"# Issuer: CN=Entrust.net Certification Authority (2048) O=Entrust.net "
+    b"OU=www.entrust.net/CPS_2048 incorp. by ref. (limits liab.)/(c) 1999 "
+    b"Entrust.net Limited\n"
+    b"# Subject: CN=Entrust.net Certification Authority (2048) O=Entrust.net "
+    b"OU=www.entrust.net/CPS_2048 incorp. by ref. (limits liab.)/(c) 1999 "
+    b"Entrust.net Limited\n"
+    b'# Label: "Entrust.net Premium 2048 Secure Server CA"\n'
+    b"# Serial: 946069240\n"
+    b"# MD5 Fingerprint: ee:29:31:bc:32:7e:9a:e6:e8:b5:f7:51:b4:34:71:90\n"
+    b"# SHA1 Fingerprint: 50:30:06:09:1d:97:d4:f5:ae:39:f7:cb:e7:92:7d:7d:65:2d:34:31\n"
+    b"# SHA256 Fingerprint: 6d:c4:71:72:e0:1c:bc:b0:bf:62:58:0d:89:5f:e2:b8:"
+    b"ac:9a:d4:f8:73:80:1e:0c:10:b9:c8:37:d2:1e:b1:77\n"
+    b"-----BEGIN CERTIFICATE-----\n"
+    b"MIIEKjCCAxKgAwIBAgIEOGPe+DANBgkqhkiG9w0BAQUFADCBtDEUMBIGA1UEChML\n"
+    b"RW50cnVzdC5uZXQxQDA+BgNVBAsUN3d3dy5lbnRydXN0Lm5ldC9DUFNfMjA0OCBp\n"
+    b"bmNvcnAuIGJ5IHJlZi4gKGxpbWl0cyBsaWFiLikxJTAjBgNVBAsTHChjKSAxOTk5\n"
+    b"IEVudHJ1c3QubmV0IExpbWl0ZWQxMzAxBgNVBAMTKkVudHJ1c3QubmV0IENlcnRp\n"
+    b"ZmljYXRpb24gQXV0aG9yaXR5ICgyMDQ4KTAeFw05OTEyMjQxNzUwNTFaFw0yOTA3\n"
+    b"MjQxNDE1MTJaMIG0MRQwEgYDVQQKEwtFbnRydXN0Lm5ldDFAMD4GA1UECxQ3d3d3\n"
+    b"LmVudHJ1c3QubmV0L0NQU18yMDQ4IGluY29ycC4gYnkgcmVmLiAobGltaXRzIGxp\n"
+    b"YWIuKTElMCMGA1UECxMcKGMpIDE5OTkgRW50cnVzdC5uZXQgTGltaXRlZDEzMDEG\n"
+    b"A1UEAxMqRW50cnVzdC5uZXQgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkgKDIwNDgp\n"
+    b"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArU1LqRKGsuqjIAcVFmQq\n"
+    b"K0vRvwtKTY7tgHalZ7d4QMBzQshowNtTK91euHaYNZOLGp18EzoOH1u3Hs/lJBQe\n"
+    b"sYGpjX24zGtLA/ECDNyrpUAkAH90lKGdCCmziAv1h3edVc3kw37XamSrhRSGlVuX\n"
+    b"MlBvPci6Zgzj/L24ScF2iUkZ/cCovYmjZy/Gn7xxGWC4LeksyZB2ZnuU4q941mVT\n"
+    b"XTzWnLLPKQP5L6RQstRIzgUyVYr9smRMDuSYB3Xbf9+5CFVghTAp+XtIpGmG4zU/\n"
+    b"HoZdenoVve8AjhUiVBcAkCaTvA5JaJG/+EfTnZVCwQ5N328mz8MYIWJmQ3DW1cAH\n"
+    b"4QIDAQABo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNV\n"
+    b"HQ4EFgQUVeSB0RGAvtiJuQijMfmhJAkWuXAwDQYJKoZIhvcNAQEFBQADggEBADub\n"
+    b"j1abMOdTmXx6eadNl9cZlZD7Bh/KM3xGY4+WZiT6QBshJ8rmcnPyT/4xmf3IDExo\n"
+    b"U8aAghOY+rat2l098c5u9hURlIIM7j+VrxGrD9cv3h8Dj1csHsm7mhpElesYT6Yf\n"
+    b"zX1XEC+bBAlahLVu2B064dae0Wx5XnkcFMXj0EyTO2U87d89vqbllRrDtRnDvV5b\n"
+    b"u/8j72gZyxKTJ1wDLW8w0B62GqzeWvfRqqgnpv55gcR5mTNXuhKwqeBCbJPKVt7+\n"
+    b"bYQLCIt+jerXmCHG8+c8eS9enNFMFY3h7CI3zJpDC5fcgJCNs2ebb0gIFVbPv/Er\n"
+    b"fF6adulZkMV8gzURZVE=\n"
+    b"-----END CERTIFICATE-----\n"
+)
+
+
+def test_is_verified_ca_bundle_accepts_real_pip_vendored_entry_with_underscore_in_dn():
+    """CR-I5-MAJ-01 remediation regression: a genuine DN legitimately
+    contains an underscore (`OU=...CPS_2048...`), and the Issuer/Subject
+    alphabet must accept it — an alphabet narrow enough to exclude
+    underscore entirely would false-positive-reject this real,
+    untampered certifi entry (reproduced against the real built image;
+    see scan_image_layers.py's `_ISSUER_SUBJECT_VALUE` docstring)."""
+    assert (
+        scanner.is_verified_ca_bundle(_REAL_PIP_VENDORED_CERTIFI_ENTRUST_2048_ENTRY)
+        is True
+    )
+
+
+def _certifi_stanza(
+    *,
+    issuer: bytes = _CERTIFI_ISSUER_SUBJECT,
+    subject: bytes = _CERTIFI_ISSUER_SUBJECT,
+    label: bytes = b'"Entrust Root Certification Authority"',
+    serial: bytes = b"1164660820",
+    md5: bytes = b"d6:a5:c3:ed:5d:dd:3e:00:c1:3d:87:92:1f:1d:3f:e4",
+    sha1: bytes = b"b3:1e:b1:b7:40:e3:6c:84:02:da:dc:37:d4:4d:f5:d4:67:49:52:f9",
+    sha256: bytes = (
+        b"73:c1:76:43:4f:1b:c6:d5:ad:f4:5b:0e:76:e7:27:28:"
+        b"7c:8d:e5:76:16:c1:e6:e6:14:1a:2b:2c:bc:7d:8e:4c"
+    ),
+) -> bytes:
+    """Build a certifi-shaped stanza + the real Entrust cert, with one
+    field's value swappable for adversarial probing. Defaults reproduce
+    the exact real upstream values so only the targeted field deviates."""
+    return (
+        b"# Issuer: " + issuer + b"\n"
+        b"# Subject: " + subject + b"\n"
+        b"# Label: " + label + b"\n"
+        b"# Serial: " + serial + b"\n"
+        b"# MD5 Fingerprint: " + md5 + b"\n"
+        b"# SHA1 Fingerprint: " + sha1 + b"\n"
+        b"# SHA256 Fingerprint: " + sha256 + b"\n"
+    ) + _REAL_CA_CERT_PEM
+
+
+def test_is_verified_ca_bundle_accepts_full_installed_certifi_bundle():
+    """Full real upstream oracle: the actual installed `certifi` package
+    (a locked project dependency — see requirements.lock) exports its
+    entire real `cacert.pem`, comments and all, and it must verify in one
+    shot — not a hand-built approximation of the format."""
+    import certifi
+
+    with open(certifi.where(), "rb") as handle:
+        data = handle.read()
+    assert len(data) > 0
+    assert scanner.is_verified_ca_bundle(data) is True
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        b"# Issuer:",
+        b"# Subject:",
+        b"# Label:",
+        b"# Serial:",
+        b"# MD5 Fingerprint:",
+        b"# SHA1 Fingerprint:",
+        b"# SHA256 Fingerprint:",
+    ],
+)
+def test_is_verified_ca_bundle_rejects_stanza_missing_a_field(prefix):
+    """Dropping any single one of the seven fields must break the fixed
+    sequence — six of seven is not a valid stanza."""
+    lines = _CERTIFI_STYLE_BLOCK.split(b"\n")
+    dropped = b"\n".join(line for line in lines if not line.startswith(prefix))
+    assert scanner.is_verified_ca_bundle(dropped) is False, prefix
+
+
+def test_is_verified_ca_bundle_rejects_duplicate_field():
+    """A duplicated `# Issuer:` line ahead of the real one (with `#
+    Subject:` still following where the grammar expects it) must not be
+    tolerated as an eight-line variant of the seven-field stanza."""
+    duplicated = _CERTIFI_STYLE_BLOCK.replace(
+        b"# Issuer: CN=Entrust",
+        b"# Issuer: CN=Entrust\n# Issuer: CN=Entrust",
+        1,
+    )
+    assert scanner.is_verified_ca_bundle(duplicated) is False
+
+
+def test_is_verified_ca_bundle_rejects_reordered_fields():
+    """The seven fields must appear in the exact upstream order — swapping
+    `# Label:` and `# Serial:` must break the match even though all seven
+    recognized prefixes and legal values are still present somewhere in
+    the stanza."""
+    lines = _CERTIFI_STYLE_BLOCK.split(b"\n")
+    label_idx = next(i for i, line in enumerate(lines) if line.startswith(b"# Label:"))
+    serial_idx = next(i for i, line in enumerate(lines) if line.startswith(b"# Serial:"))
+    lines[label_idx], lines[serial_idx] = lines[serial_idx], lines[label_idx]
+    reordered = b"\n".join(lines)
+    assert scanner.is_verified_ca_bundle(reordered) is False
+
+
+def test_is_verified_ca_bundle_rejects_extra_field():
+    """An eighth line — even a well-formed, recognized-prefix repeat of
+    the last field — must not be tolerated alongside the required seven;
+    the sequence is fixed-length, not open-ended."""
+    extra = _CERTIFI_STYLE_BLOCK.replace(
+        b"# Serial: 1164660820\n",
+        b"# Serial: 1164660820\n# Serial: 1164660820\n",
+        1,
+    )
+    assert scanner.is_verified_ca_bundle(extra) is False
+
+
+_ADVERSARIAL_FIELD_VALUES: tuple[tuple[str, bytes], ...] = (
+    # Issuer/Subject allow underscore (a real certifi DN legitimately
+    # contains it — see the module docstring), so the discriminating
+    # smuggled character here is the colon, which stays excluded from
+    # every field's alphabet.
+    ("issuer", b"token: supersecret_value_123"),
+    ("subject", b"Authorization: Bearer_abc_def_ghi"),
+    ("label", b'"../../etc/shadow"'),
+    ("serial", b"arbitrary free text"),
+    ("md5", b"sk-live-not-a-real-api-key-0123456789abcdef"),
+    ("sha1", b"/etc/shadow:0:0:root:x:0:0"),
+    ("sha256", b'{"token": "supersecret", "path": "/etc/shadow"}'),
+)
+
+
+@pytest.mark.parametrize("field, value", _ADVERSARIAL_FIELD_VALUES)
+def test_is_verified_ca_bundle_rejects_token_path_key_value_material_per_field(field, value):
+    """CR-I5-MAJ-01: every recognized-prefix field must reject a
+    token/path/key-value/private-material payload under its own
+    field-specific grammar — the prior `[^\\r\\n]{0,512}` value class
+    accepted every one of these."""
+    stanza = _certifi_stanza(**{field: value})
+    assert scanner.is_verified_ca_bundle(stanza) is False, field
+
+
+def test_is_verified_ca_bundle_rejects_reordered_recognized_prefix_example():
+    """Reproduces the exact adversarial probe from Code_Review_Iteration_5.md
+    CR-I5-MAJ-01 verbatim (missing fields, reordered/duplicated Issuer,
+    free-text Serial) appended before a real certificate — this is the
+    literal bypass the reviewer demonstrated against the prior grammar."""
+    adversarial = (
+        b"# Issuer: API_TOKEN=supersecret\n"
+        b"# Label: ../../etc/shadow\n"
+        b"# Serial: arbitrary free text\n"
+        b"# Issuer: x\n"
+        b"# Issuer: y\n"
+    ) + _REAL_CA_CERT_PEM
+    assert scanner.is_verified_ca_bundle(adversarial) is False
 
 
 def _make_image(layers: list[tuple[str, bytes]]) -> bytes:

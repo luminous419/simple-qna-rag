@@ -101,9 +101,31 @@ class EngineArtifactError(RuntimeError):
     get_rag_engine() never returns the failed instance, so `.reason` here is
     the only way a caller — server.py's `_make_lifespan`, which only sees
     this exception, not the discarded RAGEngine — can recover the reason for
-    `evaluate_readiness()`'s `artifact_{reason}` branch."""
+    `evaluate_readiness()`'s `artifact_{reason}` branch, which puts `.reason`
+    directly into a public HTTP response field (Design.md §5.2 already
+    requires `IndexTrustError.reason` to be one of `index/verification.py`'s
+    `REASONS`, never exception text/paths — this class enforces the exact
+    same allowlist at construction, since it is the only channel that reason
+    travels through once the failed RAGEngine instance itself is discarded).
+
+    Code Review Iteration 5 (CR-I5-MAJ-02) found this constructor stored any
+    string verbatim and that `server.py` classified *any* exception carrying
+    a `.reason` attribute as an artifact failure (`getattr(exc, "reason",
+    None)` on a bare `except Exception`) — an unrelated exception that
+    happened to define `.reason` would have been reclassified and its value
+    disclosed. Both are closed now: this constructor rejects any reason
+    outside the public allowlist, and `server.py`'s lifespan catches this
+    dedicated type specifically instead of duck-typing `.reason` off
+    `Exception`.
+    """
 
     def __init__(self, reason: str) -> None:
+        if reason not in index_verification.REASONS:
+            raise ValueError(
+                "EngineArtifactError reason must be a member of "
+                f"index_verification.REASONS (the public artifact-reason "
+                f"allowlist); got {reason!r}"
+            )
         super().__init__(reason)
         self.reason = reason
 
@@ -230,6 +252,13 @@ class RAGEngine:
         Returns:
             bool: 초기화 성공 여부
         """
+        # CR-I5-MAJ-02: a stale reason from a *previous* attempt on this
+        # same object must never survive into this attempt's outcome — an
+        # unrelated ordinary failure here must report as plain
+        # `engine_init_failed`, not the earlier artifact reason. Reset
+        # unconditionally at the top of every attempt, independent of the
+        # fresh-identity guarantee `get_rag_engine()` also provides below.
+        self._artifact_error_reason = None
         try:
             # 1. 벡터스토어 로드
             self.vectorstore = self._load_vectorstore()
@@ -821,11 +850,28 @@ def get_rag_engine() -> RAGEngine:
     if _rag_engine is None:
         candidate = RAGEngine()
         if not candidate.initialize():
-            # Do not cache a failed instance — a later call must retry
-            # initialize() rather than silently returning the same broken
-            # engine forever (the module global stays None on failure).
+            # CR-I5-MAJ-02: a failed construction must not survive in
+            # *either* singleton layer. The module-level `_rag_engine`
+            # global already stays None below, but `RAGEngine.__new__`
+            # also caches every constructed instance in the class-level
+            # `_instance` — left alone, a later retry's `RAGEngine()` call
+            # would return this exact same broken, stale-state object
+            # (not a fresh one) and re-run `initialize()` on it. Clearing
+            # both class attributes forces the next `RAGEngine()` call to
+            # build a genuinely new object with fresh `__init__` state,
+            # so a subsequent artifact->ordinary or artifact->success
+            # attempt can never be misreported using this attempt's state.
             reason = candidate._artifact_error_reason
-            if reason is not None:
+            RAGEngine._instance = None
+            RAGEngine._initialized = False
+            # Only an explicit, pre-audited allowlist of reason codes may
+            # ever be disclosed as a public artifact reason (see
+            # EngineArtifactError's docstring) — anything else (including
+            # a reason that is merely present but not allowlisted) must
+            # degrade to the ordinary, un-disclosed failure path below
+            # rather than leak through `evaluate_readiness()`'s
+            # `artifact_{reason}` public HTTP field.
+            if reason is not None and reason in index_verification.REASONS:
                 raise EngineArtifactError(reason)
             raise RuntimeError("RAG 엔진 초기화 실패")
         _rag_engine = candidate

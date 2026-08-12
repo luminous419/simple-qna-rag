@@ -54,24 +54,51 @@ comment lines. Both were confirmed against real exported image bytes
 (`docker run` inspection of the built `production` target), not assumed.
 
 The fix keeps both allowlist gates fail-closed while covering these real
-shapes: `is_verified_ca_bundle`'s grammar now accepts *only* those seven
-known certifi comment-line prefixes (length-capped) immediately before a
-`BEGIN CERTIFICATE` block — any other comment text, or a comment anywhere
-else in the stream, still breaks the full-consumption match, so a secret
-disguised as `# note: ...` is still rejected. Separately,
-`classify_member` gained a `link_target_verified` parameter: `scan()` now
-builds an OCI-union (whiteout-aware, layer-ordered) merged filesystem
-state as it walks layers, and for a symlink/hardlink at a trust-store
-path, `_resolve_trusted_link_content` chases the link chain — bounded to
-`_MAX_LINK_HOPS` hops, cycle-detected via a visited-path set, rejecting
-any hop that normalizes outside the image root — and only reports a
-verified target when the chain lands on a *genuine regular member* that
-is itself at a trust-store path (never widening the allowlist to
-non-trust-store targets) whose bytes independently pass
-`is_verified_ca_bundle`. A dangling target, a cycle, a traversal/absolute
-escape, a non-regular final member, a whiteout-masked path, or content
-that fails verification all still classify as `credential` — the link
-itself is never trusted by path or name alone.
+shapes: `is_verified_ca_bundle`'s grammar accepts a certifi comment
+stanza immediately before a `BEGIN CERTIFICATE` block — any other
+comment text, or a comment anywhere else in the stream, still breaks the
+full-consumption match, so a secret disguised as `# note: ...` is still
+rejected. Separately, `classify_member` gained a `link_target_verified`
+parameter: `scan()` now builds an OCI-union (whiteout-aware,
+layer-ordered) merged filesystem state as it walks layers, and for a
+symlink/hardlink at a trust-store path, `_resolve_trusted_link_content`
+chases the link chain — bounded to `_MAX_LINK_HOPS` hops, cycle-detected
+via a visited-path set, rejecting any hop that normalizes outside the
+image root — and only reports a verified target when the chain lands on
+a *genuine regular member* that is itself at a trust-store path (never
+widening the allowlist to non-trust-store targets) whose bytes
+independently pass `is_verified_ca_bundle`. A dangling target, a cycle, a
+traversal/absolute escape, a non-regular final member, a whiteout-masked
+path, or content that fails verification all still classify as
+`credential` — the link itself is never trusted by path or name alone.
+
+Code Review Iteration 5 (CR-I5-MAJ-01) found the iteration-3 comment
+grammar above accepted *any number and order* of the seven prefixes with
+*unbounded free-text values* (`(?:_COMMENT_LINE)*` with a
+`[^\r\n]{0,512}` value class) — adversarial probes with duplicated,
+reordered, or token/path/key-value-bearing "recognized-prefix" comments
+all still matched. The grammar now encodes the exact upstream certifi
+stanza as a single fixed, non-repeating sequence — `# Issuer:`, then
+`# Subject:`, then `# Label:`, then `# Serial:`, then
+`# MD5 Fingerprint:`, then `# SHA1 Fingerprint:`, then
+`# SHA256 Fingerprint:`, each appearing at most once because the
+sequence names each field literally exactly one time — so a missing,
+duplicated, reordered, or extra field breaks the match instead of being
+silently accepted or ignored. Each field also carries its own bounded
+grammar derived from the real installed certifi package (every value
+character actually observed across its full bundle, plus a generous
+length margin): `# Serial:` is decimal digits only; the three
+`Fingerprint:` fields are colon-separated lowercase hex of the exact
+byte length for their algorithm (16/20/32 bytes); `# Issuer:`/
+`# Subject:` accept only the RFC 4514-shaped
+letters/digits/space/underscore/`()/,.=\\-` alphabet, and `# Label:` the
+same minus underscore/comma/`/`/`=` (additionally requiring a wrapping
+quoted string) that a Distinguished Name can legitimately contain —
+colons, `@`, `$`, control characters, and other key=value/token/secret-
+shaped punctuation are outside every field's alphabet and still break
+the match. The stanza is optional as a whole (a system trust-store bundle
+with no comments at all still verifies) but, when present, must be the
+complete unbroken seven-field sequence described above.
 """
 
 from __future__ import annotations
@@ -121,24 +148,60 @@ _TRUSTED_CA_PATH_SUFFIXES: tuple[str, ...] = (
 )
 _WS = r"[ \t\r\n]*"
 _B64_LINE = r"[A-Za-z0-9+/=]+"
+
 # The upstream certifi cacert.pem (github.com/certifi/python-certifi,
 # generated from Mozilla's included-cert list) precedes every certificate
-# with exactly these seven metadata fields, in this order, one per line.
-# Confirmed against the real installed package: every block has all seven,
-# longest observed comment line is 159 bytes. The 512-byte cap is a
-# generous margin over any legitimate Issuer/Subject DN while still
-# bounding how much text a single recognized-prefix line can carry — this
-# is the "narrowly justified" comment allowance, not a general one: any
-# line that is not one of these seven exact prefixes (e.g. a smuggled
-# `# note: ...` or `# SECRET=...`) fails to match and breaks the full
-# fullmatch below, so it is still rejected like any other stray byte.
-_CERTIFI_COMMENT_FIELD = (
-    r"# (?:Issuer|Subject|Label|Serial"
-    r"|MD5 Fingerprint|SHA1 Fingerprint|SHA256 Fingerprint): [^\r\n]{0,512}"
+# with exactly these seven metadata fields, in this exact order, one per
+# line, each exactly once (confirmed against the real installed package:
+# every one of its blocks has all seven, in this order, no duplicates).
+# Each field's value alphabet/length below is derived from every value
+# actually observed across the full real bundle, with a generous margin —
+# not an arbitrary text allowance. Because each field name below appears
+# literally exactly once in the fixed sequence (never inside a repeating
+# group), a stanza that is missing a field, duplicates a field, reorders
+# the fields, or appends an extra field cannot match: the parser expects
+# the next literal field name and finds either the wrong one or the
+# `-----BEGIN CERTIFICATE-----` marker instead.
+_HEX_BYTE = r"[0-9a-f]{2}"
+# Serial: decimal only. Real bundle values are 1-48 digits (no sign, no
+# leading text) — RFC 5280 serials are at most 20 octets, so 48 digits is
+# already a wide margin over any conformant certificate.
+_SERIAL_VALUE = r"[0-9]{1,48}"
+# Fingerprint: colon-separated lowercase hex, byte-exact for the named
+# digest (MD5=16 bytes, SHA1=20 bytes, SHA256=32 bytes) — not a free-form
+# hex blob of arbitrary length.
+_MD5_FINGERPRINT_VALUE = rf"(?:{_HEX_BYTE}:){{15}}{_HEX_BYTE}"
+_SHA1_FINGERPRINT_VALUE = rf"(?:{_HEX_BYTE}:){{19}}{_HEX_BYTE}"
+_SHA256_FINGERPRINT_VALUE = rf"(?:{_HEX_BYTE}:){{31}}{_HEX_BYTE}"
+# Issuer/Subject: the real bundle's DN-rendering alphabet is letters,
+# digits, space, underscore, and `()/,.=\-` (no colon, `@`, `$`, quote,
+# or control byte — none of which a rendered X.509 DN needs but all of
+# which a smuggled token/key-value/secret typically does). Underscore is
+# included because a real DN legitimately contains it (confirmed against
+# two independently-vendored real certifi copies in the built production
+# image — pip's vendored `certifi==2025.10.5`'s Entrust.net 2048 CA entry
+# renders `OU=...CPS_2048...`; excluding it produced a false-positive
+# reject of that genuine trust-store bundle, CR-I5-MAJ-01 remediation
+# verification). Real observed max length is 148 bytes; 256 is a wide
+# margin.
+_ISSUER_SUBJECT_VALUE = r"[A-Za-z0-9 ()/,._=\\-]{1,256}"
+# Label: a quoted string using the same narrow alphabet minus the comma
+# (never observed inside a real Label) and minus `/` and `=` (never
+# observed either — Labels are short human-readable names, not DNs).
+# Real observed max length (incl. quotes) is 61 bytes; 128 is a wide
+# margin.
+_LABEL_VALUE = r'"[A-Za-z0-9 ().\\-]{0,126}"'
+_CERTIFI_STANZA = (
+    rf"# Issuer: {_ISSUER_SUBJECT_VALUE}\r?\n"
+    rf"# Subject: {_ISSUER_SUBJECT_VALUE}\r?\n"
+    rf"# Label: {_LABEL_VALUE}\r?\n"
+    rf"# Serial: {_SERIAL_VALUE}\r?\n"
+    rf"# MD5 Fingerprint: {_MD5_FINGERPRINT_VALUE}\r?\n"
+    rf"# SHA1 Fingerprint: {_SHA1_FINGERPRINT_VALUE}\r?\n"
+    rf"# SHA256 Fingerprint: {_SHA256_FINGERPRINT_VALUE}\r?\n"
 )
-_COMMENT_LINE = rf"(?:{_CERTIFI_COMMENT_FIELD})\r?\n"
 _CERT_BLOCK = (
-    rf"(?:{_COMMENT_LINE})*"
+    rf"(?:{_CERTIFI_STANZA})?"
     r"-----BEGIN CERTIFICATE-----\r?\n"
     rf"(?:{_B64_LINE}\r?\n)+"
     r"-----END CERTIFICATE-----"

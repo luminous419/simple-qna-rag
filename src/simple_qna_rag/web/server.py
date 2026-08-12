@@ -346,6 +346,10 @@ def _make_lifespan(
                 app.state.settings_error = None
                 grace = candidate.SHUTDOWN_GRACE_SECONDS
                 app.state.engine_artifact_reason = None
+                # Lazy import mirrors _default_engine_factory above — safe
+                # here because settings_loader() has already succeeded.
+                from simple_qna_rag.rag_engine import EngineArtifactError
+
                 try:
                     app.state.engine = engine_factory(candidate)
                     app.state.engine_error = None
@@ -357,14 +361,22 @@ def _make_lifespan(
                     )
                     app.state.query_executor = executor
                     app.state.lifecycle = "READY"
+                except EngineArtifactError as exc:  # fail-soft, disclosed reason
+                    # engine_factory never returns the failed instance on
+                    # failure (get_rag_engine() discards it), so the only
+                    # way to recover a disclosed artifact reason is off
+                    # this dedicated exception type — see
+                    # rag_engine.EngineArtifactError. CR-I5-MAJ-02: this
+                    # branch must classify *only* this specific type, never
+                    # an arbitrary exception that merely happens to define
+                    # a `.reason` attribute (that used to be reclassified
+                    # as an artifact failure via a bare `getattr`).
+                    app.state.engine = None
+                    app.state.engine_error = str(exc)
+                    app.state.engine_artifact_reason = exc.reason
                 except Exception as exc:  # fail-soft engine diagnostic
                     app.state.engine = None
                     app.state.engine_error = str(exc)
-                    # engine_factory never returns the failed instance on
-                    # failure (get_rag_engine() discards it), so the only
-                    # way to recover a disclosed artifact reason is off the
-                    # exception itself — see rag_engine.EngineArtifactError.
-                    app.state.engine_artifact_reason = getattr(exc, "reason", None)
                 _, reason = evaluate_readiness(
                     getattr(app.state, "bootstrap_error", None),
                     app.state.settings_error,

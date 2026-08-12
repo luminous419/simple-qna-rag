@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from simple_qna_rag.rag_engine import EngineArtifactError
 from simple_qna_rag.settings import Settings, SettingsError, get_settings
 from simple_qna_rag.web.bootstrap import Bootstrap
 from simple_qna_rag.web.server import create_app
@@ -49,6 +50,49 @@ def test_health_ready_settings_invalid():
 def test_health_ready_engine_init_failed():
     def _raise_engine(settings):
         raise RuntimeError("model load failed")
+
+    app = _app_with(
+        settings_loader=get_settings,
+        engine_factory=_raise_engine,
+    )
+    with TestClient(app) as client:
+        r = client.get("/health/ready")
+        assert r.status_code == 503
+        assert r.json()["reason"] == "engine_init_failed"
+
+
+def test_health_ready_engine_artifact_error_discloses_allowlisted_reason():
+    """CR-I5-MAJ-02: the lifespan must classify a dedicated
+    EngineArtifactError and disclose its (allowlisted) reason as
+    `artifact_{reason}`."""
+
+    def _raise_engine(settings):
+        raise EngineArtifactError("test_embedding_seam_unavailable")
+
+    app = _app_with(
+        settings_loader=get_settings,
+        engine_factory=_raise_engine,
+    )
+    with TestClient(app) as client:
+        r = client.get("/health/ready")
+        assert r.status_code == 503
+        assert r.json()["reason"] == "artifact_test_embedding_seam_unavailable"
+
+
+def test_health_ready_arbitrary_reason_bearing_exception_is_not_reclassified():
+    """CR-I5-MAJ-02: the lifespan must catch EngineArtifactError
+    specifically, not any exception that merely happens to define a
+    `.reason` attribute — an unrelated exception carrying `.reason` must
+    still report plain `engine_init_failed`, never a disclosed artifact
+    reason."""
+
+    class _UnrelatedError(RuntimeError):
+        def __init__(self):
+            super().__init__("unrelated failure")
+            self.reason = "not_a_real_artifact_reason"
+
+    def _raise_engine(settings):
+        raise _UnrelatedError()
 
     app = _app_with(
         settings_loader=get_settings,

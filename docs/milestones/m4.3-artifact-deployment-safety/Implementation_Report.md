@@ -557,3 +557,51 @@ reason 유실 — 총 5개 세부 지점)을 발견해 함께 고쳤다. 상세�
   `tests/unit/test_container_smoke_bare_script.py`(신규),
   `docs/milestones/m4.3-artifact-deployment-safety/Code_Review_Iteration_3.md`
   (CR-I4-MIN-02 whitespace) 9개다.
+
+## 13. Code Review Iteration 5 Remediation(같은 세션, PR #18)
+
+Iteration 3 이후의 독립 리뷰 [Code_Review_Iteration_5.md](Code_Review_Iteration_5.md)
+(판정 FAIL 9.0/10)가 지적한 `CR-I5-MAJ-01`(certifi 코멘트 grammar가
+임의 텍스트를 밀반입 가능)/`CR-I5-MAJ-02`(실패한 엔진 상태와 artifact
+reason이 재시도에서 살아남음) 2개 MAJOR finding을 모두 고쳤다. 상세는
+[Code_Review_Iteration_5_Remediation.md](Code_Review_Iteration_5_Remediation.md)
+참조. 요약:
+
+- `is_verified_ca_bundle()`의 certifi 코멘트 grammar를 "0개 이상, 순서
+  무관, 값 자유 텍스트"에서 **정확히 7개 필드를 정확한 순서로, 각
+  필드별 bounded grammar(Serial 10진수, 3개 Fingerprint는 알고리즘별
+  정확한 바이트 길이 hex, Issuer/Subject/Label은 실측 DN alphabet)**로
+  재작성했다 — 누락/중복/재정렬/추가 필드와 모든 필드의 token/path/
+  key-value/private-material 페이로드를 거부한다. 리뷰의 정확한 재현
+  입력이 이제 `False`를 반환함을 직접 확인했다.
+- 실제 `docker buildx build --platform linux/amd64 --target production`
+  이미지로 재검증하는 과정에서 pip-vendored certifi 사본의 실제
+  Entrust.net 2048 항목이 정당한 밑줄(`CPS_2048`)을 포함해
+  `forbidden_count: 1`이라는 새 오탐을 냈다 — Issuer/Subject 알파벳에
+  밑줄을 추가해 고쳤고, 재빌드 이미지로 `forbidden_count: 0`을 재확인
+  했다.
+- `RAGEngine.__new__`의 클래스 레벨 싱글톤이 실패한 인스턴스를 계속
+  캐시하고 `_artifact_error_reason`이 시도 간 리셋되지 않던 결함을
+  고쳤다 — `get_rag_engine()`이 실패 시 `_instance`/`_initialized`를
+  모두 클리어해 재시도가 항상 신선한 identity를 받고,
+  `initialize()`도 시도 시작 시 reason을 리셋한다. `EngineArtifactError`
+  는 이제 `index_verification.REASONS` 허용목록 밖의 reason으로는
+  생성될 수 없고, `server.py`의 lifespan은 이 dedicated 타입만
+  분류한다(`.reason` 속성 존재 여부가 아니라 타입으로).
+- 두 finding 모두 fix 적용 전 코드로 되돌려 신규 테스트가 정확히
+  실패함을 직접 확인한 뒤 fix를 복원했다(회귀 오라클 검증).
+- 재검증: 전체 로컬 pytest suite 1251 passed, 1 skipped(1220→1251,
+  +31). 실제 linux/amd64 이미지 스캔 `forbidden_count: 0`, 같은
+  이미지 `container_smoke.py` `status: PASS`. Linux lock
+  `compile_lock.sh --verify` PASS, drift 없음. 결정론적 acceptance
+  repeat=10 PASS(17/17 node), negative control REJECTED_AS_EXPECTED.
+- 이 remediation은 §1~§12까지의 어떤 결정도 재검토하지 않았고,
+  `M4.1_BLOCKED=true`/M3 `NOT_RUN`/`overall_release_ready=false`
+  불변식도 그대로 유지했다. OCI 레이어 해석(symlink/hardlink/whiteout)
+  로직 자체는 변경하지 않았다. 변경된 파일은
+  `scripts/scan_image_layers.py`, `tests/unit/test_scan_image_layers.py`,
+  `src/simple_qna_rag/rag_engine.py`, `src/simple_qna_rag/web/server.py`,
+  `tests/unit/test_rag_engine_singleton.py`(신규),
+  `tests/integration/test_health_endpoints.py`,
+  `docs/milestones/m4.3-artifact-deployment-safety/Code_Review_Iteration_5.md`
+  6개다.
