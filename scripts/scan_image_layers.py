@@ -15,18 +15,29 @@ test: test_deleted_credential_still_detected_in_earlier_layer).
 
 Hosted-CI remediation iteration 1 (see
 docs/milestones/m4.3-artifact-deployment-safety/Hosted_CI_Remediation_Iteration_1.md)
-narrowed the generic `.pem` credential pattern below with a fail-closed CA
-allowlist: legitimate OS/interpreter trust-store bundles (Debian
-`/etc/ssl/certs`, `/usr/lib/ssl`, `/usr/share/ca-certificates`, RHEL
-`/etc/pki/...`, and any vendored `certifi/cacert.pem`) are exempted only
-when BOTH the path matches a known trust-store location AND — for regular
-files, which is where actual bytes could leak — the content parses as
-nothing but CERTIFICATE PEM blocks that `ssl.SSLContext.load_verify_locations`
-accepts. Any private key, CSR, or other PEM label, any path outside the
-allowlist, or any content that fails to parse still classifies as
-`credential`. The allowlist can only narrow what `.pem`/`.crt` reports as
-forbidden, never widen it — see `_is_trusted_ca_path` and
-`is_verified_ca_bundle`.
+narrowed the generic `.pem`/`.crt` credential patterns below with a
+fail-closed CA allowlist: legitimate OS/interpreter trust-store bundles
+(Debian `/etc/ssl/certs`, `/usr/lib/ssl`, `/usr/share/ca-certificates`,
+RHEL `/etc/pki/...`, and any vendored `certifi/cacert.pem`) are exempted
+only when the member is a genuine regular file AND its path matches a
+known trust-store location AND its content is, byte for byte, nothing but
+one or more complete CERTIFICATE PEM blocks that
+`ssl.SSLContext.load_verify_locations` accepts as structurally valid.
+
+Hosted-CI remediation iteration 2 (Code_Review_Iteration_3.md
+CR-I3-MAJ-01/02) closed two allowlist gaps: `is_verified_ca_bundle` now
+requires the *entire* byte stream to fullmatch a strict BEGIN/END
+CERTIFICATE block grammar (rejecting appended/prepended secrets, mixed
+PEM labels, and unmatched delimiters instead of merely scanning for a
+`BEGIN` line), and `classify_member` grants the content exemption only to
+`TarInfo.isfile()` members — a symlink, hardlink, device, or FIFO at a
+trust-store-shaped path can no longer borrow the allowlist by path alone
+and instead falls through to the generic forbidden-pattern check, which
+now also covers `.crt`. Any private key, CSR, or other PEM label, any
+path outside the allowlist, any non-regular member, or any content that
+fails to parse still classifies as `credential`. The allowlist can only
+narrow what `.pem`/`.crt` reports as forbidden, never widen it — see
+`_is_trusted_ca_path` and `is_verified_ca_bundle`.
 """
 
 from __future__ import annotations
@@ -54,6 +65,7 @@ FORBIDDEN_PATTERNS: tuple[tuple[str, str], ...] = (
     ("evaluation/reports/", "ci_report"),
     ("id_rsa", "credential"),
     (".pem", "credential"),
+    (".crt", "credential"),
     (".pfx", "credential"),
     ("simple_qna_rag_test_seam", "test_embedding_seam"),
 )
@@ -73,7 +85,18 @@ _TRUSTED_CA_PATH_SUFFIXES: tuple[str, ...] = (
     "/certifi/cacert.pem",  # Python certifi package (top-level or vendored,
                              # e.g. pip/_vendor/certifi/cacert.pem)
 )
-_PEM_LABEL_RE = re.compile(rb"-----BEGIN ([A-Z0-9 ]+)-----")
+_WS = r"[ \t\r\n]*"
+_B64_LINE = r"[A-Za-z0-9+/=]+"
+_CERT_BLOCK = (
+    r"-----BEGIN CERTIFICATE-----\r?\n"
+    rf"(?:{_B64_LINE}\r?\n)+"
+    r"-----END CERTIFICATE-----"
+)
+# Full-input fullmatch: the entire byte stream must be one or more complete
+# BEGIN/END CERTIFICATE blocks separated by nothing but whitespace — any
+# prepended/appended/interleaved text (secrets, other PEM labels, malformed
+# bytes, unmatched delimiters) breaks the match and the file is rejected.
+_STRICT_PEM_BUNDLE_RE = re.compile(rf"^{_WS}(?:{_CERT_BLOCK}{_WS})+$")
 
 
 def export_image(image: str, out_tar: Path) -> None:
@@ -93,21 +116,24 @@ def _is_trusted_ca_path(norm: str) -> bool:
 
 
 def is_verified_ca_bundle(data: bytes) -> bool:
-    """Fail-closed content check: True only if `data` is exclusively
-    CERTIFICATE PEM blocks that ssl.SSLContext accepts as CA material.
+    """Fail-closed content check: True only if `data`, in its entirety, is
+    one or more complete `-----BEGIN CERTIFICATE-----`/`-----END
+    CERTIFICATE-----` blocks separated by nothing but whitespace, and the
+    result parses as structurally valid X.509 material.
 
-    Any non-CERTIFICATE PEM label (private key, CSR, public key, ...), any
-    block ssl rejects, or any decode failure returns False. A file with no
-    PEM blocks at all also returns False rather than vacuously passing.
+    `_STRICT_PEM_BUNDLE_RE.fullmatch` anchors both ends of the input, so
+    every byte must belong to a block or to the permitted whitespace
+    between blocks — arbitrary text prepended, appended, or interleaved
+    (secrets, key=value payloads, a private-key/CSR/other PEM block, an
+    unmatched or mismatched BEGIN/END delimiter, non-base64 bytes) leaves
+    at least one byte unconsumed and fails the match. A file with no PEM
+    blocks at all also returns False rather than vacuously passing.
     """
-    labels = _PEM_LABEL_RE.findall(data)
-    if not labels:
-        return False
-    if any(label.strip() != b"CERTIFICATE" for label in labels):
-        return False
     try:
         text = data.decode("ascii")
     except UnicodeDecodeError:
+        return False
+    if not _STRICT_PEM_BUNDLE_RE.fullmatch(text):
         return False
     try:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -121,33 +147,38 @@ def classify_member(
     name: str,
     read_content: Callable[[], bytes] | None = None,
     *,
-    is_symlink: bool = False,
+    is_regular_file: bool = True,
 ) -> tuple[str, str] | None:
     """Classify a tar member path as forbidden, or None if clean.
 
     `read_content` is an optional zero-arg callable returning the member's
     file bytes, supplied by callers only for members that are already path
     candidates for the CA allowlist (see _is_trusted_ca_path) — it is never
-    required for the traversal/generic-pattern checks below. `is_symlink`
-    marks members that carry no content of their own (a symlink under a
-    trusted CA path, e.g. usr/lib/ssl/cert.pem -> /etc/ssl/certs/... on
-    Debian, leaks nothing by existing, so it is exempt without a content
-    read; its symlink target, if itself a real file, is scanned as its own
-    tar member).
+    required for the traversal/generic-pattern checks below.
+
+    `is_regular_file` must reflect the tar member's actual type
+    (`TarInfo.isfile()`/`isreg()`) and gates the CA-bundle content
+    exemption: it is granted only to a genuine regular file, whose bytes
+    can be read directly and structurally verified as a pure certificate
+    bundle by `is_verified_ca_bundle`. A symlink, hardlink, device, FIFO,
+    or directory at an otherwise-trusted CA path is never exempted by path
+    alone — a hardlink shares another member's raw bytes with no
+    verification of its own, and a symlink's target is a separate,
+    independently-scanned tar member whose own classification is what
+    actually gates it. Such non-regular members fall through to the
+    generic forbidden-pattern check below, so a `.pem`/`.crt`-named link
+    still classifies as `credential` even at a trust-store-shaped path.
     """
     norm = normalize_member_path(name)
     if norm.split("/", 1)[0] == "..":
         return ("path_traversal", name)
-    if _is_trusted_ca_path(norm):
-        if is_symlink:
+    if is_regular_file and _is_trusted_ca_path(norm) and read_content is not None:
+        try:
+            data = read_content()
+        except (OSError, tarfile.TarError):
+            data = None
+        if data is not None and is_verified_ca_bundle(data):
             return None
-        if read_content is not None:
-            try:
-                data = read_content()
-            except (OSError, tarfile.TarError):
-                data = None
-            if data is not None and is_verified_ca_bundle(data):
-                return None
     for pattern, category in FORBIDDEN_PATTERNS:
         if pattern.rstrip("/") in norm:
             return (category, pattern)
@@ -180,7 +211,7 @@ def scan(image: str) -> dict:
                                 fileobj = _layer.extractfile(_member)
                                 return fileobj.read() if fileobj is not None else b""
                         hit = classify_member(
-                            member.name, read_content, is_symlink=member.issym() or member.islnk()
+                            member.name, read_content, is_regular_file=member.isfile()
                         )
                         if hit:
                             violations.append({

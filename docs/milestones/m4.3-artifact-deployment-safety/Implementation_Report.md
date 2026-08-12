@@ -427,3 +427,50 @@ PR #18 hosted run
 - 이 remediation은 §9까지의 어떤 결정도 재검토하지 않았고,
   `M4.1_BLOCKED=true`/M3 `NOT_RUN`/`overall_release_ready=false`
   불변식도 그대로 유지했다.
+
+## 11. Hosted CI Remediation Iteration 2(별도 세션, PR #18)
+
+Iteration 1 이후의 독립 리뷰
+[Code_Review_Iteration_3.md](Code_Review_Iteration_3.md)(판정 FAIL
+8.8/10)가 지적한 `CR-I3-MAJ-01`/`CR-I3-MAJ-02` 2개 finding과, hosted run
+[31606183756](https://github.com/luminous419/simple-qna-rag/actions/runs/31606183756)의
+`container` job 실제 실패(`container_smoke.py`의
+`ModuleNotFoundError: No module named 'tests'`)를 고쳤다. 상세는
+[Hosted_CI_Remediation_Iteration_2.md](Hosted_CI_Remediation_Iteration_2.md)
+참조. 요약:
+
+- `is_verified_ca_bundle()`을 BEGIN 라벨 스캔에서 전체-입력
+  full-consumption `fullmatch` 정규식으로 재작성했다 — 하나 이상의 완전한
+  `BEGIN`/`END CERTIFICATE` 블록과 그 사이 순수 공백만으로 전체 바이트가
+  소비돼야 통과하므로, 인증서 뒤/앞/사이에 붙은 시크릿·다른 PEM 라벨·
+  짝 없는 delimiter는 모두 거부된다(CR-I3-MAJ-01).
+- `classify_member()`의 `is_symlink` 파라미터를 `is_regular_file`로
+  교체하고 CA 콘텐츠 허용목록을 `TarInfo.isfile()` 멤버에만 부여했다 —
+  symlink/hardlink/device/FIFO/디렉터리는 신뢰 경로에 있어도 경로만으로
+  예외 처리되지 않고 항상 일반 forbidden-pattern 검사로 떨어진다. 이
+  분기가 실제로 닫히려면 `.crt`도 `.pem`과 동일하게 credential
+  패턴이어야 하므로 `FORBIDDEN_PATTERNS`에 `.crt`를 추가했다
+  (CR-I3-MAJ-02).
+- `tests/unit/test_scan_image_layers.py`에 19개 adversarial 테스트를
+  추가했다(20→39) — appended/prepended/interleaved 시크릿, 라벨 없는
+  private-key 꼬리, 짝 없는/불일치 delimiter, non-ASCII 바이트(MAJ-01
+  8개 + end-to-end 1개), symlink/hardlink 신뢰 경로 우회, target
+  traversal, character device/FIFO/디렉터리, 신뢰 경로 밖 `.crt`,
+  `scan()` 진입점 전체를 통한 하드링크 우회 재현(MAJ-02 9개),
+  duplicate-credential/duplicate-whiteout-history 회귀 2개.
+- `container_smoke.py`의 `run_smoke()`가 `tests.support.mock_ollama`를
+  import하기 전에 저장소 루트를 `sys.path`에 명시적으로 넣도록 한 줄을
+  추가했다 — 스크립트를 `python scripts/container_smoke.py`로 직접
+  실행하면 스크립트 자신의 디렉터리만 `sys.path[0]`에 들어가고 저장소
+  루트는 들어가지 않아 `tests` 패키지를 찾지 못했다(M4.3 feature 커밋
+  `5b91840`부터 존재했으나 이전 hosted run들은 더 앞선 스텝에서 먼저
+  실패해 이 경로에 도달하지 못했다). 정책 로직은 건드리지 않은 순수
+  import 배선 수정이다.
+- `requirements.lock`이 `charset-normalizer` 3.4.9→3.5.0 상류 릴리스로
+  다시 drift돼 Iteration 1과 동일한 절차(linux/amd64 컨테이너,
+  `uv==0.8.15`)로 재컴파일했다 — 패키지 총수 103개 불변.
+- 이 remediation은 §9~10까지의 어떤 결정도 재검토하지 않았고,
+  `M4.1_BLOCKED=true`/M3 `NOT_RUN`/`overall_release_ready=false`
+  불변식도 그대로 유지했다. 변경된 파일은 `requirements.lock`,
+  `scripts/scan_image_layers.py`, `scripts/container_smoke.py`,
+  `tests/unit/test_scan_image_layers.py` 4개뿐이다.

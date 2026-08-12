@@ -145,6 +145,8 @@ def run_smoke(image: str) -> dict:
     if shutil.which("docker") is None:
         return {"status": "SKIPPED", "reason": "docker_unavailable"}
 
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
     from tests.support.mock_ollama import start_mock_ollama_server
 
     mock_server = start_mock_ollama_server()
