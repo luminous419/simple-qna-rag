@@ -399,3 +399,31 @@ writer와 동일한 형식으로 맞춘 것 — 새 canonical 검사가 정당�
 `overall_release_ready=false` 산출 경로는 이번 4개 finding과 무관하므로
 전혀 수정하지 않았다 — §7의 M4 release readiness 상태(BLOCKED)는 그대로
 유지된다.
+
+## 10. Hosted CI Remediation Iteration 1(별도 세션, PR #18)
+
+PR #18 hosted run
+[31593816593](https://github.com/luminous419/simple-qna-rag/actions/runs/31593816593)가
+`python-tests`(lock drift)와 `container`(스캐너 false positive) 2개 job에서
+실패해 그 원인만 고쳤다 — 상세는
+[Hosted_CI_Remediation_Iteration_1.md](Hosted_CI_Remediation_Iteration_1.md)
+참조. 요약:
+
+- `requirements.lock`을 ubuntu-latest와 동일한 linux/amd64 컨테이너 안에서
+  `scripts/compile_lock.sh`로 재컴파일(103개 패키지 유지, `langsmith`/
+  `sqlalchemy`/`typing-inspection` 3개만 갱신) — macOS에서 직접 실행하면
+  이 저장소가 `d0b57d0`/`0eb09bf`에서 이미 겪은 플랫폼 그래프 오염이
+  재발함을 실제로 확인하고 되돌린 뒤 올바른 절차로 재실행했다.
+- `scripts/scan_image_layers.py`의 `.pem` 패턴에 fail-closed CA
+  허용목록을 추가했다 — 알려진 OS/certifi 신뢰 저장소 경로에 있고, 콘텐츠가
+  `ssl.SSLContext.load_verify_locations`가 받아들이는 순수 `CERTIFICATE`
+  PEM 블록으로만 구성된 경우에만 예외 처리한다. 개인키/CSR 혼입, 경로
+  불일치, 파싱 실패는 모두 여전히 `credential`이다. `tests/unit/
+  test_scan_image_layers.py`에 14개 positive/negative 테스트를 추가했다
+  (6→20).
+- deletion-history leakage(레이어 additive 특성상 `rm`/whiteout 이후에도
+  이전 레이어의 secret이 여전히 스캔됨)는 기존 per-layer 순회 설계로 이미
+  성립했으므로 코드 변경 없이 회귀 테스트만 추가했다.
+- 이 remediation은 §9까지의 어떤 결정도 재검토하지 않았고,
+  `M4.1_BLOCKED=true`/M3 `NOT_RUN`/`overall_release_ready=false`
+  불변식도 그대로 유지했다.

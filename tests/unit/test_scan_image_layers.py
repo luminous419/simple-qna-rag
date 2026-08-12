@@ -80,3 +80,222 @@ def test_positive_negative_traversal_whiteout_fixtures():
     test_traversal_member_detected()
     test_whiteout_only_layer_has_zero_violations()
     test_test_seam_leak_layer_detected()
+
+
+# --- Hosted-CI remediation iteration 1: CA trust-store allowlist ----------
+#
+# scripts/scan_image_layers.py's `.pem` pattern used to flag every OS and
+# certifi CA bundle in the base image as a "credential" (153 false
+# positives on PR #18 run 31593816593: Debian /etc/ssl/certs/*.pem,
+# /usr/lib/ssl/cert.pem, and both the top-level and pip-vendored
+# certifi/cacert.pem). classify_member() now only exempts a `.pem`/`.crt`
+# member when BOTH its path sits under a known trust-store location AND
+# its content verifies as nothing but CERTIFICATE PEM blocks accepted by
+# ssl.SSLContext.load_verify_locations — everything below proves that gate
+# stays fail-closed in both directions (real CA content still needs the
+# right path, and the right path still needs real CA content).
+
+_REAL_CA_CERT_PEM = b"""-----BEGIN CERTIFICATE-----
+MIIEkTCCA3mgAwIBAgIERWtQVDANBgkqhkiG9w0BAQUFADCBsDELMAkGA1UEBhMC
+VVMxFjAUBgNVBAoTDUVudHJ1c3QsIEluYy4xOTA3BgNVBAsTMHd3dy5lbnRydXN0
+Lm5ldC9DUFMgaXMgaW5jb3Jwb3JhdGVkIGJ5IHJlZmVyZW5jZTEfMB0GA1UECxMW
+KGMpIDIwMDYgRW50cnVzdCwgSW5jLjEtMCsGA1UEAxMkRW50cnVzdCBSb290IENl
+cnRpZmljYXRpb24gQXV0aG9yaXR5MB4XDTA2MTEyNzIwMjM0MloXDTI2MTEyNzIw
+NTM0MlowgbAxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1FbnRydXN0LCBJbmMuMTkw
+NwYDVQQLEzB3d3cuZW50cnVzdC5uZXQvQ1BTIGlzIGluY29ycG9yYXRlZCBieSBy
+ZWZlcmVuY2UxHzAdBgNVBAsTFihjKSAyMDA2IEVudHJ1c3QsIEluYy4xLTArBgNV
+BAMTJEVudHJ1c3QgUm9vdCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTCCASIwDQYJ
+KoZIhvcNAQEBBQADggEPADCCAQoCggEBALaVtkNC+sZtKm9I35RMOVcF7sN5EUFo
+Nu3s/poBj6E4KPz3EEZmLk0eGrEaTsbRwJWIsMn/MYszA9u3g3s+IIRe7bJWKKf4
+4LlAcTfFy0cOlypowCKVYhXbR9n10Cv/gkvJrT7eTNuQgFA/CYqEAOwwCj0Yzfv9
+KlmaI5UXLEWeH25DeW0MXJj+SKfFI0dcXv1u5x609mhF0YaDW6KKjbHjKYD+JXGI
+rb68j6xSlkuqUY3kEzEZ6E5Nn9uss2rVvDlUccp6en+Q3X0dgNmBu1kmwhH+5pPi
+94DkZfs0Nw4pgHBNrziGLp5/V6+eF67rHMsoIV+2HNjnogQi+dPa2MsCAwEAAaOB
+sDCBrTAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zArBgNVHRAEJDAi
+gA8yMDA2MTEyNzIwMjM0MlqBDzIwMjYxMTI3MjA1MzQyWjAfBgNVHSMEGDAWgBRo
+kORnpKZTgMeGZqTx90tD+4S9bTAdBgNVHQ4EFgQUaJDkZ6SmU4DHhmak8fdLQ/uE
+vW0wHQYJKoZIhvZ9B0EABBAwDhsIVjcuMTo0LjADAgSQMA0GCSqGSIb3DQEBBQUA
+A4IBAQCT1DCw1wMgKtD5Y+iRDAUgqV8ZyntyTtSx29CW+1RaGSwMCPeyvIWonX9t
+O1KzKtvn1ISMY/YPyyYBkVBs9F8U4pN0wBOeMDpQ47RgxRzwIkSNcUesyBrJ6Zua
+AGAT/3B+XxFNSRuzFVJ7yVTav52Vr2ua2J7p8eRDjeIRRDq/r72DQnNSi6q7pynP
+9WQcCk3RvKqsnyrQ/39/2n3qse0wJcGE2jTSW3iDVuycNsMm4hH2Z0kdkquM++v/
+eu6FSqdQgPCnXEqULl8FmTxSQeDNtGPPAUO6nIPcj2A781q0tHuu2guQOHXvgR1m
+0vdXcDazv/wor3ElhVsT/h5/WrQ8
+-----END CERTIFICATE-----
+"""
+
+_FAKE_PRIVATE_KEY_PEM = b"""-----BEGIN RSA PRIVATE KEY-----
+MIIBOgIBAAJBAK5FakePrivateKeyContentThatIsNotARealKeyButLooksLikeOneToASubstringMatcher
+-----END RSA PRIVATE KEY-----
+"""
+
+_MALFORMED_CERT_PEM = b"""-----BEGIN CERTIFICATE-----
+VGhpcyBpcyBub3QgYSByZWFsIGNlcnRpZmljYXRl
+-----END CERTIFICATE-----
+"""
+
+
+def _read_member_content(tar: tarfile.TarFile, name: str) -> bytes:
+    fileobj = tar.extractfile(name)
+    assert fileobj is not None
+    return fileobj.read()
+
+
+def test_system_ca_pem_under_trust_store_path_is_allowed():
+    layer = _make_layer_tar(["etc/ssl/certs/Entrust_Root_CA_G2.pem"])
+    layer_with_content = io.BytesIO()
+    with tarfile.open(fileobj=layer_with_content, mode="w") as tf:
+        info = tarfile.TarInfo(name="etc/ssl/certs/Entrust_Root_CA_G2.pem")
+        info.size = len(_REAL_CA_CERT_PEM)
+        tf.addfile(info, io.BytesIO(_REAL_CA_CERT_PEM))
+    layer_with_content.seek(0)
+    with tarfile.open(fileobj=layer_with_content) as tf:
+        member = tf.getmembers()[0]
+        hit = scanner.classify_member(
+            member.name, lambda: _read_member_content(tf, member.name)
+        )
+    assert hit is None
+    del layer
+
+
+def test_certifi_cacert_pem_top_level_and_vendored_are_allowed():
+    for path in (
+        "usr/local/lib/python3.11/site-packages/certifi/cacert.pem",
+        "usr/local/lib/python3.11/site-packages/pip/_vendor/certifi/cacert.pem",
+    ):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            info = tarfile.TarInfo(name=path)
+            info.size = len(_REAL_CA_CERT_PEM)
+            tf.addfile(info, io.BytesIO(_REAL_CA_CERT_PEM))
+        buf.seek(0)
+        with tarfile.open(fileobj=buf) as tf:
+            member = tf.getmembers()[0]
+            hit = scanner.classify_member(
+                member.name, lambda tf=tf, member=member: _read_member_content(tf, member.name)
+            )
+        assert hit is None, path
+
+
+def test_symlinked_openssl_default_bundle_is_allowed_without_content():
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        info = tarfile.TarInfo(name="usr/lib/ssl/cert.pem")
+        info.type = tarfile.SYMTYPE
+        info.linkname = "/etc/ssl/certs/ca-certificates.crt"
+        tf.addfile(info)
+    buf.seek(0)
+    with tarfile.open(fileobj=buf) as tf:
+        member = tf.getmembers()[0]
+        assert member.issym()
+        hit = scanner.classify_member(member.name, None, is_symlink=member.issym())
+    assert hit is None
+
+
+def test_malicious_private_key_under_trust_store_path_is_still_credential():
+    """A private key smuggled at a trusted CA path must not be exempted —
+    the allowlist checks content, not just location."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        info = tarfile.TarInfo(name="etc/ssl/certs/evil.pem")
+        info.size = len(_FAKE_PRIVATE_KEY_PEM)
+        tf.addfile(info, io.BytesIO(_FAKE_PRIVATE_KEY_PEM))
+    buf.seek(0)
+    with tarfile.open(fileobj=buf) as tf:
+        member = tf.getmembers()[0]
+        hit = scanner.classify_member(
+            member.name, lambda: _read_member_content(tf, member.name)
+        )
+    assert hit == ("credential", ".pem")
+
+
+def test_malformed_cert_under_trust_store_path_is_still_credential():
+    """CERTIFICATE-labeled but structurally invalid PEM at a trusted path
+    fails ssl verification and stays fail-closed as credential."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        info = tarfile.TarInfo(name="etc/ssl/certs/broken.pem")
+        info.size = len(_MALFORMED_CERT_PEM)
+        tf.addfile(info, io.BytesIO(_MALFORMED_CERT_PEM))
+    buf.seek(0)
+    with tarfile.open(fileobj=buf) as tf:
+        member = tf.getmembers()[0]
+        hit = scanner.classify_member(
+            member.name, lambda: _read_member_content(tf, member.name)
+        )
+    assert hit == ("credential", ".pem")
+
+
+def test_real_ca_content_outside_trust_store_path_is_still_credential():
+    """Arbitrary app PEM credentials: a legitimate-looking CA cert dropped
+    at a non-trust-store app path (e.g. bundled by the app itself) must
+    still be flagged — the allowlist is path-scoped, not content-only."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        info = tarfile.TarInfo(name="app/secrets/bundled_ca.pem")
+        info.size = len(_REAL_CA_CERT_PEM)
+        tf.addfile(info, io.BytesIO(_REAL_CA_CERT_PEM))
+    buf.seek(0)
+    with tarfile.open(fileobj=buf) as tf:
+        member = tf.getmembers()[0]
+        hit = scanner.classify_member(
+            member.name, lambda: _read_member_content(tf, member.name)
+        )
+    assert hit == ("credential", ".pem")
+
+
+def test_private_key_pem_outside_trust_store_path_is_credential():
+    layer = _make_layer_tar(["app/keys/server.pem"])
+    member = layer.getmembers()[0]
+    hit = scanner.classify_member(member.name)
+    assert hit == ("credential", ".pem")
+
+
+def test_env_secret_file_is_still_detected():
+    layer = _make_layer_tar(["app/.env.production"])
+    member = layer.getmembers()[0]
+    hit = scanner.classify_member(member.name)
+    assert hit == ("env_file", ".env")
+
+
+def test_pfx_credential_is_still_detected():
+    layer = _make_layer_tar(["app/client_identity.pfx"])
+    member = layer.getmembers()[0]
+    hit = scanner.classify_member(member.name)
+    assert hit == ("credential", ".pfx")
+
+
+def test_is_verified_ca_bundle_rejects_mixed_cert_and_private_key():
+    """A file concatenating a real cert with a private key block must not
+    verify — every PEM label in the file must be CERTIFICATE."""
+    mixed = _REAL_CA_CERT_PEM + _FAKE_PRIVATE_KEY_PEM
+    assert scanner.is_verified_ca_bundle(mixed) is False
+
+
+def test_is_verified_ca_bundle_rejects_content_with_no_pem_blocks():
+    assert scanner.is_verified_ca_bundle(b"not a pem file at all") is False
+
+
+def test_is_verified_ca_bundle_accepts_multi_cert_bundle():
+    bundle = _REAL_CA_CERT_PEM + _REAL_CA_CERT_PEM
+    assert scanner.is_verified_ca_bundle(bundle) is True
+
+
+def test_deleted_credential_still_detected_in_earlier_layer():
+    """Deletion-history leakage: OCI layers are additive, so `rm`ing a
+    secret in a later layer only whites it out of the final view — the
+    secret's bytes are still present, and still classified, in the layer
+    that wrote them. This mirrors the per-layer loop in scan()."""
+    layer_1 = _make_layer_tar(["app/secrets/id_rsa"])
+    layer_2 = _make_layer_tar(["app/secrets/.wh.id_rsa"])
+
+    all_violations = []
+    for layer in (layer_1, layer_2):
+        for member in layer.getmembers():
+            if scanner.is_whiteout(member.name):
+                continue
+            hit = scanner.classify_member(member.name)
+            if hit:
+                all_violations.append(hit)
+
+    assert all_violations == [("credential", "id_rsa")]
