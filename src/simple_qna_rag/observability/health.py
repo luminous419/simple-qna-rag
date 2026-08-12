@@ -18,11 +18,14 @@ def evaluate_readiness(
     engine_error: str | None,
     *, lifecycle: str | None = None, saturated: bool = False,
     orphaned: int = 0, concurrency_limit: int = 0,
+    artifact_error_reason: str | None = None,
 ) -> tuple[int, str]:
     if bootstrap_error is not None:
         return 503, "static_mount_failed"
     if settings_error is not None:
         return 503, "settings_invalid"
+    if artifact_error_reason is not None:
+        return 503, f"artifact_{artifact_error_reason}"
     if engine_error is not None:
         return 503, "engine_init_failed"
     if lifecycle in {"DRAINING", "STOPPED"}:

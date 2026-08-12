@@ -6,10 +6,12 @@ RAG 코어 엔진
 한 번 초기화하면 전역으로 재사용 가능
 """
 
+import importlib
 import os
 import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional, Dict, List
 
 from langchain_core.prompts import PromptTemplate
@@ -21,6 +23,8 @@ from langchain_ollama import OllamaLLM
 
 from simple_qna_rag.config import (
     EMBEDDING_MODEL_NAME,
+    EMBEDDING_PROVIDER,
+    INDEX_ROOT,
     VECTORSTORE_PATH,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
@@ -30,6 +34,8 @@ from simple_qna_rag.config import (
     MMR_K,
     MMR_LAMBDA,
     NORMALIZE_EMBEDDINGS,
+    CHUNK_SIZE,
+    CHUNK_OVERLAP,
     USE_HYBRID_SEARCH,
     BM25_TOP_K,
     DENSE_TOP_K,
@@ -43,12 +49,73 @@ from simple_qna_rag.config import (
     MMR_VECTOR_COSINE_FLOOR,
     ANSWER_TEMPLATE_MODE,
 )
+from simple_qna_rag.index import verification as index_verification
 from simple_qna_rag.observability.deadline import current_deadline, ollama_call_client
 from simple_qna_rag.intent_classifier import classify_intent
 from simple_qna_rag.observability.logging import log_event
 from simple_qna_rag.observability.metrics import record_fallback, record_stage_duration, record_stage_error
 from simple_qna_rag.prompt_templates import get_template_by_intent
 from simple_qna_rag.vector_index import StoredVectorIndex, VectorIndexValidationError, VectorLookupError
+
+_TEST_SEAM_MODULE = "simple_qna_rag_test_seam.deterministic_embeddings"
+
+
+class IndexTrustError(RuntimeError):
+    """Raised when `INDEX_ROOT/current` resolves to a version that fails
+    trust-boundary verification (Design.md §5.2). `.reason` is one of
+    `index/verification.py::REASONS` — never exception text/paths."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class TestEmbeddingSeamUnavailable(RuntimeError):
+    """Raised when `EMBEDDING_PROVIDER="deterministic_test"` but the test
+    seam module is not importable — the expected outcome in every
+    production image, which never COPYs `tests/` (Design.md §5.2-a)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _build_embeddings():
+    """Settings' 2-key validator (Layer 1) already forced
+    `ALLOW_TEST_EMBEDDING is True` before this branch could be reached — the
+    real trust boundary (Layer 2) is that the test-seam module simply does
+    not exist in a production image, so the import fails structurally."""
+    if EMBEDDING_PROVIDER == "deterministic_test":
+        try:
+            module = importlib.import_module(_TEST_SEAM_MODULE)
+        except ModuleNotFoundError as exc:
+            raise TestEmbeddingSeamUnavailable("test_embedding_seam_unavailable") from exc
+        return module.DeterministicTestEmbeddings()
+    return HuggingFaceEmbeddings(
+        model_name=EMBEDDING_MODEL_NAME,
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': NORMALIZE_EMBEDDINGS}
+    )
+
+
+def _settings_binding_snapshot() -> dict:
+    return {
+        "embedding_model_name": EMBEDDING_MODEL_NAME,
+        "embedding_provider": EMBEDDING_PROVIDER,
+        "normalize_embeddings": NORMALIZE_EMBEDDINGS,
+        "chunk_size": CHUNK_SIZE,
+        "chunk_overlap": CHUNK_OVERLAP,
+    }
+
+
+def _container_expected_uid() -> int | None:
+    raw = os.environ.get("SIMPLE_QNA_RAG_EXPECT_UID")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 @dataclass
@@ -119,6 +186,9 @@ class RAGEngine:
             # M4.1 REQ-004.1 — 쿼리당 발생한 fallback을 `query()`가 배출할 때까지
             # 담아두는 큐. registry가 없을 때(CLI 등)도 안전하게 비워진다.
             self._pending_fallback_events: list[tuple[str, str]] = []
+            # M4.3 §5.2/§5.3 — trust-boundary/test-seam init failures surface
+            # here so readiness can report a bounded `artifact_<reason>` 503.
+            self._artifact_error_reason: str | None = None
             RAGEngine._initialized = True
 
     def initialize(self) -> bool:
@@ -160,6 +230,12 @@ class RAGEngine:
 
             return True
 
+        except IndexTrustError as exc:
+            self._artifact_error_reason = exc.reason
+            return False
+        except TestEmbeddingSeamUnavailable as exc:
+            self._artifact_error_reason = exc.reason
+            return False
         except Exception:
             # M4.1 REPLACE(Design.md §6.1) — 예외 원문/traceback은 로그에 남기지
             # 않는다. 실패는 `get_rag_engine()`의 고정 문자열 RuntimeError로
@@ -167,7 +243,24 @@ class RAGEngine:
             return False
 
     def _load_vectorstore(self) -> FAISS:
-        """벡터스토어 로드"""
+        """벡터스토어 로드 — M4.3 §5.2: `INDEX_ROOT/current`가 있으면 검증된
+        경로, 없으면(genuine absence) 기존 legacy 경로로 그대로 폴백한다."""
+        embeddings = _build_embeddings()
+        index_root = Path(INDEX_ROOT)
+        try:
+            version_id = index_verification.resolve_current(index_root)
+        except index_verification.CurrentPointerMissing:
+            return self._load_vectorstore_legacy(embeddings)
+        try:
+            return index_verification.load_verified_faiss(
+                index_root, version_id, embeddings=embeddings,
+                settings_snapshot=_settings_binding_snapshot(),
+                expected_owner_uid=_container_expected_uid())
+        except index_verification.TrustBoundaryError as exc:
+            raise IndexTrustError(exc.reason) from None
+
+    def _load_vectorstore_legacy(self, embeddings) -> FAISS:
+        """648e3ab와 바이트 단위로 동일 — M4.1/M4.2 계약 보존(REQ-009.1)."""
         # M4.1 REQ-003.3 — 사용자 절대 경로(VECTORSTORE_PATH)는 콘솔/로그에
         # 출력하지 않는다.
         if not os.path.exists(VECTORSTORE_PATH):
@@ -175,12 +268,6 @@ class RAGEngine:
                 "벡터스토어가 존재하지 않습니다. "
                 "먼저 simple-qna-rag-index를 실행하여 문서를 등록해주세요."
             )
-
-        embeddings = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL_NAME,
-            model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': NORMALIZE_EMBEDDINGS}
-        )
 
         vectorstore = FAISS.load_local(
             VECTORSTORE_PATH,

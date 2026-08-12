@@ -322,6 +322,14 @@
     },
     {
       "disposition": "KEEP_CLI",
+      "file": "cli/index_lifecycle.py",
+      "identity": "cli/index_lifecycle.py::_emit#1",
+      "kind": "print",
+      "line": 111,
+      "scope": "_emit"
+    },
+    {
+      "disposition": "KEEP_CLI",
       "file": "cli/query.py",
       "identity": "cli/query.py::main#1",
       "kind": "print",
@@ -572,12 +580,12 @@
   "schema_version": "1.0.0",
   "totals": {
     "by_disposition": {
-      "KEEP_CLI": 71
+      "KEEP_CLI": 72
     },
     "by_kind": {
       "logging": 4,
-      "print": 67
+      "print": 68
     },
-    "count": 71
+    "count": 72
   }
 }

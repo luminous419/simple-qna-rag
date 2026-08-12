@@ -103,6 +103,15 @@ def _make_path_parser() -> Callable[[str], Path]:
     return _parse
 
 
+def _enum_parser(allowed: tuple[str, ...]) -> Callable[[str], str]:
+    def _parse(raw: str) -> str:
+        if raw not in allowed:
+            raise ValueError(f"must be one of {allowed}, got {raw!r}")
+        return raw
+
+    return _parse
+
+
 def _check_positive(v: object) -> object:
     if v <= 0:  # type: ignore[operator]
         raise ValueError("must be > 0")
@@ -167,6 +176,16 @@ def _check_queue_timeout_lt_execution_timeout(self: Any) -> Any:
     return self
 
 
+def _check_test_embedding_provider_requires_explicit_allow(self: Any) -> Any:
+    """M4.3 Design.md §5.1 Layer 1 — accidental-default-activation guard.
+    This is a convenience gate only; the real production trust boundary is
+    the physical absence of the test-seam module from the production image
+    (Design.md §5.2-a `_build_embeddings`)."""
+    if self.EMBEDDING_PROVIDER == "deterministic_test" and self.ALLOW_TEST_EMBEDDING is not True:
+        raise ValueError("test_embedding_provider_requires_explicit_allow")
+    return self
+
+
 MODEL_VALIDATORS: tuple[ModelValidatorSpec, ...] = (
     ModelValidatorSpec(
         callable=_check_chunk_overlap_lt_chunk_size,
@@ -193,6 +212,12 @@ MODEL_VALIDATORS: tuple[ModelValidatorSpec, ...] = (
         default_rendering=lambda d: (
             f"{d['QUERY_QUEUE_TIMEOUT_SECONDS']} < {d['QUERY_EXECUTION_TIMEOUT_SECONDS']}"
         ),
+    ),
+    ModelValidatorSpec(
+        callable=_check_test_embedding_provider_requires_explicit_allow,
+        constraint='EMBEDDING_PROVIDER=="deterministic_test" requires ALLOW_TEST_EMBEDDING is True',
+        related_fields=("EMBEDDING_PROVIDER", "ALLOW_TEST_EMBEDDING"),
+        default_rendering=lambda d: f"{d['EMBEDDING_PROVIDER']!r}, {d['ALLOW_TEST_EMBEDDING']}",
     ),
 )
 
@@ -623,9 +648,40 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
               env_alias="SIMPLE_QNA_RAG_UPSTREAM_CONNECT_TIMEOUT_SECONDS", parser=float,
               validators=(_make_range_validator(0, 30, lo_inclusive=False, finite=True),),
               consumers=("observability/deadline.py",)),
+    FieldSpec(
+        name="INDEX_ROOT",
+        annotation=Path,
+        default_factory=lambda: _PACKAGE_ROOT / "runtime" / "index",
+        env_alias="SIMPLE_QNA_RAG_INDEX_ROOT",
+        parser=_path_parser,
+        consumers=("rag_engine.py", "index/lifecycle.py", "index/verification.py",
+                   "cli/index_lifecycle.py"),
+        facade_type=str,
+        facade_adapter=str,
+    ),
+    FieldSpec(
+        name="EMBEDDING_PROVIDER",
+        annotation=Literal["huggingface", "deterministic_test"],
+        default="huggingface",
+        env_alias="SIMPLE_QNA_RAG_EMBEDDING_PROVIDER",
+        parser=_enum_parser(("huggingface", "deterministic_test")),
+        consumers=("rag_engine.py", "index/lifecycle.py"),
+        facade_type=str,
+        facade_adapter=str,
+    ),
+    FieldSpec(
+        name="ALLOW_TEST_EMBEDDING",
+        annotation=bool,
+        default=False,
+        env_alias="SIMPLE_QNA_RAG_ALLOW_TEST_EMBEDDING",
+        parser=_parse_bool,
+        consumers=("rag_engine.py",),
+        facade_type=bool,
+        facade_adapter=bool,
+    ),
 )
 
-assert len(FIELD_SPECS) == 49, f"FIELD_SPECS must have 49 fields, got {len(FIELD_SPECS)}"
+assert len(FIELD_SPECS) == 52, f"FIELD_SPECS must have 52 fields, got {len(FIELD_SPECS)}"
 
 
 # ---------------------------------------------------------------------------

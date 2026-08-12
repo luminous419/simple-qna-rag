@@ -69,6 +69,19 @@ jobs:
       - name: Verify M3 baseline files are unchanged
         run: git diff --exit-code -- evaluation/baselines/m3_initial.*
 
+      - name: Write CI producer receipt (M4.3 evidence identity)
+        if: success()
+        run: python scripts/write_ci_producer_receipt.py --job python-tests --output ci_producer_receipt.json
+
+      - name: Upload producer receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m43-evidence-python-tests
+          path: ci_producer_receipt.json
+          if-no-files-found: error
+          retention-days: 90
+
   frontend-tests:
     runs-on: ubuntu-latest
     steps:
@@ -92,6 +105,182 @@ jobs:
 
       - name: Verify vendored assets are current
         run: git diff --exit-code -- web/static/vendor/
+
+      - name: Write CI producer receipt (M4.3 evidence identity)
+        if: success()
+        run: python3 scripts/write_ci_producer_receipt.py --job frontend-tests --output ci_producer_receipt.json
+
+      - name: Upload producer receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m43-evidence-frontend-tests
+          path: ci_producer_receipt.json
+          if-no-files-found: error
+          retention-days: 90
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install Python dependencies (locked, hash-verified)
+        run: python -m pip install --require-hashes -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install project package
+        run: python -m pip install -e . --no-deps
+
+      - name: Build test-stage image
+        run: docker build --target test -f deploy/Dockerfile .
+
+      - name: Build production-stage image
+        run: docker build --target production -f deploy/Dockerfile -t simple-qna-rag:${{ github.sha }} .
+
+      - name: Scan OCI layers
+        run: python scripts/scan_image_layers.py --image simple-qna-rag:${{ github.sha }} --output layer_scan.json
+
+      - name: Container security/mock smoke
+        run: python scripts/container_smoke.py --image simple-qna-rag:${{ github.sha }} --output container_smoke.json
+
+      - name: Write CI producer receipt
+        if: success()
+        run: python scripts/write_ci_producer_receipt.py --job container --payload layer_scan.json --payload container_smoke.json --output ci_producer_receipt.json
+
+      - name: Upload container evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m43-evidence-container
+          path: |
+            layer_scan.json
+            container_smoke.json
+            ci_producer_receipt.json
+          if-no-files-found: error
+          retention-days: 90
+
+  m43-deterministic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install Python dependencies (locked, hash-verified)
+        run: python -m pip install --require-hashes -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install project package
+        run: python -m pip install -e . --no-deps
+
+      - name: Run M4.3 deterministic acceptance
+        run: python scripts/run_m43_acceptance.py --profile deterministic --repeat 10 --seed 4303 --output m43.json
+
+      - name: Run M4.3 negative control (expected exit 1)
+        run: |
+          set +e
+          python scripts/run_m43_acceptance.py --profile deterministic --repeat 10 --seed 4303 --inject-evidence-mismatch --output m43-negative.json
+          code=$?
+          if [ "$code" -ne 1 ]; then echo "negative control did not fail as expected (exit=$code)"; exit 1; fi
+
+      - name: Write CI producer receipt
+        if: success()
+        run: python scripts/write_ci_producer_receipt.py --job m43-deterministic --payload m43.json --payload m43-negative.json --output ci_producer_receipt.json
+
+      - name: Upload deterministic evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m43-evidence-m43-deterministic
+          path: |
+            m43.json
+            m43-negative.json
+            ci_producer_receipt.json
+          if-no-files-found: error
+          retention-days: 90
+
+  m4-assemble:
+    needs: [python-tests, frontend-tests, container, m43-deterministic]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install Python dependencies (locked, hash-verified)
+        run: python -m pip install --require-hashes -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install project package
+        run: python -m pip install -e . --no-deps
+
+      - name: Download python-tests evidence
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: {name: m43-evidence-python-tests, path: assemble/python-tests}
+
+      - name: Download frontend-tests evidence
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: {name: m43-evidence-frontend-tests, path: assemble/frontend-tests}
+
+      - name: Download container evidence
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: {name: m43-evidence-container, path: assemble/container}
+
+      - name: Download m43-deterministic evidence
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: {name: m43-evidence-m43-deterministic, path: assemble/m43-deterministic}
+
+      - name: Assemble M4 evidence and baseline
+        run: >
+          python scripts/assemble_m4_evidence.py --fresh-dir assemble
+          --expected-sha ${{ github.sha }}
+          --expected-run-id ${{ github.run_id }}
+          --expected-run-attempt ${{ github.run_attempt }}
+          --expected-workflow-path .github/workflows/ci.yml
+          --expected-event ${{ github.event_name }}
+          --needs-result python-tests=${{ needs.python-tests.result }}
+          --needs-result frontend-tests=${{ needs.frontend-tests.result }}
+          --needs-result container=${{ needs.container.result }}
+          --needs-result m43-deterministic=${{ needs.m43-deterministic.result }}
+          --evidence python-tests=assemble/python-tests/ci_producer_receipt.json
+          --evidence frontend-tests=assemble/frontend-tests/ci_producer_receipt.json
+          --evidence container=assemble/container/ci_producer_receipt.json
+          --evidence m43-deterministic=assemble/m43-deterministic/ci_producer_receipt.json
+          --output assemble/m4-baseline.json
+
+      - name: Check M4 baseline state algebra
+        run: python scripts/check_m4_baseline.py --candidate assemble/m4-baseline.json --expect-operational-blocked
+
+      - name: Upload M4 baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-baseline
+          path: assemble/m4-baseline.json
+          if-no-files-found: error
+          retention-days: 90
 
   # CR-I1-MAJ-04 / CR-I2-MAJ-01 closure — M4.1 §10 authoritative M3 live
   # 14-gate regression.

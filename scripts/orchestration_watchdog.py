@@ -18,6 +18,18 @@ import orchestration_state as state
 
 CommandRunner = Callable[[list[str]], dict[str, Any]]
 
+CONSUMER_FENCED_MARKER = "consumer_fenced"
+
+
+def _classify_runner_error(exc: Exception) -> str:
+    """Reduce an arbitrary runner failure (full command line + raw CLI
+    stderr embedded in `str(exc)`) to a fixed bounded-vocabulary reason.
+    Never leaks the original text to stdout/journal (M4.3-REQ-004.2 style
+    fixed vocabulary, applied here to watchdog failure paths)."""
+    if CONSUMER_FENCED_MARKER in str(exc):
+        return CONSUMER_FENCED_MARKER
+    return "cli_command_failed"
+
 
 def run_json(command: list[str]) -> dict[str, Any]:
     proc = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -33,21 +45,21 @@ def anomaly_key(run_id: str, reasons: list[str], last_delivery: str | None) -> s
 
 def inspect_run(cli: str, payload: dict[str, Any], runner: CommandRunner = run_json) -> dict[str, Any]:
     run_id = payload["run_id"]
+    terminal = payload["coordinator"]["terminal"]
     reasons: list[str] = []
     if state.lease_expired(payload) and payload["terminal_outcome"] is None:
         reasons.append("coordinator_lease_expired")
-    tasks = runner([cli, "orchestration", "task-list", "--run", run_id, "--brief", "--json"])
+    tasks = runner([cli, "orchestration", "task-list", "--run", run_id, "--from", terminal, "--brief", "--json"])
     rows = tasks.get("result", {}).get("tasks", [])
     active = [row for row in rows if row.get("status") in {"ready", "dispatched"}]
     unfinished = payload["terminal_outcome"] is None
     if unfinished and not active:
         reasons.append("unfinished_without_active_task")
-    inbox = runner([cli, "orchestration", "check", "--run", run_id, "--peek", "--json"])
+    inbox = runner([cli, "orchestration", "check", "--terminal", terminal, "--run", run_id, "--peek", "--json"])
     messages = inbox.get("result", {}).get("messages", [])
     actionable = [m for m in messages if m.get("type") in {"worker_done", "question", "escalation"}]
     if actionable:
         reasons.append("unread_actionable_delivery")
-    terminal = payload["coordinator"]["terminal"]
     terminal_status = runner([cli, "terminal", "show", "--terminal", terminal, "--json"])
     connected = terminal_status.get("result", {}).get("terminal", {}).get("connected", False)
     if not connected:
@@ -94,9 +106,17 @@ def run_loop(root: Path, run_id: str, cli: str, interval: int) -> int:
     stop_path = state.state_dir(root, run_id) / "watchdog.stop"
     while not stop_path.exists():
         try:
-            check_once(root, run_id, cli)
+            check_once(root, run_id, cli, runner=run_json)
         except Exception as exc:  # watchdog must record failures and keep checking
-            state.append_journal(root, run_id, {"operation": "watchdog_check", "outcome": "failed", "error": str(exc)})
+            reason = _classify_runner_error(exc)
+            state.append_journal(root, run_id, {"operation": "watchdog_check", "outcome": "failed", "reason": reason})
+            if reason == CONSUMER_FENCED_MARKER:
+                # Terminal ownership loss — this process no longer has authority
+                # to watch this run. journal already recorded exactly once above;
+                # terminate immediately instead of retrying with a revoked
+                # ownership. Restart is always a new process (explicit rebind).
+                return 1
+            # generic transient failure only: fall through to interval-paced retry.
         time.sleep(interval)
     stop_path.unlink(missing_ok=True)
     return 0
@@ -120,13 +140,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "check":
             if args.dry_run and args.test_wake:
                 raise ValueError("--dry-run and --test-wake are mutually exclusive")
-            result = check_once(args.root, args.run_id, args.orca_cli, dry_run=args.dry_run, test_wake=args.test_wake)
+            result = check_once(args.root, args.run_id, args.orca_cli, dry_run=args.dry_run, test_wake=args.test_wake, runner=run_json)
         elif args.command == "run": return run_loop(args.root, args.run_id, args.orca_cli, max(10, args.interval))
         elif args.command == "stop":
             path = state.state_dir(args.root, args.run_id) / "watchdog.stop"; path.parent.mkdir(parents=True, exist_ok=True); path.touch(); result = {"stop_requested": True}
         else: result = load_watchdog(state.state_dir(args.root, args.run_id) / "watchdog_state.json")
     except (ValueError, PermissionError, FileNotFoundError, RuntimeError, json.JSONDecodeError) as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        print(json.dumps({"ok": False, "error": _classify_runner_error(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2
     print(json.dumps({"ok": True, "result": result}, ensure_ascii=False, sort_keys=True))
     return 0

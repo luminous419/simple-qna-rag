@@ -360,10 +360,14 @@ def _make_lifespan(
                     app.state.engine = None
                     app.state.engine_error = str(exc)
 
+                app.state.engine_artifact_reason = getattr(
+                    app.state.engine, "_artifact_error_reason", None
+                )
                 _, reason = evaluate_readiness(
                     getattr(app.state, "bootstrap_error", None),
                     app.state.settings_error,
                     app.state.engine_error,
+                    artifact_error_reason=app.state.engine_artifact_reason,
                 )
                 registry = app.state.metrics_registry
                 registry.rag_readiness.labels(reason=clamp_readiness_reason(reason)).set(1)
@@ -494,6 +498,7 @@ def _register_health_routes(app: FastAPI) -> None:
             saturated=saturated,
             orphaned=snap.orphaned if snap else 0,
             concurrency_limit=snap.concurrency_limit if snap else 0,
+            artifact_error_reason=getattr(request.app.state, "engine_artifact_reason", None),
         )
         return JSONResponse(
             status_code=status_code,
