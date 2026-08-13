@@ -766,6 +766,15 @@ def test_is_verified_ca_bundle_accepts_real_pip_vendored_entry_with_underscore_i
     )
 
 
+def test_pip_vendored_entrust_label_exception_is_certificate_bound():
+    tampered = _REAL_PIP_VENDORED_CERTIFI_ENTRUST_2048_ENTRY.replace(
+        b'"Entrust.net Premium 2048 Secure Server CA"',
+        b'"Entrust.net Premium 2048 Secure Server CB"',
+        1,
+    )
+    assert scanner.is_verified_ca_bundle(tampered) is False
+
+
 def _certifi_stanza(
     *,
     issuer: bytes = _CERTIFI_ISSUER_SUBJECT,
@@ -804,6 +813,174 @@ def test_is_verified_ca_bundle_accepts_full_installed_certifi_bundle():
         data = handle.read()
     assert len(data) > 0
     assert scanner.is_verified_ca_bundle(data) is True
+
+
+def test_is_verified_ca_bundle_accepts_full_pip_vendored_certifi_bundle():
+    """Same full-bundle oracle as above, against pip's independently
+    vendored `certifi` copy (`pip/_vendor/certifi/cacert.pem`) rather than
+    the top-level package — CR-I7-MAJ-01 remediation: the switch from
+    case/whitespace-insensitive Label matching to exact equality plus a
+    fixed per-certificate exception table must not regress either real,
+    unmodified installed bundle."""
+    from pip._vendor import certifi as pip_certifi
+
+    with open(pip_certifi.where(), "rb") as handle:
+        data = handle.read()
+    assert len(data) > 0
+    assert scanner.is_verified_ca_bundle(data) is True
+
+
+# --- Code Review Iteration 8 (CR-I8-MAJ-01): documented compatibility -----
+# boundary + five legacy repository-default-Python exceptions -------------
+#
+# The Iteration 7 remediation's three-entry exception table was verified
+# against one machine's installed bundles and happened to cover every
+# deviation in them, but its report incorrectly described the pip-vendored
+# bundle's version as `certifi==2026.7.22` — that version only ever applied
+# to the top-level `certifi` package. pip's vendored copy
+# (`pip/_vendor/certifi/cacert.pem`) is baked into the installed `pip`
+# package itself, is never touched by installing or upgrading the
+# top-level package, and instead tracks whatever `pip` release is actually
+# on `PATH` — so it legitimately differs between this project's `venv`
+# (created with a newer `pip`) and this machine's repository-default
+# Python (the interpreter Code_Review_Iteration_8.md's fresh review
+# actually ran under: `python3`/`pytest` resolved without activating
+# `venv`, whose `pip==23.3.1` vendors `certifi==2023.07.22`). See the
+# module docstring for the full three-boundary write-up.
+#
+# Walking that real, unmodified certifi==2023.07.22 bundle (independently,
+# not just trusting the review's list) finds five ordinary-Label
+# deviations beyond the three already-covered entries: Comodo AAA Services
+# root, Security Communication Root CA, XRamp Global CA Root, Go Daddy
+# Class 2 CA, and Starfield Class 2 CA. Each is added to
+# `_CERTIFICATE_LABEL_COMPATIBILITY` as its own exact (certificate SHA-256,
+# exact Label) pair. Rather than embedding all five real certificates'
+# full PEM bytes here (a large, hard-to-review diff for data the existing
+# full pip-vendored bundle test already exercises end-to-end when run
+# under the repository-default interpreter — see
+# test_is_verified_ca_bundle_accepts_full_pip_vendored_certifi_bundle and
+# Code_Review_Iteration_8_Remediation.md's verification section), the
+# tests below call `_label_bound_to_subject` directly with the exact real
+# SHA-256/Label pair plus a genuine decoded Subject RDN value (taken from
+# the real certificate, but expressed as the same `((attr_type, value),
+# ...)` tuple shape `ssl._ssl._test_decode_cert` returns, not a hand-built
+# guess) that differs from the Label — proving each exception both accepts
+# the real deviation and stays certificate-bound (a mutated Label or wrong
+# SHA-256 on the same Subject must still fail).
+
+_CERTIFI_2023_LEGACY_LABEL_EXCEPTIONS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "comodo_aaa_services_root",
+        "d7a7a0fb5d7e2731d771e9484ebcdef71d5f0c3e0a2948782bc83ee0ea699ef4",
+        "Comodo AAA Services root",
+        "Comodo CA Limited",
+    ),
+    (
+        "security_communication_root_ca",
+        "e75e72ed9f560eec6eb4800073a43fc3ad19195a392282017895974a99026b6c",
+        "Security Communication Root CA",
+        "SECOM Trust.net",
+    ),
+    (
+        "xramp_global_ca_root",
+        "cecddc905099d8dadfc5b1d209b737cbe2c18cfb2c10c0ff0bcf0d3286fc1aa2",
+        "XRamp Global CA Root",
+        "XRamp Security Services Inc",
+    ),
+    (
+        "go_daddy_class_2_ca",
+        "c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4",
+        "Go Daddy Class 2 CA",
+        "The Go Daddy Group, Inc.",
+    ),
+    (
+        "starfield_class_2_ca",
+        "1465fa205397b876faa6f0a9958e5590e40fcc7faa4fb7c2c8677521fb5fb658",
+        "Starfield Class 2 CA",
+        "Starfield Technologies, Inc.",
+    ),
+)
+
+
+def _single_rdn_subject(organization_value: str) -> tuple:
+    return ((("organizationName", organization_value),),)
+
+
+@pytest.mark.parametrize(
+    "name, sha256, label, organization_value",
+    _CERTIFI_2023_LEGACY_LABEL_EXCEPTIONS,
+    ids=[entry[0] for entry in _CERTIFI_2023_LEGACY_LABEL_EXCEPTIONS],
+)
+def test_label_bound_to_subject_accepts_certifi_2023_legacy_exception(
+    name, sha256, label, organization_value
+):
+    """Each real certifi==2023.07.22 deviation the fresh review reported
+    binds via its exact table entry even though the Label isn't any
+    decoded Subject RDN value."""
+    subject_rdns = _single_rdn_subject(organization_value)
+    assert label not in {value for rdn in subject_rdns for _, value in rdn}
+    assert scanner._label_bound_to_subject(label, subject_rdns, sha256) is True
+
+
+@pytest.mark.parametrize(
+    "name, sha256, label, organization_value",
+    _CERTIFI_2023_LEGACY_LABEL_EXCEPTIONS,
+    ids=[entry[0] for entry in _CERTIFI_2023_LEGACY_LABEL_EXCEPTIONS],
+)
+def test_label_bound_to_subject_rejects_mutated_legacy_label(
+    name, sha256, label, organization_value
+):
+    """The exception is bound to one exact Label string, not any Label for
+    that certificate's SHA-256 — a one-character mutation must fail."""
+    subject_rdns = _single_rdn_subject(organization_value)
+    mutated_label = label + "X"
+    assert scanner._label_bound_to_subject(mutated_label, subject_rdns, sha256) is False
+
+
+@pytest.mark.parametrize(
+    "name, sha256, label, organization_value",
+    _CERTIFI_2023_LEGACY_LABEL_EXCEPTIONS,
+    ids=[entry[0] for entry in _CERTIFI_2023_LEGACY_LABEL_EXCEPTIONS],
+)
+def test_label_bound_to_subject_rejects_legacy_label_with_wrong_sha256(
+    name, sha256, label, organization_value
+):
+    """The exception is bound to one exact certificate SHA-256, not any
+    certificate that happens to carry this exact Label text."""
+    subject_rdns = _single_rdn_subject(organization_value)
+    wrong_sha256 = "0" * 64
+    assert wrong_sha256 != sha256
+    assert scanner._label_bound_to_subject(label, subject_rdns, wrong_sha256) is False
+
+
+# --- Code Review Iteration 7 (CR-I7-MAJ-01): exact ordinary Label binding --
+#
+# The prior `_label_bound_to_subject` compared
+# `label_value.strip().casefold()` against case-folded Subject RDN
+# candidates, so a case-only or leading/trailing-whitespace mutation of a
+# genuine Label still bound to the certificate — the seventh field was the
+# sole non-exact one of the seven. These probes are the exact ones the
+# review demonstrated against the real Entrust Root Certification Authority
+# fixture (`_certifi_stanza`'s default label): each must now be rejected,
+# while the unmodified genuine label (already covered by
+# `test_is_verified_ca_bundle_accepts_real_certifi_comment_format` and the
+# full-bundle oracles above) continues to pass.
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        b'"entrust Root Certification Authority"',
+        b'" Entrust Root Certification Authority"',
+        b'"Entrust Root Certification Authority "',
+    ],
+)
+def test_is_verified_ca_bundle_rejects_case_or_whitespace_label_variant(label):
+    """Case-only and leading/trailing-space variants of a genuine Label,
+    against the otherwise exact real certificate and the other six exact
+    fields, must fail — Label binding is byte-for-byte exact, not a
+    case/whitespace equivalence class."""
+    assert scanner.is_verified_ca_bundle(_certifi_stanza(label=label)) is False
 
 
 @pytest.mark.parametrize(
@@ -886,6 +1063,33 @@ def test_is_verified_ca_bundle_rejects_token_path_key_value_material_per_field(f
     accepted every one of these."""
     stanza = _certifi_stanza(**{field: value})
     assert scanner.is_verified_ca_bundle(stanza) is False, field
+
+
+@pytest.mark.parametrize("field", ["issuer", "subject"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        b"CN=API_TOKEN=supersecret",
+        b"CN=../../etc/shadow",
+        b"CN=PRIVATE KEY",
+        b"CN=AWS_SECRET_ACCESS_KEY=ABCDEF",
+    ],
+)
+def test_is_verified_ca_bundle_rejects_grammar_valid_dn_smuggling(field, value):
+    assert scanner.is_verified_ca_bundle(_certifi_stanza(**{field: value})) is False
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        b'"API TOKEN supersecret"',
+        b'"PRIVATE KEY"',
+        b'"AWS SECRET ACCESS KEY"',
+        b'"etc shadow"',
+    ],
+)
+def test_is_verified_ca_bundle_rejects_grammar_valid_label_smuggling(label):
+    assert scanner.is_verified_ca_bundle(_certifi_stanza(label=label)) is False
 
 
 def test_is_verified_ca_bundle_rejects_reordered_recognized_prefix_example():

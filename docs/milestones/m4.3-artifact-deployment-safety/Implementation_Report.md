@@ -605,3 +605,226 @@ reason이 재시도에서 살아남음) 2개 MAJOR finding을 모두 고쳤다. 
   `tests/integration/test_health_endpoints.py`,
   `docs/milestones/m4.3-artifact-deployment-safety/Code_Review_Iteration_5.md`
   6개다.
+
+## 14. Code Review Iteration 6~9 — certifi Label 바인딩 closure(별도 세션들, PR #18)
+
+§13까지 커밋되지 않은 `scan_image_layers.py`/`test_scan_image_layers.py`/
+`test_rag_engine_singleton.py`의 후속 독립 리뷰 4회가 이어졌다. 이 절은
+[Orchestration_Stop_Report.md](Orchestration_Stop_Report.md)(한 stop/resume
+이벤트의 역사적 기록 — 현재 상태가 아님)가 남긴 지점 이후의 전체 chain을
+요약한다.
+
+- **Code Review Iteration 6**([Code_Review_Iteration_6.md](Code_Review_Iteration_6.md)):
+  판정 FAIL 9.4/10(`MAJOR 1`/`MINOR 1`). CR-I6-MAJ-01은 당시 certifi 코멘트
+  grammar가 구조적으로 정확해도 Issuer/Subject 값이 실제 인증서에서 파생됐다는
+  보장이 없어 `CN=API_TOKEN=supersecret` 같은 임의 텍스트를 여전히 받아들인다는
+  지적이었다. CR-I6-MIN-01(싱글톤 테스트가 정수 `id()` 비교만 사용해 CPython
+  ID 재사용에 취약)은 이 리뷰 시점에는 아직 열려 있었다.
+- **원격 remediation(같은 세션 이어짐, 별도 기록 없음)**: CR-I6-MAJ-01에 대해
+  Issuer/Subject/Serial/MD5/SHA1/SHA256 6개 필드를 `ssl._ssl._test_decode_cert`로
+  디코딩한 실제 인증서 값에 바인딩하는 두 번째 독립 게이트를 추가했고(모듈
+  docstring의 "Code Review Iteration 6" 절 참조), CR-I6-MIN-01에 대해 싱글톤
+  테스트가 실제 객체 참조를 유지하도록 했다. Label만은 당시 여전히
+  `.strip().casefold()`로 대소문자/공백을 정규화해 비교했다.
+- **Code Review Iteration 7**([Code_Review_Iteration_7.md](Code_Review_Iteration_7.md)):
+  판정 FAIL 9.5/10(`MAJOR 1`). CR-I6-MIN-01 closed 확인. CR-I7-MAJ-01: 일곱
+  필드 중 Label만 대소문자/앞뒤 공백을 정규화해 비교하므로 같은 인증서에 대해
+  `"entrust Root..."`, `" Entrust Root..."`, `"Entrust Root... "`가 모두 `True`를
+  반환 — 일곱 필드 exact binding이 미완성이었다.
+  [Code_Review_Iteration_7_Remediation.md](Code_Review_Iteration_7_Remediation.md)가
+  같은 세션에서 `_label_bound_to_subject()`를 원문 그대로(`.strip()`/
+  `.casefold()` 없이) 디코딩된 Subject RDN 값과 byte-exact 비교하도록 재작성하고,
+  대소문자/공백만 다른 정당한 예외 2건(`certSIGN Root CA G2`, `" OISTE Server
+  Root RSA G1"`)을 `_CERTIFICATE_LABEL_COMPATIBILITY`에 exact
+  `(SHA-256, label)` pair로 추가했다.
+- **Code Review Iteration 8**([Code_Review_Iteration_8.md](Code_Review_Iteration_8.md)):
+  판정 FAIL 9.5/10(`MAJOR 1`). byte-exact Label 비교 자체는 정확하다고 확인했지만,
+  Iteration 7 remediation이 "설치된 두 bundle 모두 `certifi==2026.7.22`"라고
+  가정한 것이 틀렸다는 것을 발견 — `pip`가 vendoring하는 `pip/_vendor/certifi`
+  사본은 top-level `certifi` 패키지와 별개로 그 `pip` 릴리스에 고정되며, 리뷰
+  환경의 `pip==23.3.1`은 `certifi==2023.07.22`를 vendoring해 5개의 진짜(그러나
+  Mozilla가 이후 제거한) legacy 항목(Comodo AAA, Security Communication Root CA,
+  XRamp Global CA Root, Go Daddy Class 2 CA, Starfield Class 2 CA)에서 Label
+  바인딩이 실패했다.
+  [Code_Review_Iteration_8_Remediation.md](Code_Review_Iteration_8_Remediation.md)가
+  같은 세션에서 호환 경계를 "`venv`의 top-level certifi(`requirements.lock`
+  고정) + `venv`의 pip-vendored certifi + repository-default Python의
+  pip-vendored certifi" 3-bundle로 명시적으로 문서화하고, 실제
+  `certifi==2023.07.22` 배포본을 PyPI에서 직접 내려받아 독립적으로 walk해 얻은
+  5개 항목을 정확한 `(SHA-256, label)` pair로 테이블에 추가했다.
+- **Code Review Iteration 9**([Code_Review_Iteration_9.md](Code_Review_Iteration_9.md)):
+  판정 **PASS 10.0/10**(`CRITICAL 0 / MAJOR 0 / MINOR 0 / TRIVIAL 0`).
+  CR-I8-MAJ-01 closed로 확인 — 독립적으로 세 bundle(venv top-level
+  `certifi==2026.07.22`, venv pip-vendored `certifi==2025.10.05`,
+  repository-default Python의 pip-vendored `certifi==2023.07.22`)을 리뷰어
+  자신의 grammar/decoder로 다시 walk해, 진짜 Label 편차의 합집합이
+  `_CERTIFICATE_LABEL_COMPATIBILITY`의 정확히 8개 entry와 일치함(누락도 초과도
+  없음)을 확인했다. ordinary Label 바인딩은 여전히 대소문자 폴딩/공백
+  제거/Unicode 정규화가 전혀 없는 byte-exact 비교이고, 요구사항/설계/추적성/
+  workflow/baseline checker는 `84f6b407`과 diff 0을 유지해
+  `M4.1_BLOCKED=true`/protected M3 live `NOT_RUN`/`SKIPPED`/
+  `operational_status=BLOCKED`/`overall_release_ready=false`가 그대로
+  보존됨을 재확인했다. Iteration 9가 근거로 삼은 로컬 수치: `venv/bin/python -m
+  pytest -q tests/unit/test_scan_image_layers.py
+  tests/unit/test_rag_engine_singleton.py`와 `python3 -m pytest`(repository-default
+  interpreter) 모두 **112 passed**.
+
+이 4회 리뷰 사이클을 관통해 변경된 파일은 §13과 동일한 3개뿐이다 —
+`scripts/scan_image_layers.py`, `tests/unit/test_scan_image_layers.py`,
+`tests/unit/test_rag_engine_singleton.py`. Requirement/Plan/Design/
+Traceability(이 remediation 이전 버전)/workflow/baseline checker는 4회
+리뷰 전체에서 `84f6b407` 대비 diff 0으로 유지됐다.
+
+### 14.1 certifi 호환 경계 — 최종 정의
+
+`scripts/scan_image_layers.py`가 지금 지원을 문서화하는 정확한 3-bundle
+경계는 다음과 같다(모듈 docstring에 정본이 있고, 이 절은 재확인 목적의
+요약이다):
+
+| Bundle | Interpreter | 이 세션이 관측한 버전 |
+|---|---|---|
+| top-level `certifi`(`requirements.lock` 고정) | `venv/bin/python` | `2026.07.22` |
+| `pip`-vendored `certifi`(`pip/_vendor/certifi/cacert.pem`) | `venv/bin/python`의 `pip` | `2025.10.05` |
+| `pip`-vendored `certifi` | 이 머신의 repository-default `python3`의 `pip` | `2023.07.22`(Anaconda `common` 환경 — Iteration 8/9 리뷰 환경과 동일 버전) |
+
+`_CERTIFICATE_LABEL_COMPATIBILITY`의 8개 entry는 이 세 bundle의 진짜 Label
+편차의 정확한 합집합이다 — Entrust.net legacy(원래 항목), `certSIGN Root CA
+G2`/` OISTE Server Root RSA G1`(Iteration 7 remediation, `venv`의 두 bundle),
+Comodo AAA Services root/Security Communication Root CA/XRamp Global CA
+Root/Go Daddy Class 2 CA/Starfield Class 2 CA(Iteration 8 remediation,
+repository-default 인터프리터의 `certifi==2023.07.22` pip-vendored bundle —
+Mozilla가 이후 제거해 `venv`의 어느 bundle에도 더는 없지만, 실제 존재했던
+certifi entry로서 exact SHA-256/Label pair로 독립 검증됨).
+
+## 15. Integration & Acceptance — Claude Sonnet 5 통합/인수 worker(별도 세션)
+
+Code Review Iteration 9 PASS 10.0/10 이후, 이 세션은 §0의 통합/인수 worker
+역할로 milestone 문서 전체(Requirement/Plan/Traceability/Design,
+Implementation_Report 본문, Code Review Iteration 1~9와 그 remediation,
+Orchestration_Stop_Report)와 현재 working tree diff, `.github/workflows/ci.yml`을
+읽고 대조한 뒤, 다음을 수행했다.
+
+### 15.1 문서 정합화
+
+- **Orchestration_Stop_Report.md**: 파일 최상단에 "HISTORICAL RECORD —
+  SUPERSEDED" 배너를 추가해, 그 문서가 기록한 stop 시점 이후 Iteration 7~9가
+  진행돼 현재 PASS 10.0/10으로 closed됐음을 명시했다 — 본문 자체(§14 이전
+  시점의 실제 기록)는 역사적 사실이므로 수정하지 않았다.
+- 이 §14~15를 Implementation_Report.md에 추가해 Iteration 6~9 closure와
+  certifi 3-bundle 경계를 기록했다(위 참조).
+- Traceability.md의 M4.3-REQ-005/NFR-003 행과 상태 header를 이 chain의 최종
+  결과(Iteration 9 PASS 10.0/10, 8-entry compatibility table)로 갱신했다 —
+  상세는 Traceability.md 자체 참조.
+
+### 15.2 requirements.lock 재컴파일 — 진짜 상류 drift(코디네이터 지시로 이 세션이 해결)
+
+`bash scripts/compile_lock.sh --verify`를 이 세션이 처음 macOS 호스트에서
+파이프(`| tail`) 뒤에 실행해 종료 코드를 가렸다가, 코디네이터가
+"compile_lock 파이프라인이 진짜 drift 실패를 가렸다"는 것을 지적해 파이프
+없이 재실행한 결과 **실제 종료 코드 1**을 확인했다. macOS(arm64) 호스트에서
+직접 `uv pip compile`을 실행하면 §10(Hosted CI Remediation Iteration 1)이
+이미 겪은 플랫폼 그래프 오염이 재발할 수 있으므로, `python:3.11-slim`
+`--platform linux/amd64` 컨테이너(hosted CI의 `ubuntu-latest` + `uv==0.8.15`와
+동일한 조합) 안에서 같은 검증을 다시 실행해 **컨테이너 안에서도 exit 1**
+(진짜 상류 drift, macOS 아티팩트가 아님)임을 확인했다.
+
+`requirements.lock`과 `requirements.txt` 사이 diff는 이 세션의 어떤 커밋에도
+없었다(재컴파일 직전 `git diff --stat -- requirements.lock requirements.txt`가
+빈 출력) — 즉 drift는 이 세션이나 이전 M4.3 세션이 만든 것이 아니라, 마지막
+lock 커밋 이후 `pypdf`(6.15.0→6.16.0), `uvicorn`(0.52.1→0.52.2), `xxhash`
+(위 두 패키지 포함 다수 wheel/hash 갱신, 총 패키지 수 103→103, package 세트
+불변)를 포함한
+순수 상류 PyPI 릴리스 경과였다.
+
+**해결**: 코디네이터 지시에 따라 같은 `python:3.11-slim --platform linux/amd64`
+컨테이너(`uv==0.8.15`)에서 `bash scripts/compile_lock.sh`(no `--verify`)를
+실행해 `requirements.lock`을 canonical하게 재작성했다(bind mount라 호스트
+파일이 직접 갱신됨). 재작성 직후 같은 컨테이너에서 `--verify`를 재실행해
+**PASS(재현 가능, drift 0)**를 확인했다. `git diff --stat -- requirements.lock`
+결과 222 insertions / 195 deletions — 다수 패키지의 순수 버전/hash 갱신이며
+package 수는 103→103(package 세트 불변).
+
+**Clean lock-based pip check**(코디네이터 지시): 재컴파일된 `requirements.lock`을
+같은 `python:3.11-slim --platform linux/amd64` 컨테이너에 hosted CI와 동일한
+순서(`pip install --require-hashes -r requirements.lock
+--extra-index-url https://download.pytorch.org/whl/cpu` → `pip install -e .
+--no-deps` → `pip check`)로 **처음부터 새로 설치**해 확인한 결과
+**`No broken requirements found.`(exit 0)** — §2/§13까지 기록된 `pip check`
+exit 1(`langgraph-prebuilt`/`langchain-classic`가 `langchain-core>=1.0.0`
+요구)은 이 lock 자체의 결함이 아니라, 이 프로젝트의 로컬 개발 `venv`에
+lock에 없는 두 패키지(`langgraph-prebuilt`, `langchain-classic`)가 다른
+경로로 설치돼 있던 **순수 로컬 venv drift**였음이 이 clean-install
+비교로 확정됐다(`requirements.lock`을 grep해도 두 패키지는 존재하지 않음).
+이 delta는 M4.3 코드 결함이 아니라 §3.1/§8-4가 이미 "환경 예외"로
+분류했던 판단이 clean-install 증거로 최종 확인된 것이다.
+
+재컴파일 이후 이 세션의 로컬 `venv/bin/python -m pytest tests/unit
+tests/integration -q`(1282 passed, 1 skipped — 아래 §15.3)는 재컴파일 이전
+`venv`(기존 설치 패키지 조합)로 실행한 결과이며, 새 lock으로부터 처음부터
+재구성한 clean venv에서 전체 suite를 다시 실행하는 추가 확인은 코디네이터가
+"clean pip-check + 기존 전체 venv suite 증거로 충분하다"고 명시적으로
+판단해 생략했다 — hosted CI가 새 lock을 사용하는 첫 실제 실행이 된다.
+
+### 15.3 로컬 검증 실행과 결과
+
+이 세션이 직접 실행한 검증(전체 명령/결과는
+[Acceptance_Report.md](Acceptance_Report.md) 참조):
+
+- `venv/bin/python -m pytest tests/unit tests/integration -q` — **1282 passed,
+  1 skipped**(§13의 1251에서 Iteration 7/8 remediation이 추가한 테스트 반영).
+- `npm test` — **9 passed**; `npm run sync-vendor` 후 vendor diff 0.
+- `venv/bin/python scripts/check_markdown_links.py` — 파일 129개, 링크 566개,
+  실패 0.
+- `git diff --check` — exit 0.
+- `venv/bin/python -m compileall -q src scripts tests evaluation` — exit 0.
+- `generate_field_spec.py --check` / `logging_callsite_audit.py --check` —
+  둘 다 exit 0.
+- `venv/bin/python -m evaluation.dataset validate evaluation/datasets/golden.jsonl` —
+  `"valid": true`, errors 0.
+- `venv/bin/python -m pytest -q tests/unit/test_orchestration_watchdog.py` —
+  **16 passed**(consumer_fenced readiness fix 포함, §9 요구사항 M4.3-REQ-009).
+- `venv/bin/python -m pytest -q tests/unit/test_scan_image_layers.py
+  tests/unit/test_rag_engine_singleton.py`(venv interpreter)와 `python3 -m
+  pytest`(repository-default interpreter, Anaconda `common` env,
+  `certifi==2023.07.22` pip-vendored) — **각각 112 passed**, Iteration 9의
+  수치를 재현.
+- `venv/bin/python scripts/run_m43_acceptance.py --profile deterministic
+  --repeat 10 --seed 4303` — **exit 0**, 17개 node 전부 `success_count: 10/10`.
+- 같은 명령 + `--inject-evidence-mismatch` — **exit 1**(negative control 기대
+  성공), `negative_control.result="REJECTED_AS_EXPECTED"`.
+- **`docker build --platform linux/amd64 --target test -f deploy/Dockerfile .`** —
+  이번 세션에서 처음으로 로컬 완주(exit 0) — 이전 세션들을 반복해서 막았던
+  Docker Desktop VM 디스크 소진이 이번 실행 시점에는 재현되지 않았다(빌드 전
+  `docker system df` 확인상 reclaimable 공간이 충분했음).
+- **`docker build --platform linux/amd64 --target production -f deploy/Dockerfile
+  -t simple-qna-rag:m43-candidate .`** — exit 0, 재컴파일된
+  `requirements.lock`으로부터 hash-verified 설치 포함 완주.
+- **`venv/bin/python scripts/scan_image_layers.py --image
+  simple-qna-rag:m43-candidate`** — `forbidden_count: 0`, `violations: []`,
+  exit 0 — 이 세션이 실제 로컬 이미지로 처음부터 끝까지 실행한 최초 스캔.
+- **`venv/bin/python scripts/container_smoke.py --image
+  simple-qna-rag:m43-candidate`** — `status: "PASS"`, 6개 boolean 필드
+  (`host_gateway_reachable`/`mock_query_ok`/`root_page_ok`/`static_asset_ok`/
+  `production_test_seam_sealed`/`readiness_sequence.live,ready`) 전부 `true`,
+  exit 0.
+
+이로써 §4/§12에서 반복 기록됐던 "실제 이미지 build/scan/smoke는 로컬
+환경 제약으로 미완주"라는 제약이 **이 세션에서는 해소**됐다 — 호스트 Docker
+Desktop VM의 가용 디스크가 이번 실행 시점에는 충분했다. 이는 인프라 상태의
+변화(이 세션이 코드/설정을 바꾸지 않았음)이며, hosted CI가 여전히 별도의
+독립적 확인이라는 점은 변하지 않는다.
+
+Native Linux/Ollama/DDGS, protected M3 live 14-gate, M4.1 live 14-gate,
+self-hosted runner/environment 승인 경계는 이 세션에서도 실행·변경하지
+않았다. `M4.1_BLOCKED=true`, protected M3 live `NOT_RUN`,
+`overall_release_ready=false` 불변식은 코드 검토로 재확인했으며 어디에서도
+변경되지 않았다.
+
+이 세션이 변경한 파일: `docs/milestones/m4.3-artifact-deployment-safety/
+Implementation_Report.md`(이 §14~15), `Traceability.md`,
+`Orchestration_Stop_Report.md`(상단 배너만), `Acceptance_Report.md`(전면
+갱신), `requirements.lock`(§15.2의 canonical 재컴파일 — **상류 패키지
+버전만 갱신, 이 프로젝트의 코드/설정 변경 아님**). commit/push/merge는
+수행하지 않았다 — `requirements.lock` 갱신을 포함한 이 세션의 모든 변경은
+working tree에만 존재하며, 코디네이터는 이를 "material change"로 분류해
+별도의 fresh code review 대상으로 삼기로 했다.

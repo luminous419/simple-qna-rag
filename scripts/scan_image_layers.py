@@ -99,12 +99,115 @@ shaped punctuation are outside every field's alphabet and still break
 the match. The stanza is optional as a whole (a system trust-store bundle
 with no comments at all still verifies) but, when present, must be the
 complete unbroken seven-field sequence described above.
+
+Code Review Iteration 6 (CR-I6-MAJ-01) found the iteration-5 grammar,
+while structurally exact, still let Issuer/Subject values be *any*
+grammar-valid text — `CN=API_TOKEN=supersecret`, `CN=../../etc/shadow`,
+`CN=PRIVATE KEY`, and `CN=AWS_SECRET_ACCESS_KEY=ABCDEF` all satisfy
+`_ISSUER_SUBJECT_VALUE` without being derived from the certificate that
+follows them, because the grammar only bounded the *shape* of the
+comment text, never bound it to the certificate's own content. The fix
+adds a second, independent gate layered on top of the grammar: every
+accepted stanza is now parsed field-by-field and bound to the exact
+certificate immediately following it, using only the stdlib —
+`ssl.PEM_cert_to_DER_cert` for the DER bytes, `hashlib.md5`/`sha1`/
+`sha256` over those bytes for the three fingerprints, and
+`ssl._ssl._test_decode_cert` (the same internal decoder `ssl.py` itself
+uses to test certificate parsing — invoked here against a private,
+securely-created `tempfile.mkstemp` PEM file, since it only accepts a
+filesystem path) for the Issuer/Subject RDN sequence and the serial
+number. Issuer/Subject are re-rendered with `_canonical_dn` — CN, then
+O, then every OU joined by `/`, each present only if that attribute type
+actually exists in the certificate, with any non-ASCII character
+`str.encode("unicode_escape")`-rendered exactly as certifi's own ASCII
+comment output does — and the stanza value must equal that rendering
+exactly. This canonicalization was proven, and is regression-tested,
+against every one of the 147 entries in the locally installed certifi
+bundle (`certifi==2025.10.5`), an unmodified copy of the real upstream
+package, not a hand-built approximation. Serial is bound by comparing
+the stanza's decimal digits to `str(int(decoded_hex_serial, 16))`.
+Label is Mozilla-curated free text, not mechanically derived from the
+DN by any single consistent rule (it is sometimes the Subject's CN,
+sometimes an OU). For an ordinary entry, Label is bound by exact
+byte-for-byte equality — no case-folding, no whitespace stripping — to
+some individual RDN value (CN, O, or any single OU — never the merged
+Issuer/Subject line) actually present in the certificate's own decoded
+Subject. A Label that doesn't exactly match any real Subject RDN
+value — including every token/path/key-value/private-material probe
+that stays inside `_LABEL_VALUE`'s alphabet, and including a case-only
+or leading/trailing-whitespace variant of a genuine RDN value — fails
+this bind (CR-I7-MAJ-01). A small number of genuine upstream certifi
+entries render a Label that differs from every Subject RDN value only
+by case or a leading space, or (the legacy Entrust.net entry) isn't
+derived from the Subject at all; each such entry is encoded as its own
+exact `(certificate SHA-256, exact label string)` pair in
+`_CERTIFICATE_LABEL_COMPATIBILITY` rather than as a case/whitespace
+equivalence class, keeping every accepted exception certificate-bound
+and non-extensible. A mismatch on any of the seven fields, or a
+certificate block that fails to decode, rejects the whole bundle; the
+independently parseable grammar above is retained as a first, cheaper
+gate, and this certificate-binding gate is strictly additional to it,
+never a replacement.
+
+Code Review Iteration 8 (CR-I8-MAJ-01) found the Iteration 7 remediation's
+three-entry exception table was tuned against one specific interpreter's
+pip-vendored `certifi` copy and rejected the reviewer's own environment's
+genuine pip-vendored bundle, whose pip shipped a different `certifi`
+release (`2023.07.22`) than the one the remediation had checked
+(`2026.7.22`). That gap exists because `pip`'s vendored `certifi` copy is
+source baked into the installed `pip` package itself
+(`pip/_vendor/certifi/cacert.pem`) — it is a separate, independent copy
+from the top-level `certifi` package `requirements.lock` pins, is never
+touched by installing or upgrading the top-level package, and instead
+tracks whatever `pip` release happens to be installed, so it legitimately
+differs release to release and interpreter to interpreter. The Iteration
+7 remediation's claim that "both real bundles" were `certifi==2026.7.22`
+was therefore wrong for the pip-vendored one: that version number only
+ever applied to the top-level package, and the pip-vendored copy's actual
+version was never independently checked.
+
+The supported compatibility boundary is now explicit and spans three real
+bundles across the two interpreters this project's tests are actually run
+under:
+
+- This project's maintained `venv` — `python -m pytest` — where the
+  top-level `certifi` package is pinned by `requirements.lock`
+  (`certifi==2026.7.22` at the time of writing) and `pip`'s vendored copy
+  (`pip._vendor.certifi`) tracks whichever `pip` release was installed
+  into that `venv`.
+- This machine's repository-default Python (`python3`/`pytest` resolved
+  from `PATH` without activating `venv`) — the interpreter
+  Code_Review_Iteration_8.md's fresh review actually ran under, whose
+  `pip==23.3.1` vendors `certifi==2023.07.22`. Running the module's tests
+  under this interpreter is a genuine, reproducible local-review
+  configuration, not a one-off review artifact, so its pip-vendored
+  bundle is a supported boundary in its own right rather than an
+  out-of-scope historical curiosity.
+
+`_CERTIFICATE_LABEL_COMPATIBILITY` covers every ordinary-Label deviation
+an independent walk of all three bundles finds: the legacy Entrust.net
+entry and `certSIGN Root CA G2` (both interpreters' bundles),
+` OISTE Server Root RSA G1` (the `venv` pip-vendored bundle), and — from
+the repository-default interpreter's `certifi==2023.07.22` pip-vendored
+bundle — Comodo AAA Services root, Security Communication Root CA, XRamp
+Global CA Root, Go Daddy Class 2 CA, and Starfield Class 2 CA. Mozilla has
+since removed all five of those from the curated root list, so none of
+them (by SHA-256) is present in either bundle the `venv` interpreter
+exercises today; each is nevertheless a real, unmodified, historical
+certifi entry, verified directly against `_label_bound_to_subject` with
+its exact SHA-256/Label pair and a genuine decoded Subject RDN value from
+that same certificate (see
+tests/unit/test_scan_image_layers.py's CR-I8-MAJ-01 section) — the table's
+correctness for them does not depend on running under that exact
+interpreter every time.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import posixpath
 import re
 import ssl
@@ -214,6 +317,229 @@ _CERT_BLOCK = (
 # the file is rejected.
 _STRICT_PEM_BUNDLE_RE = re.compile(rf"^{_WS}(?:{_CERT_BLOCK}{_WS})+$")
 
+# Named-group variant of the same stanza+cert grammar, used only to walk
+# the (already fullmatch-confirmed) bundle block by block so each accepted
+# stanza can be bound to its own immediately-following certificate — see
+# CR-I6-MAJ-01 in the module docstring. The value grammars are identical to
+# `_CERT_BLOCK` above; this is purely an iteration aid, not a separate or
+# looser acceptance grammar.
+_CERTIFI_STANZA_GROUPED = (
+    rf"# Issuer: (?P<issuer>{_ISSUER_SUBJECT_VALUE})\r?\n"
+    rf"# Subject: (?P<subject>{_ISSUER_SUBJECT_VALUE})\r?\n"
+    rf"# Label: (?P<label>{_LABEL_VALUE})\r?\n"
+    rf"# Serial: (?P<serial>{_SERIAL_VALUE})\r?\n"
+    rf"# MD5 Fingerprint: (?P<md5>{_MD5_FINGERPRINT_VALUE})\r?\n"
+    rf"# SHA1 Fingerprint: (?P<sha1>{_SHA1_FINGERPRINT_VALUE})\r?\n"
+    rf"# SHA256 Fingerprint: (?P<sha256>{_SHA256_FINGERPRINT_VALUE})\r?\n"
+)
+_CERT_BLOCK_GROUPED_RE = re.compile(
+    rf"(?:{_CERTIFI_STANZA_GROUPED})?"
+    r"(?P<pem>-----BEGIN CERTIFICATE-----\r?\n"
+    rf"(?:{_B64_LINE}\r?\n)+"
+    r"-----END CERTIFICATE-----)"
+)
+
+# Attribute-type OIDs `ssl._ssl._test_decode_cert` names in an RDN, in the
+# exact preference certifi's own stanza rendering uses: Common Name first,
+# then Organization, then every Organizational Unit (joined by `/` when
+# there is more than one) — never Country, Locality, State, or any other
+# attribute type, none of which the real installed bundle's stanzas ever
+# render (confirmed against all 147 entries).
+_DN_COMMON_NAME = "commonName"
+_DN_ORGANIZATION = "organizationName"
+_DN_ORG_UNIT = "organizationalUnitName"
+
+
+def _unicode_escape(value: str) -> str:
+    """Render `value` the way certifi's own ASCII-only comment stanzas
+    render a non-ASCII DN character: Python's `unicode_escape` codec
+    (`\\xHH` for a byte in 0x80-0xFF, `\\uHHHH` above that), leaving every
+    printable-ASCII character — including the `=`, `/`, and space that
+    join the rendered DN — untouched. Confirmed byte-for-byte against the
+    one non-ASCII entry (NetLock, containing Hungarian accented letters)
+    in the locally installed certifi bundle."""
+    return value.encode("unicode_escape").decode("ascii")
+
+
+def _canonical_dn(rdns: tuple) -> str:
+    """Re-render a decoded X.509 RDN sequence (the `issuer`/`subject`
+    shape `ssl._ssl._test_decode_cert` returns: a tuple of RDNs, each a
+    tuple of `(attribute_type, value)` pairs) in the exact format upstream
+    certifi's stanza comments use for that same certificate: `CN=...`,
+    then `O=...`, then `OU=...` with every organizational-unit value
+    joined by `/`, each part present only if the certificate actually
+    carries that attribute type. Verified byte-for-byte against all 147
+    Issuer and 147 Subject values in the locally installed certifi
+    bundle — see `test_is_verified_ca_bundle_binds_full_installed_bundle_stanzas_to_certificates`.
+    """
+    flat = [(attr_type, value) for rdn in rdns for attr_type, value in rdn]
+    common_name = next((v for t, v in flat if t == _DN_COMMON_NAME), None)
+    organization = next((v for t, v in flat if t == _DN_ORGANIZATION), None)
+    org_units = [v for t, v in flat if t == _DN_ORG_UNIT]
+    parts = []
+    if common_name is not None:
+        parts.append(f"CN={common_name}")
+    if organization is not None:
+        parts.append(f"O={organization}")
+    if org_units:
+        parts.append(f"OU={'/'.join(org_units)}")
+    return _unicode_escape(" ".join(parts))
+
+
+def _canonical_serial(hex_serial: str) -> str:
+    """`ssl._ssl._test_decode_cert`'s `serialNumber` is unsigned hex with
+    no separators (e.g. `'456B5054'`); certifi's stanza renders the same
+    integer in decimal — this is the inverse of that formatting choice,
+    not an independent guess at the value."""
+    return str(int(hex_serial, 16))
+
+
+def _colonize_hex(hex_digest: str) -> str:
+    """`hashlib.*.hexdigest()` returns a contiguous lowercase hex string;
+    certifi's fingerprint stanza fields are the same bytes colon-separated
+    two hex digits at a time."""
+    return ":".join(hex_digest[i : i + 2] for i in range(0, len(hex_digest), 2))
+
+
+_CERTIFICATE_LABEL_COMPATIBILITY: dict[str, str] = {
+    # Genuine legacy Mozilla label whose wording is not present in any
+    # Subject RDN, not even case-insensitively.
+    "6dc47172e01cbcb0bf62580d895fe2b8ac9ad4f873801e0c10b9c837d21eb177":
+        "Entrust.net Premium 2048 Secure Server CA",
+    # Real entry: Label renders lowercase-leading `certSIGN Root CA G2`
+    # against a Subject CN of literal `certSIGN ROOT CA G2` — case differs,
+    # confirmed against the locally installed and pip-vendored certifi
+    # bundles (certifi==2026.7.22).
+    "657cfe2fa73faa38462571f332a2363a46fce7020951710702cdfbb6eeda3305":
+        "certSIGN Root CA G2",
+    # Real entry: Label carries a genuine leading space, ` OISTE Server
+    # Root RSA G1`, against a Subject CN with none — confirmed against the
+    # locally installed and pip-vendored certifi bundles.
+    "9ae36232a5189ffddb353dfd26520c015395d22777dac59db57b98c089a651e6":
+        " OISTE Server Root RSA G1",
+    # CR-I8-MAJ-01: five further genuine legacy entries, each verified
+    # against the real, unmodified certifi==2023.07.22 pip-vendored bundle
+    # this machine's repository-default Python resolves (see the module
+    # docstring's three-boundary write-up) via direct
+    # _label_bound_to_subject calls — see the
+    # test_label_bound_to_subject_accepts_certifi_2023_legacy_exception /
+    # _rejects_mutated_legacy_label / _rejects_legacy_label_with_wrong_sha256
+    # tests in tests/unit/test_scan_image_layers.py. None of these five
+    # certificates (by SHA-256) is present in either bundle the venv's
+    # full-bundle tests exercise; Mozilla has since removed all five from
+    # the curated root list.
+    "d7a7a0fb5d7e2731d771e9484ebcdef71d5f0c3e0a2948782bc83ee0ea699ef4":
+        "Comodo AAA Services root",
+    "e75e72ed9f560eec6eb4800073a43fc3ad19195a392282017895974a99026b6c":
+        "Security Communication Root CA",
+    "cecddc905099d8dadfc5b1d209b737cbe2c18cfb2c10c0ff0bcf0d3286fc1aa2":
+        "XRamp Global CA Root",
+    "c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4":
+        "Go Daddy Class 2 CA",
+    "1465fa205397b876faa6f0a9958e5590e40fcc7faa4fb7c2c8677521fb5fb658":
+        "Starfield Class 2 CA",
+}
+
+
+def _label_bound_to_subject(
+    label_value: str, subject_rdns: tuple, certificate_sha256: str
+) -> bool:
+    """certifi's `# Label:` is Mozilla-curated descriptive text, not a
+    value mechanically derived from the DN by one consistent rule (it is
+    the Subject's CN for most entries, an Organizational Unit for others).
+    For an ordinary entry the accepted Label must equal — byte-for-byte,
+    no case-folding, no whitespace stripping — an individual RDN value
+    (CN, O, or one OU) the certificate's own decoded Subject actually
+    carries. It is never matched against the merged Issuer/Subject stanza
+    line, so a Label that isn't an exact real Subject RDN value —
+    including every grammar-valid token/path/key-value/private-material
+    probe, and including a case-only or leading/trailing-whitespace
+    variant of a genuine RDN value — fails this bind.
+
+    A small number of genuine upstream certifi entries render a Label
+    that differs from every Subject RDN value by case or a leading space
+    (`certSIGN Root CA G2` vs. Subject CN `certSIGN ROOT CA G2`;
+    ` OISTE Server Root RSA G1`, with a real leading space, vs. a Subject
+    CN with none) or isn't derived from the Subject at all (the legacy
+    Entrust.net label). Requiring exact RDN equality would
+    false-positive-reject those genuine, unmodified entries, so each is
+    instead encoded as its own exact `(certificate SHA-256, exact label
+    string)` pair in `_CERTIFICATE_LABEL_COMPATIBILITY` — bound to one
+    specific certificate and one specific byte-exact label, never a
+    case/whitespace-insensitive class of labels. CR-I7-MAJ-01."""
+    candidates = {_unicode_escape(value) for rdn in subject_rdns for _, value in rdn}
+    if label_value in candidates:
+        return True
+    compatible_label = _CERTIFICATE_LABEL_COMPATIBILITY.get(certificate_sha256)
+    return compatible_label is not None and label_value == compatible_label
+
+
+def _decode_certificate(pem_text: str) -> dict:
+    """Decode a single `-----BEGIN CERTIFICATE-----` PEM block using only
+    the stdlib. `ssl._ssl._test_decode_cert` — the same internal decoder
+    `ssl.py` itself uses to test certificate parsing — only accepts a
+    filesystem path, so the block is written to a private, securely
+    created (`tempfile.mkstemp`, mode 0600, unique name) temporary file for
+    the duration of the call and removed immediately after, regardless of
+    outcome. No third-party ASN.1/X.509 library is used."""
+    fd, tmp_path = tempfile.mkstemp(suffix=".pem")
+    try:
+        handle = os.fdopen(fd, "w", encoding="ascii")
+        fd = -1  # ownership transferred to `handle`
+        with handle:
+            handle.write(pem_text)
+        return ssl._ssl._test_decode_cert(tmp_path)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+
+
+def _stanza_bound_to_certificate(stanza: dict, pem_text: str) -> bool:
+    """CR-I6-MAJ-01: an accepted seven-field stanza must equal values
+    independently derived from the exact certificate immediately following
+    it — an otherwise grammar-valid Issuer/Subject/Label comment that
+    isn't actually the metadata for that certificate (e.g.
+    `# Issuer: CN=API_TOKEN=supersecret` preceding a real, unrelated CA
+    certificate) fails this check even though it satisfies every field's
+    character-class grammar. Returns False on any single-field mismatch or
+    if the certificate itself fails to decode; never partially trusts a
+    stanza."""
+    try:
+        decoded = _decode_certificate(pem_text)
+    except ssl.SSLError:
+        return False
+    der = ssl.PEM_cert_to_DER_cert(pem_text)
+    sha256 = hashlib.sha256(der).hexdigest()
+    return (
+        stanza["issuer"] == _canonical_dn(decoded["issuer"])
+        and stanza["subject"] == _canonical_dn(decoded["subject"])
+        and stanza["serial"] == _canonical_serial(decoded["serialNumber"])
+        and stanza["md5"] == _colonize_hex(hashlib.md5(der).hexdigest())
+        and stanza["sha1"] == _colonize_hex(hashlib.sha1(der).hexdigest())
+        and stanza["sha256"] == _colonize_hex(sha256)
+        and _label_bound_to_subject(
+            stanza["label"].strip('"'), decoded["subject"], sha256
+        )
+    )
+
+
+def _all_stanzas_bound_to_certificates(text: str) -> bool:
+    """Walk every block of an already fullmatch-confirmed bundle and, for
+    each one that carries a stanza, bind it to its own certificate. A
+    bundle with no stanzas at all (a bare system trust-store file) has
+    nothing to bind and passes trivially — this gate only ever narrows
+    what the grammar above accepts, never widens it."""
+    for match in _CERT_BLOCK_GROUPED_RE.finditer(text):
+        if match.group("issuer") is None:
+            continue
+        if not _stanza_bound_to_certificate(match.groupdict(), match.group("pem")):
+            return False
+    return True
+
 
 def export_image(image: str, out_tar: Path) -> None:
     subprocess.run(["docker", "save", image, "-o", str(out_tar)], check=True)
@@ -256,7 +582,7 @@ def is_verified_ca_bundle(data: bytes) -> bool:
         ctx.load_verify_locations(cadata=text)
     except ssl.SSLError:
         return False
-    return True
+    return _all_stanzas_bound_to_certificates(text)
 
 
 def classify_member(

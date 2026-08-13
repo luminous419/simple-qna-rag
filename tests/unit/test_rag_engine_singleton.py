@@ -41,29 +41,29 @@ def _reset_singleton():
     rag_engine._rag_engine = None
 
 
-def _fail_with_reason(monkeypatch, reason, seen_ids=None):
+def _fail_with_reason(monkeypatch, reason, seen_objects=None):
     def _initialize(self):
-        if seen_ids is not None:
-            seen_ids.append(id(self))
+        if seen_objects is not None:
+            seen_objects.append(self)
         self._artifact_error_reason = reason
         return False
 
     monkeypatch.setattr(RAGEngine, "initialize", _initialize)
 
 
-def _fail_ordinary(monkeypatch, seen_ids=None):
+def _fail_ordinary(monkeypatch, seen_objects=None):
     def _initialize(self):
-        if seen_ids is not None:
-            seen_ids.append(id(self))
+        if seen_objects is not None:
+            seen_objects.append(self)
         return False
 
     monkeypatch.setattr(RAGEngine, "initialize", _initialize)
 
 
-def _succeed(monkeypatch, seen_ids=None):
+def _succeed(monkeypatch, seen_objects=None):
     def _initialize(self):
-        if seen_ids is not None:
-            seen_ids.append(id(self))
+        if seen_objects is not None:
+            seen_objects.append(self)
         return True
 
     monkeypatch.setattr(RAGEngine, "initialize", _initialize)
@@ -98,19 +98,19 @@ def test_artifact_then_retry_ordinary_failure_yields_ordinary_engine_init_failed
 def test_artifact_then_retry_success_uses_fresh_identity(monkeypatch):
     """A successful retry after an artifact failure must construct a
     genuinely new RAGEngine object, not resurrect the failed one."""
-    seen_ids: list[int] = []
+    seen_objects: list[RAGEngine] = []
 
-    _fail_with_reason(monkeypatch, "test_embedding_seam_unavailable", seen_ids)
+    _fail_with_reason(monkeypatch, "test_embedding_seam_unavailable", seen_objects)
     with pytest.raises(EngineArtifactError):
         rag_engine.get_rag_engine()
 
-    _succeed(monkeypatch, seen_ids)
+    _succeed(monkeypatch, seen_objects)
     engine = rag_engine.get_rag_engine()
-    seen_ids.append(id(engine))
+    seen_objects.append(engine)
 
-    assert len(seen_ids) == 3
-    assert seen_ids[0] != seen_ids[1], "retry must construct a fresh RAGEngine identity"
-    assert seen_ids[1] == seen_ids[2]
+    assert len(seen_objects) == 3
+    assert seen_objects[0] is not seen_objects[1]
+    assert seen_objects[1] is seen_objects[2]
     assert engine._artifact_error_reason is None
     assert engine is rag_engine._rag_engine
 
@@ -118,19 +118,20 @@ def test_artifact_then_retry_success_uses_fresh_identity(monkeypatch):
 def test_ordinary_failure_then_retry_success_is_unaffected(monkeypatch):
     """CR-I5-MAJ-02 must not change the pre-existing ordinary
     failure/retry contract — only the artifact-reason bug is fixed."""
-    seen_ids: list[int] = []
+    seen_objects: list[RAGEngine] = []
 
-    _fail_ordinary(monkeypatch, seen_ids)
+    _fail_ordinary(monkeypatch, seen_objects)
     with pytest.raises(RuntimeError) as excinfo:
         rag_engine.get_rag_engine()
     assert not isinstance(excinfo.value, EngineArtifactError)
     assert str(excinfo.value) == "RAG 엔진 초기화 실패"
 
-    _succeed(monkeypatch, seen_ids)
+    _succeed(monkeypatch, seen_objects)
     engine = rag_engine.get_rag_engine()
-    seen_ids.append(id(engine))
+    seen_objects.append(engine)
 
-    assert seen_ids[0] != seen_ids[1], "retry must construct a fresh RAGEngine identity"
+    assert seen_objects[0] is not seen_objects[1]
+    assert seen_objects[1] is engine
     assert engine._artifact_error_reason is None
 
 

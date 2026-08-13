@@ -1,31 +1,43 @@
 # M4.3 Artifact & Deployment Safety — Final Pre-Merge Integration & Acceptance Report
 
-역할: Claude Code Sonnet 5 integration/acceptance worker
+역할: Claude Sonnet 5 integration/acceptance worker (Code Review Iteration 9
+PASS 10.0/10 이후)
 기준 revision (working tree base, HEAD, uncommitted): `648e3abcca7c321e7f4dd13a7fbed1a4f1886c3e`
-선행 조건: 독립 Code Review Iteration 2 — **PASS 9.8/10**
+선행 조건: 독립 Code Review Iteration 9 — **PASS 10.0/10**
 (`CRITICAL 0 / MAJOR 0 / MINOR 0 / TRIVIAL 0`), 근거
-[Code_Review_Iteration_2.md](Code_Review_Iteration_2.md)
-실행 시각: 2026-08-12 (KST 오후, UTC 07:xx)
+[Code_Review_Iteration_9.md](Code_Review_Iteration_9.md); Iteration 6~8과 그
+remediation의 전체 chain은 [Implementation_Report.md](Implementation_Report.md)
+§14 참조.
+실행 시각: 2026-08-14
 No commit / push / PR / merge performed by this session.
+
+이 문서는 2026-08-12에 작성된 이전 버전(Code Review Iteration 2 기준, PASS
+9.8/10)을 대체한다 — 그 이후 Code Review Iteration 3~9와 세 차례의 Hosted CI
+Remediation이 있었고, 이 세션은 그 최종 상태(Iteration 9 PASS 10.0/10)를
+기준으로 통합/인수를 재수행했다.
 
 ## 0. 근거 문서
 
 `milestone_dev_orchestration_guide.md` 전체와 이 디렉터리의
 [Requirement.md](Requirement.md), [Plan.md](Plan.md), [Design.md](Design.md),
-[Design_Review_Iteration_1~6](Design_Review_Iteration_6.md),
 [Traceability.md](Traceability.md), [Implementation_Report.md](Implementation_Report.md),
-[Code_Review_Iteration_1.md](Code_Review_Iteration_1.md),
-[Code_Review_Iteration_1_Remediation.md](Code_Review_Iteration_1_Remediation.md),
-[Code_Review_Iteration_2.md](Code_Review_Iteration_2.md)를 읽고, 현재 working
-tree(코드/스크립트/워크플로/테스트)를 대조 확인한 뒤 아래 절차를 수행했다.
+[Code_Review_Iteration_1.md](Code_Review_Iteration_1.md)~
+[Code_Review_Iteration_9.md](Code_Review_Iteration_9.md)와 대응 remediation
+문서, [Hosted_CI_Remediation_Iteration_1~3](Hosted_CI_Remediation_Iteration_1.md),
+[Orchestration_Stop_Report.md](Orchestration_Stop_Report.md)(역사적 stop/resume
+기록 — 상단 배너 참조, 현재 상태 아님)를 읽고, 현재 working tree(코드/스크립트/
+워크플로/테스트)와 `.github/workflows/ci.yml`을 대조 확인한 뒤 아래 절차를
+수행했다.
 
 ## 1. 목적과 범위
 
-이 세션은 **pre-merge Code Quality Gate 이후, merge 이전의 최종 통합/인수
-단계**다. 코드 변경은 수행하지 않았고(발견된 결함 없음), 이미 리뷰를 통과한
-구현을 독립적으로 재현·검증했다. 가이드 §11(Pre-merge/Post-merge Gate 분리)에
-따라 hosted CI/protected environment/self-hosted runner 증거는 이 세션의
-책임 범위 밖이며 `NOT_RUN`으로 유지한다.
+이 세션은 **pre-merge Code Quality Gate(Iteration 9 PASS) 이후, merge 이전의
+최종 통합/인수 단계**다. 코드 변경은 `requirements.lock` 재컴파일 1건뿐이며
+(§3.2 참조, 코디네이터 지시에 따른 진짜 상류 drift 해결 — 상세 근거는 아래),
+그 외에는 이미 리뷰를 통과한 구현을 독립적으로 재현·검증하고 milestone 문서를
+최종 상태로 정합화했다. 가이드 §11(Pre-merge/Post-merge Gate 분리)에 따라
+hosted CI/protected environment/self-hosted runner 증거는 이 세션의 책임
+범위 밖이며 `NOT_RUN`으로 유지한다.
 
 ## 2. 실행 명령과 결과 (전체 명시적 재현)
 
@@ -34,13 +46,12 @@ tree(코드/스크립트/워크플로/테스트)를 대조 확인한 뒤 아래 
 | # | 명령 | 결과 |
 |---|---|---|
 | 1 | `venv/bin/python -m compileall -q src scripts tests evaluation` | exit 0 |
-| 2 | `venv/bin/python -m pip check` | **exit 1** — 아래 §3.1 참조(사전 존재 환경 조건, M4.3 무관) |
-| 3 | `bash scripts/compile_lock.sh --verify` | exit 0, `Resolved 102 packages in 3.29s`, `requirements.lock` git diff 없음(재현 가능, drift 없음) |
-| 4 | `venv/bin/python scripts/generate_field_spec.py --check` | exit 0 |
-| 5 | `venv/bin/python scripts/logging_callsite_audit.py --check` | exit 0 |
-| 6 | `venv/bin/python scripts/check_markdown_links.py` | exit 0 — 파일 114개(tracked 98 + untracked 16), 링크 519개, 실패 0개 |
-| 7 | `git diff --check` | exit 0 |
-| 8 | `venv/bin/python -m evaluation.dataset validate evaluation/datasets/golden.jsonl` | exit 0 — `"valid": true`, `"errors": []`, total 76 |
+| 2 | `venv/bin/python -m pip check`(기존 dev venv) | **exit 1** — §3.1 참조(로컬 venv에만 존재하는 사전 존재 drift, `requirements.lock`과 무관함을 §3.2의 clean-install로 확정) |
+| 3 | `venv/bin/python scripts/generate_field_spec.py --check` | exit 0 |
+| 4 | `venv/bin/python scripts/logging_callsite_audit.py --check` | exit 0 |
+| 5 | `venv/bin/python scripts/check_markdown_links.py` | exit 0 — 파일 129개(tracked 122 + untracked 7), 링크 566개, 실패 0개(이 세션이 갱신한 문서 포함, 최종 재확인은 §5) |
+| 6 | `git diff --check` | exit 0(최종 재확인은 §5) |
+| 7 | `venv/bin/python -m evaluation.dataset validate evaluation/datasets/golden.jsonl` | exit 0 — `"valid": true`, `"errors": []`, total 76 |
 
 ### 2.2 전체 Python unit + integration suite
 
@@ -48,54 +59,50 @@ tree(코드/스크립트/워크플로/테스트)를 대조 확인한 뒤 아래 
 venv/bin/python -m pytest tests/unit tests/integration -q
 ```
 
-결과: **1173 passed, 1 skipped, 4 warnings in 127.11s** — Code Review
-Iteration 2 근거 수치와 정확히 일치. skip 1건은 기존에 문서화된 M4.3 무관
-pre-existing skip이다. 신규 회귀 없음.
+결과: **1282 passed, 1 skipped, 4 warnings in 166.26s**. skip 1건은 기존에
+문서화된 M4.3 무관 pre-existing skip이다. 신규 회귀 없음(§13 기준 1251에서
+Iteration 7/8 remediation이 추가한 테스트 반영, 이 세션의 문서/lock 변경은
+이 수치에 영향 없음 — 재확인 목적으로 그대로 재실행한 결과다).
 
-### 2.3 Frontend 테스트/vendor drift
+### 2.3 certifi Label exact-binding — venv/repository-default 두 interpreter
+
+```
+venv/bin/python -m pytest -q tests/unit/test_scan_image_layers.py tests/unit/test_rag_engine_singleton.py
+python3 -m pytest -q tests/unit/test_scan_image_layers.py tests/unit/test_rag_engine_singleton.py
+```
+
+결과: **각각 112 passed** — Code_Review_Iteration_9.md가 근거로 삼은 수치를
+독립 재현했다. `python3`은 이 머신의 repository-default interpreter(Anaconda
+`common` 환경, `pip==23.3.1` → `certifi==2023.07.22` pip-vendored, Iteration
+8/9 리뷰가 검증한 것과 동일한 legacy bundle)로, `venv/bin/python`과는 다른
+`certifi` 버전 조합을 실제로 exercise한다.
+
+### 2.4 orchestration watchdog(M4.3-REQ-009, consumer_fenced readiness fix)
+
+```
+venv/bin/python -m pytest -q tests/unit/test_orchestration_watchdog.py
+```
+
+결과: **16 passed**(기존 8 + Design §11.2 신규 8, `_classify_runner_error`의
+`consumer_fenced` 분기, exact-argv/terminal-scope/dry-run 테스트 포함).
+
+### 2.5 Frontend 테스트/vendor drift
 
 | 명령 | 결과 |
 |---|---|
-| `npm ci` | exit 0 — 92 packages, postinstall `sync-vendor.js`가 vendor 4개 파일 동기화 |
 | `npm test` | exit 0 — **9 passed** (vitest) |
-| `npm run sync-vendor` | exit 0 |
+| `npm run sync-vendor` | exit 0 — 4개 파일 동기화(내용 변경 없음) |
 | `git diff --exit-code -- web/static/vendor/` | exit 0 — drift 없음 |
 
-### 2.4 Dockerfile/layer/container workflow 정적 계약 (targeted)
+### 2.6 Protected M3 live block 보존(코드 검토)
 
-```
-venv/bin/python -m pytest tests/unit/test_ci_workflow_contract.py \
-  tests/unit/test_scan_image_layers.py tests/unit/test_container_smoke_contract.py -q
-```
+`.github/workflows/ci.yml`의 `m3-live-regression-gate:` 잡 블록을 이 세션의
+working tree에서 재검토했다 — trigger allowlist, `runs-on: [self-hosted,
+ollama-m3]`, `environment: m3-live-regression` 승인 요구에 변경이 없음을
+확인했다(이 세션은 워크플로 파일을 전혀 수정하지 않았다 — `git status`에
+`.github/workflows/ci.yml`이 나타나지 않는다).
 
-결과: **26 passed**(§2.2 전체 suite에도 포함된 동일 테스트의 focused 재확인).
-`deploy/Dockerfile`을 직접 재검토해 numeric non-root user(`10001:10001`),
-test-seam(`tests/support`)의 production stage 물리적 미포함, `--require-hashes`
-locked install, minimal `COPY` surface를 재확인했다.
-
-### 2.5 Protected M3 live block 보존 검증 (byte 단위)
-
-`.github/workflows/ci.yml`의 `m3-live-regression-gate:` 잡 블록을 `master`와
-현재 working tree에서 각각 추출해 SHA-256으로 비교했다.
-
-```
-git show master:.github/workflows/ci.yml | awk '/^  m3-live-regression-gate:/,0' > master.txt
-awk '/^  m3-live-regression-gate:/,0' .github/workflows/ci.yml > current.txt
-diff master.txt current.txt   # 출력 없음
-sha256sum master.txt current.txt
-# 6fbb2a13432c7b216e7d871f156d52bd5faa554a46fdcacb99ee2f2723b314cb  master.txt
-# 6fbb2a13432c7b216e7d871f156d52bd5faa554a46fdcacb99ee2f2723b314cb  current.txt
-```
-
-49줄 블록이 **byte 단위로 완전히 동일**(SHA-256 일치). trigger, `[self-hosted,
-ollama-m3]` runner labels, `environment: m3-live-regression` 승인 요구가
-전혀 변경되지 않았음을 확인했다. `git diff master -- .github/workflows/ci.yml`
-전체를 별도로 검토해 신규 `+` 라인은 `python-tests`/`frontend-tests`의 evidence
-step과 신규 `container`/`m43-deterministic`/`m4-assemble` job에만 있고, 기존
-`python-tests`/`frontend-tests`/`m3-live-regression-gate` 블록 본문에는 삭제(`-`)
-라인이 전혀 없음을 확인했다.
-
-### 2.6 M4.3 deterministic acceptance — positive
+### 2.7 M4.3 deterministic acceptance — positive
 
 ```
 venv/bin/python scripts/run_m43_acceptance.py --profile deterministic --repeat 10 --seed 4303 \
@@ -103,177 +110,169 @@ venv/bin/python scripts/run_m43_acceptance.py --profile deterministic --repeat 1
 ```
 
 결과: **exit 0**, top-level `"status": "PASS"`, 17개 node 전부
-`success_count: 10/10`, `negative_control.executed: false`(positive 실행에서는
-negative control 미실행이 정상).
+`success_count: 10/10`(`activation_rollback`, `assemble_payload_verification`,
+`baseline_strict_schema`, `container_static_and_connectivity`,
+`crash_recovery_journal`, `embedding_provider_seam_guard`, `layer_scanner`,
+`legacy_baseline_pin`, `legacy_import`, `lock_contention`,
+`lock_untrusted_symlink`, `manifest_canonical`, `manifest_negative`,
+`retention`, `staging_fault`, `verification_reopen_race`,
+`verification_trust`).
 
-Node 목록(17개, 전부 10/10 PASS): `activation_rollback`,
-`assemble_payload_verification`, `baseline_strict_schema`,
-`container_static_and_connectivity`, `crash_recovery_journal`,
-`embedding_provider_seam_guard`, `layer_scanner`, `legacy_baseline_pin`,
-`legacy_import`, `lock_contention`, `lock_untrusted_symlink`,
-`manifest_canonical`, `manifest_negative`, `retention`, `staging_fault`,
-`verification_reopen_race`, `verification_trust`.
-
-### 2.7 M4.3 deterministic acceptance — negative control (expected failure)
+### 2.8 M4.3 deterministic acceptance — negative control (expected failure)
 
 ```
 venv/bin/python scripts/run_m43_acceptance.py --profile deterministic --repeat 10 --seed 4303 \
   --inject-evidence-mismatch --output <tmp>/m43-negative.json
 ```
 
-결과: **exit 1**(negative control의 기대되는 성공) — 프로세스 exit code가
-정확히 1, top-level `"status": "REJECTED_AS_EXPECTED"`,
-`negative_control = {"executed": true, "expected_to_fail": true,
-"actual_exit_code": 1, "result": "REJECTED_AS_EXPECTED"}`. tampered `sha`
-필드를 `assemble_m4_evidence.py::_check_identity`의 동일 parser가 거부함을
-실측 확인했다.
+결과: **exit 1**(negative control의 기대되는 성공),
+`"status": "REJECTED_AS_EXPECTED"`, `negative_control = {"executed": true,
+"expected_to_fail": true, "actual_exit_code": 1, "result":
+"REJECTED_AS_EXPECTED"}`.
 
-### 2.8 Deploy drill
+### 2.9 requirements.lock — 진짜 상류 drift 발견과 canonical 해결
 
-```
-venv/bin/python scripts/deploy_drill.py --root <tmp>/deploy_drill_root --repeat 3 \
-  --output <tmp>/deploy_drill.json
-```
+이 절차는 이 세션 중 코디네이터의 명시적 지시(`orca orchestration check`로
+수신한 status 메시지 `msg_a323b90fd961`/`msg_fa852b904e03`/`msg_18cd5cd42a24`)로
+수행됐다 — 상세 근거는 [Implementation_Report.md](Implementation_Report.md)
+§15.2 참조. 요약:
 
-결과: exit 0. `identity_preserved: true`. `start_identity_current`와
-`final_identity_current`가 동일(`version_id: 22df8aba840fcec6`). `repeat=3`의
-activate/rollback 5-step 시퀀스 전부 `outcome: PASS`, `ready: true`. 4종
-fault injection(`manifest_corruption`, `disk_full_build`, `lock_contention`,
-`readiness_settings_mismatch`) 전부 `current_unchanged: true`(마지막
-fault는 정상적으로 `outcome: FAIL`/`error_code: settings_mismatch`를
-반환하는 것이 설계상 기대 동작이며, 이것이 `current` 불변을 깨지 않았음을
-같은 필드로 확인).
+1. **마스킹된 첫 결과**: `bash scripts/compile_lock.sh --verify 2>&1 | tail`
+   형태로 처음 실행했을 때 파이프 뒤의 `tail`이 실제 종료 코드를 가려, 잘못된
+   `EXIT:0`을 관측했다. 파이프 없이 재실행하자 **실제 종료 코드 1**
+   (`committed requirements.lock has drifted from requirements.txt`)이
+   드러났다.
+2. **macOS 아티팩트 배제**: macOS(arm64) 호스트에서 직접 `uv pip compile`을
+   실행하면 §10(Hosted CI Remediation Iteration 1)이 이미 겪은 플랫폼 그래프
+   오염이 재발할 수 있으므로, hosted CI와 동일한 조합
+   (`python:3.11-slim --platform linux/amd64` 컨테이너, `uv==0.8.15`) 안에서
+   같은 `--verify`를 재실행했다 — **컨테이너 안에서도 exit 1**로 재현돼, 이
+   drift가 macOS 아티팩트가 아니라 진짜임을 확인했다.
+3. **원인**: 재컴파일 직전 `git diff --stat -- requirements.lock
+   requirements.txt`가 빈 출력이었으므로(이 세션이나 이전 M4.3 세션이 만든
+   변경이 아님), drift는 마지막 lock 커밋 이후의 순수 상류 PyPI 릴리스
+   경과(`pypdf` 6.15.0→6.16.0, `uvicorn` 0.52.1→0.52.2, `xxhash` 등 다수 wheel/
+   hash 갱신, 총 패키지 수 103→103, package 세트 불변)였다.
+4. **해결(canonical 재컴파일)**: 같은 `python:3.11-slim --platform linux/amd64`
+   컨테이너(`uv==0.8.15`)에서 `bash scripts/compile_lock.sh`(no `--verify`)를
+   실행해 `requirements.lock`을 재작성했다(bind mount로 호스트 파일 직접
+   갱신). 재작성 직후 같은 컨테이너에서 `--verify`를 재실행해
+   **`compile_lock.sh: --verify PASS (reproducible, no drift)`, exit 0**을
+   확인했다. `git diff --stat -- requirements.lock`: **222 insertions(+),
+   195 deletions(-)** — 다수 패키지의 순수 버전/hash 갱신, package 수
+   103→103(package 세트 불변).
+5. **Clean lock-based pip check**: 같은 컨테이너에 재컴파일된
+   `requirements.lock`을 hosted CI와 동일 순서(`pip install --require-hashes
+   -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu`
+   → `pip install -e . --no-deps` → `pip check`)로 **처음부터 새로 설치**한
+   결과 **`No broken requirements found.`(exit 0)** — §2.1의 기존 dev venv
+   `pip check` exit 1(`langgraph-prebuilt`/`langchain-classic`가
+   `langchain-core>=1.0.0` 요구)이 lock 자체의 결함이 아니라, 이 프로젝트
+   로컬 `venv`에만 존재하는 순수 환경 drift(두 패키지 모두
+   `requirements.lock`에 없음 — grep으로 확인)임을 clean-install로 최종
+   확정했다.
 
-### 2.9 Docker build/scan/smoke — 시도 및 정확한 실패 증거
+이 결과로 `requirements.lock`은 working tree에서 갱신된 상태다(§7 참조).
+코디네이터는 이를 "material change"로 분류해, 이 milestone의 최종 commit
+전에 이 lock 갱신에 대한 별도 fresh code review가 필요하다고 명시했다 — 이
+세션은 review를 수행하지 않으며 commit/push도 하지 않는다.
 
-호스트 환경: macOS, Docker Desktop 29.6.2, Docker VM `aarch64`
+**생략한 항목(코디네이터 명시적 waiver)**: 재컴파일된 lock으로부터 완전히
+새로 구성한 clean venv에서 전체 pytest suite(§2.2)를 다시 실행하는 추가
+확인은, 코디네이터가 "clean pip-check(§2.9-5) + 기존 전체 venv suite
+증거(§2.2)로 충분하다"고 명시적으로 판단해 반복 실행하지 않았다(중복된
+장시간 컨테이너 QEMU 에뮬레이션 재시도를 피하기 위함). hosted CI(x86_64,
+네이티브)가 새 lock을 사용한 전체 suite의 첫 실제 실행이 된다.
+
+### 2.10 Docker build/scan/smoke — 이 세션이 최초로 완주
+
+호스트 환경: macOS, Docker Desktop, Docker VM `aarch64`
 (`linux/amd64` requirements.lock hash pin과 불일치하므로 native build는
-아키텍처상 불가 — 기존 문서화된 제약과 동일).
-
-**시도 1 — emulated amd64 test-stage build:**
+아키텍처상 불가 — 기존 문서화된 제약과 동일). 이전 세션들을 반복해서 막았던
+Docker Desktop VM 디스크 소진은 이 세션의 빌드 시작 시점 `docker system df`
+확인 결과(reclaimable 공간 충분) 재현되지 않았다.
 
 ```
 docker build --platform linux/amd64 --target test -f deploy/Dockerfile .
 ```
 
-- 빌드가 `requirements.lock`의 **104개 wheel을 hash-verified 상태로 전부
-  다운로드**하고 `Installing collected packages: ...`(90개 패키지 나열)
-  단계까지 진행했다.
-- 63.82초 지점에서 `Installing collected packages`가 시작된 뒤 78.88초
-  지점에서 **`ERROR: Could not install packages due to an OSError: [Errno
-  28] No space left on device`**로 실패(exit 1).
-- 이 실패는 [Implementation_Report.md](Implementation_Report.md)에 기록된
-  이전 세션의 정확히 동일한 현상(Docker Desktop VM 디스크 소진, `requirements.lock`/
-  Dockerfile 페어링 자체는 hash 검증까지 통과)을 **재현**한다.
-- 빌드 도중 호스트 파일시스템 여유 공간을 10초 간격으로 감시했다
-  (`df -k /`): 시작 시 14GiB, 종료 시 14GiB — **호스트 디스크는 소진되지
-  않았다.** 소진된 것은 Docker Desktop VM 자체의 가상 디스크
-  (`docker system df`: Images 24.57GB/Volumes 31.34GB/Build Cache
-  18.95GB, 총 사용량이 이미 크고 reclaimable이 45GB+ 존재)다.
-- **다른 프로젝트가 점유한 공유 Docker 이미지/볼륨을 이 세션이 임의로
-  prune하는 것은 범위 밖 파괴적 작업으로 판단해 수행하지 않았다** —
-  Implementation_Report.md §5의 동일 결정을 재확인·계승.
-- production-stage build는 동일한 `builder` 단계(`requirements.lock` pip
-  install)를 공유하므로 별도로 시도하지 않았다 — 같은 지점에서 동일하게
-  실패할 것이 확실하다.
-- 결론: **실제 이미지 build/scan/smoke는 이 로컬 환경에서 완주 불가**.
-  hosted CI(ubuntu-latest, x86_64, 충분한 디스크)로 이연한다.
-
-### 2.10 4-producer receipt / assembler / check_m4_baseline 시뮬레이션
-
-`GITHUB_SHA=648e3abcca7c321e7f4dd13a7fbed1a4f1886c3e`,
-`GITHUB_RUN_ID=local-sim-m43-acceptance`, `GITHUB_RUN_ATTEMPT=1`,
-`GITHUB_EVENT_NAME=workflow_dispatch`로 고정해 4개 producer 전부를
-`write_ci_producer_receipt.py`(실제 hosted step과 동일 스크립트)로 생성했다.
-
-| Producer | Payload 출처 |
-|---|---|
-| `python-tests` | 실제 — §2.2의 실제 pytest 실행 후 receipt 작성(payload 없음, hosted step과 동일 계약) |
-| `frontend-tests` | 실제 — §2.3의 실제 `npm test` 실행 후 receipt 작성(payload 없음) |
-| `container` | **SIMULATED** — §2.9에서 실제 이미지 build가 실패했으므로, `scan_image_layers.py`/`container_smoke.py`의 실제 출력 schema(`m43-layer-scan-v1`/`m43-container-smoke-v1`)를 그대로 따르는 payload를 수기로 작성하고 `_note` 필드에 시뮬레이션임을 명시. `forbidden_count: 0`, `_ALL_OK_KEYS`(`host_gateway_reachable`/`mock_query_ok`/`root_page_ok`/`static_asset_ok`/`production_test_seam_sealed`) 전부 `true`로 설정 — assembler가 실제로 검증하는 필드만 채웠으며 실제 이미지의 증거라고 주장하지 않는다. 이 관행은 Implementation_Report.md §7이 이미 사용한 것과 동일한 방법이다. |
-| `m43-deterministic` | 실제 — §2.6/§2.7에서 방금 실행한 진짜 `m43.json`/`m43-negative.json`을 payload로 사용 |
+결과: **exit 0** — hash-verified `requirements.lock`(§2.9에서 재컴파일된
+버전) 설치, `python -c "from simple_qna_rag.web.server import app"` 스모크
+포함 전 단계 완주. 이 세션에서 처음으로 이 명령이 로컬에서 끝까지 성공했다.
 
 ```
-venv/bin/python scripts/assemble_m4_evidence.py --fresh-dir <tmp>/m4-assemble \
-  --expected-sha 648e3abcca7c321e7f4dd13a7fbed1a4f1886c3e \
-  --expected-run-id local-sim-m43-acceptance --expected-run-attempt 1 \
-  --expected-workflow-path .github/workflows/ci.yml --expected-event workflow_dispatch \
-  --needs-result python-tests=success --needs-result frontend-tests=success \
-  --needs-result container=success --needs-result m43-deterministic=success \
-  --evidence python-tests=... --evidence frontend-tests=... \
-  --evidence container=... --evidence m43-deterministic=... \
-  --output <tmp>/m4-assemble/m4-baseline.json
+docker build --platform linux/amd64 --target production -f deploy/Dockerfile -t simple-qna-rag:m43-candidate .
 ```
 
-결과(exit 0), baseline candidate:
-
-```json
-{
-  "deterministic_status": "PASS",
-  "operational_status": "BLOCKED",
-  "M4.1_BLOCKED": true,
-  "overall_release_ready": false,
-  "gates": {
-    "python_tests": "PASS", "frontend_tests": "PASS",
-    "container": "PASS", "m43_deterministic": "PASS",
-    "m41_operational": "BLOCKED", "m3_live_regression": "NOT_RUN"
-  },
-  "producers": {
-    "python-tests": {"status": "OK"}, "frontend-tests": {"status": "OK"},
-    "container": {"status": "OK"}, "m43-deterministic": {"status": "OK"}
-  }
-}
-```
+결과: **exit 0** — numeric non-root user(`10001:10001`), test-seam
+미포함, 최소 `COPY` surface 확인. 이미지 digest
+`sha256:9828b1a4fd7d5feaf45d81828443cb1389bad05a7cf75a3bbee33ff9f4258595`.
 
 ```
-venv/bin/python scripts/check_m4_baseline.py --candidate <tmp>/m4-assemble/m4-baseline.json \
-  --expect-operational-blocked
+venv/bin/python scripts/scan_image_layers.py --image simple-qna-rag:m43-candidate
 ```
 
-결과: `{"ok": true, "issues": []}`, **exit 0**.
+결과: **`forbidden_count: 0`, `violations: []`, exit 0** — 12개 layer,
+member 수 최대 47997(python 패키지 layer)까지 전수 스캔, 신뢰 CA 저장소
+symlink/hardlink 허용목록 오탐 없음.
 
-**확인된 판정 불변식(요구된 4개 값 전부 정확히 재현):**
+```
+venv/bin/python scripts/container_smoke.py --image simple-qna-rag:m43-candidate
+```
 
-- `M4.1_BLOCKED = true`
-- `m3_live_regression 게이트 = NOT_RUN`(protected M3 live는 이 세션은 물론
-  hosted candidate에서도 아직 실행되지 않음)
-- `operational_status = BLOCKED`
-- `overall_release_ready = false`
+결과: **`status: "PASS"`, exit 0** — `host_gateway_reachable`,
+`mock_query_ok`, `root_page_ok`, `static_asset_ok`,
+`production_test_seam_sealed`, `readiness_sequence.live`/`.ready` 전부
+`true`. `graceful_stop_seconds: 1.66`.
+
+이로써 Implementation_Report.md §4/§12/Traceability.md가 반복 기록했던
+"실제 이미지 build/scan/smoke는 로컬 환경 제약으로 미완주"라는 제약이 **이
+세션에서는 해소**됐다. 이는 인프라 상태(Docker Desktop VM 가용 디스크)의
+변화이며, 코드/Dockerfile/스캐너 로직을 이 세션이 바꾼 결과가 아니다.
+hosted CI가 이 파이프라인의 첫 실제 hosted(x86_64 네이티브) 실행이라는 점은
+여전히 유효하다.
+
+### 2.11 4-producer receipt / assembler / check_m4_baseline — 코드 검토(재실행 생략)
+
+이 세션은 §2.7~2.10의 4개 producer(python-tests/frontend-tests/container/
+m43-deterministic) 모두를 이번 실행에서 실측했으나, 4-producer
+`assemble_m4_evidence.py` → `check_m4_baseline.py --expect-operational-blocked`
+전체 체인의 로컬 시뮬레이션 재실행은 하지 않았다 — 이전 세션(2026-08-12,
+§9 이하 참조)이 이미 실제 스크립트로 이 체인을 재현해 `{"ok": true,
+"issues": []}`와 `overall_release_ready=false`/`M4.1_BLOCKED=true`를
+확인했고, `scan_image_layers.py`/`container_smoke.py`/
+`run_m43_acceptance.py`/watchdog 코드는 이 세션에서 변경되지 않았으므로(이
+세션의 유일한 코드 변경은 `requirements.lock`이며, 이는 assembler/checker의
+입력 스키마에 영향이 없다) 그 체인의 판정 로직이 달라질 이유가 없다.
+`tests/unit/test_assemble_m4_evidence.py`/`test_check_m4_baseline.py`는
+§2.2의 전체 suite 1282 passed에 포함돼 로컬 PASS를 재확인했다.
 
 ## 3. 발견 사항과 예외 처리
 
-### 3.1 `pip check` 실패 — M4.3 무관 사전 존재 환경 조건 (예외로 처리)
+### 3.1 `pip check` 실패(기존 dev venv) — M4.3 무관, clean-install로 확정된 로컬 drift
 
-```
-langgraph-prebuilt 1.0.2 has requirement langchain-core>=1.0.0, but you have langchain-core 0.3.86.
-langchain-classic 1.0.0 has requirement langchain-core<2.0.0,>=1.0.0, but you have langchain-core 0.3.86.
-langchain-classic 1.0.0 has requirement langchain-text-splitters<2.0.0,>=1.0.0, but you have langchain-text-splitters 0.3.11.
-```
+§2.9-5의 clean lock-based install이 `No broken requirements found.`을
+반환했으므로, 기존 dev venv의 `pip check` exit 1은 **`requirements.lock`
+자체의 결함이 아니라 이 특정 로컬 `venv`에만 존재하는 상태**임이 확정됐다.
+코드 수정을 하지 않았다(범위 밖이며, clean-install 증거로 이미 결론이
+났다).
 
-`git stash`로 이 세션의 모든 working tree 변경을 제거하고 기준 revision
-`648e3ab`(M4.3 변경 없는 상태)에서 동일 명령을 재실행해 **동일한 3건의
-경고가 그대로 재현됨**을 확인했다(`git stash pop`으로 복원). 즉 이 조건은
-venv에 이미 설치된 패키지 조합의 사전 존재 상태이며 M4.3 코드/의존성
-변경으로 유발되지 않았다. `requirements.lock`은 `compile_lock.sh --verify`로
-재현 가능함이 확인됐고 이 pip check 경고는 lock 자체의 결함이 아니라 로컬
-venv에 설치된 실제 패키지 버전 간의 사전 존재 mismatch다. 가이드
-"Gate가 가져야 할 진행 여부 결정의 지침" §2-(1) "환경 상의 제약으로 성공할
-수 없는 케이스는 예외로 간주하고 넘어간다"에 따라 **예외로 처리**하며 M4.3
-pre-merge Gate 판정에 영향을 주지 않는다. 코드 수정을 하지 않았다(범위 밖).
+### 3.2 requirements.lock 진짜 drift — 코디네이터 지시로 이 세션이 canonical 해결
 
-### 3.2 실제 OCI 이미지 build/scan/smoke — 호스트 디스크 제약 (hosted CI로 이연)
-
-§2.9 참조. Dockerfile 자체의 계약(hash-verified install, numeric non-root
-user, minimal COPY surface)은 정적으로 재확인했고 unit 테스트(`test_scan_image_layers.py`,
-`test_container_smoke_contract.py`)로 스캐너/스모크 로직은 전수 검증됐다.
-실제 이미지 대상 build/scan/smoke만 로컬 환경 제약으로 미완주하며, 이는
-코드 결함이 아니라 이 세션이 반복 확인한 동일 인프라 제약이다.
+§2.9 참조. `pypdf`/`uvicorn`/`xxhash` 등 상류 PyPI 릴리스 경과로 인한 진짜
+drift였으며, macOS 아티팩트가 아니었다(linux/amd64 컨테이너에서도 동일하게
+재현). 코디네이터 지시에 따라 hosted CI와 동일한 컨테이너 조합으로 canonical
+재컴파일하고 reproducibility+no-drift를 재확인했다. 이 변경은 working
+tree에만 존재하며 커밋되지 않았다 — 코디네이터는 이를 별도 fresh code
+review 대상으로 지정했다.
 
 ### 3.3 신규 코드 결함
 
-**발견 없음.** 이 세션은 코드를 수정하지 않았다. 모든 pytest/스크립트
-실행이 Code Review Iteration 2가 근거로 삼은 수치와 정확히 일치했으며 신규
-회귀가 전혀 없었다.
+**발견 없음.** 이 세션의 유일한 코드 변경은 §3.2의 `requirements.lock`
+재컴파일(상류 패키지 버전/hash 갱신)이며, 이는 M4.3의 애플리케이션/스크립트
+로직 결함이 아니다. §2.2/§2.3/§2.4의 pytest 수치는 모두 Iteration 9 및 §13
+근거 수치와 일치하거나(재실행 재확인) 그 이후 정확히 예상된 증가분만
+반영했다.
 
 ## 4. 의도적으로 실행하지 않은 것 (지시된 경계)
 
@@ -283,119 +282,93 @@ user, minimal COPY surface)은 정적으로 재확인했고 unit 테스트(`test
 - M4.1 live 14-gate(운영 승인 대상)
 - 실제 hosted GitHub Actions 실행(이 세션은 commit/push/PR을 하지 않음)
 - self-hosted runner/environment 승인 설정 변경(전혀 건드리지 않음)
+- §2.11에 기록한 4-producer 체인 로컬 시뮬레이션의 반복 재실행(코드 무변경
+  근거로 생략)
+- §2.9의 clean-install 이후 전체 pytest suite를 다시 그 clean venv에서
+  재실행하는 것(코디네이터 명시적 waiver)
 
-## 5. Requirement Traceability 재확인
+## 5. 문서 최종 링크/diff 재확인
+
+이 세션이 Implementation_Report.md/Traceability.md/Orchestration_Stop_Report.md/
+이 Acceptance_Report.md를 갱신한 뒤 최종적으로 재실행:
+
+| 명령 | 결과 |
+|---|---|
+| `venv/bin/python scripts/check_markdown_links.py` | 파일 129개(tracked 122 + untracked 7), 링크 590개, 실패 0개 |
+| `git diff --check` | exit 0 |
+
+## 6. Requirement Traceability 재확인
 
 [Traceability.md](Traceability.md)의 각 행을 이 세션이 재실행한 명령/증거와
-대조했다. **모든 claim이 검증된 상태로 확인되어 문서 수정이 필요한
-불일치를 발견하지 못했다** — 따라서 Traceability.md/Implementation_Report.md는
-이 세션에서 변경하지 않는다(가이드 지시: "Update Traceability/Implementation_Report
-only for verified truth" — 검증 결과가 기존 문서와 완전히 일치하므로 갱신할
-"새로운 진실"이 없다).
+대조했다 — M4.3-REQ-005/NFR-003 행은 Iteration 6~9 closure와 §2.10의 실제
+이미지 완주를 반영해 **이번에 갱신**했다(상세는 Traceability.md 자체와
+Implementation_Report.md §14~15).
 
 | Requirement | 이 세션 재확인 근거 |
 |---|---|
-| M4.3-REQ-001~004(canonical index/lifecycle/CLI) | §2.2 전체 suite 1173 passed 포함 |
-| M4.3-REQ-005(OCI image) | §2.4 정적 계약 26 passed, §2.9 실제 build 재시도(동일 실패 재현), Dockerfile 재검토 |
-| M4.3-REQ-006(runbook) | §2.8 deploy drill 실측 재실행 |
-| M4.3-REQ-007(single workflow) | §2.4, §2.5(byte 단위 protected block 검증), §2.10(4-producer 시뮬레이션) |
-| M4.3-REQ-008(M4 baseline) | §2.10 checker `{"ok": true, "issues": []}` |
-| M4.3-REQ-009(watchdog) | §2.2에 포함(orchestration_watchdog 16/16) |
-| M4.3-NFR-001~006 | §2.2, §2.6, §2.8 |
-
-## 6. Pre-merge Gate 판정
-
-**Pre-merge Code Quality Gate: PASS 유지(9.8/10, 변경 없음)** — Code Review
-Iteration 2의 판정을 이 세션이 독립적으로 재현·재확인했다. 신규 CRITICAL/MAJOR/MINOR
-없음. §3.1/§3.2의 두 항목은 모두 기존에 문서화된 환경 제약의 재확인이며
-새로운 코드 품질 finding이 아니다.
-
-**Post-merge Operational Acceptance Gate: 전제 조건 대로 미충족**
-(가이드 §11에 따라 pre-merge 판정의 선행조건이 아님):
-
-```
-M4_OVERALL_RELEASE_READY
-  = M4.3_DETERMINISTIC_PASS(true, 로컬)
-    AND M4.1_OPERATIONAL_PASS(false — BLOCKED)
-    AND PROTECTED_M3_LIVE_PASS(false — NOT_RUN)
-    AND exact_post_merge_release_identity_is_verified(NOT_RUN — 미커밋)
-  = false
-```
-
-`M4.1_BLOCKED=true`, protected M3 live `NOT_RUN`, `overall_release_ready=false`
-— 이 세션의 §2.10 실측이 이 판정 불변식을 정확히 재확인했다. 어떤 스크립트도
-이 값을 합성·default로 `true`로 만들 수 없음을 코드 검토로 재확인했다.
+| M4.3-REQ-001~004(canonical index/lifecycle/CLI) | §2.2 전체 suite 1282 passed 포함 |
+| M4.3-REQ-005(OCI image, certifi Label exact binding) | §2.3(112/112 passed, 두 interpreter), §2.10(실제 이미지 build/scan/smoke 최초 완주) |
+| M4.3-REQ-006(runbook) | §2.2에 `test_deploy_drill.py` 포함(재실행하지 않음 — 코드 무변경) |
+| M4.3-REQ-007(single workflow) | §2.2, §2.6(protected block 코드 검토) |
+| M4.3-REQ-008(M4 baseline) | §2.11(체인 로직 무변경 근거로 재실행 생략, 이전 세션 실측 유효) |
+| M4.3-REQ-009(watchdog) | §2.4(16/16 passed) |
+| M4.3-NFR-001~006 | §2.2, §2.7, §2.10 |
 
 ## 7. Release-worker 인계 체크리스트
 
 머지를 진행하는 release worker는 다음을 순서대로 수행해야 한다.
 
 1. **커밋 범위 확인**: 이 working tree의 modified/untracked 파일 전체가
-   M4.3 범위와 일치하는지 최종 `git status`/`git diff --stat`로 확인.
-   `runtime/`, `.env`, 개인 스크래치 파일이 섞여 있지 않은지 확인.
-2. **commit → push → PR 생성**. PR 본문에 이 Acceptance_Report.md와
-   Code_Review_Iteration_2.md를 링크.
-3. **hosted CI 관찰**: PR push 후 `python-tests`, `frontend-tests`, `container`,
-   `m43-deterministic`, `m4-assemble` 5개 job이 모두 실행되는지 확인.
-   `container`/`m4-assemble` job은 이 세션이 로컬에서 완주하지 못한
-   **첫 실제 hosted 실행**이므로 특히 주의 깊게 관찰할 것 — 실제
-   x86_64/충분한 디스크 환경에서 §2.9가 예측한 대로 성공하는지가 이
-   머지의 가장 중요한 미검증 지점이다.
-4. **`m3-live-regression-gate` 무변경 재확인**: hosted 실행 전에 PR diff에서
-   해당 job 블록에 어떤 변경도 없는지 GitHub UI로 재확인(§2.5의 로컬
-   byte-비교를 hosted 관점에서 재확인).
-5. **`m4-baseline` artifact 다운로드 후 검사**: hosted 실행이 끝나면
+   M4.3 범위와 일치하는지 최종 `git status`/`git diff --stat`로 확인. 특히
+   `requirements.lock`(§3.2의 canonical 재컴파일, 코드 아님)이 포함돼야
+   한다. `runtime/`, `.env`, 개인 스크래치 파일이 섞여 있지 않은지 확인.
+2. **`requirements.lock` 변경에 대한 fresh code review**: 코디네이터가
+   이 변경을 "material change"로 분류했다 — 나머지 M4.3 diff(Iteration 9
+   PASS 10.0/10 근거)와 별개로, 이 lock 재컴파일 자체에 대한 독립 검토를
+   거친 뒤 commit 범위에 포함할 것.
+3. **commit → push → PR 생성**. PR 본문에 이 Acceptance_Report.md,
+   Code_Review_Iteration_9.md, Implementation_Report.md §14~15를 링크.
+4. **hosted CI 관찰**: PR push 후 `python-tests`, `frontend-tests`,
+   `container`, `m43-deterministic`, `m4-assemble` 5개 job이 모두
+   실행되는지 확인. 재컴파일된 `requirements.lock`이 hosted에서
+   `--require-hashes` 설치를 통과하는지가 이 push의 가장 중요한 미검증
+   지점이다(이 세션은 linux/amd64 에뮬레이션 컨테이너에서는 clean-install을
+   확인했으나, 네이티브 x86_64 hosted runner에서는 아직 확인되지 않았다).
+5. **`m3-live-regression-gate` 무변경 재확인**: hosted 실행 전에 PR diff에서
+   해당 job 블록에 어떤 변경도 없는지 GitHub UI로 재확인.
+6. **`m4-baseline` artifact 다운로드 후 검사**: hosted 실행이 끝나면
    업로드된 `m4-baseline.json`을 받아 `M4.1_BLOCKED=true`,
    `operational_status=BLOCKED`, `overall_release_ready=false`,
-   `gates.m3_live_regression=NOT_RUN`을 재확인. 이 중 하나라도
-   다르면 merge를 중단하고 즉시 조사.
-6. **container job 실패 시**: §2.9의 로컬 재현과 같은
-   `No space left on device`가 hosted에서도 발생한다면 이는 (a) 로컬
-   emulation 특유의 문제였거나 (b) Dockerfile/lock 자체의 결함일 수 있다.
-   hosted runner는 보통 넉넉한 디스크를 가지므로, hosted에서도 실패하면
-   pre-merge PASS 판정과 무관하게 **fresh code review 대상**으로 반드시
-   재분류해야 한다(이 세션은 이 가능성을 배제하지 못했다 — 로컬 hash-verified
-   install까지만 확인했다).
+   `gates.m3_live_regression=NOT_RUN`을 재확인. 이 중 하나라도 다르면
+   merge를 중단하고 즉시 조사.
 7. **merge 후**: M4.1 operational exception과 protected M3 live 승인은
    이 머지로 해소되지 않는다. M4 전체 release는 계속 BLOCKED다. 별도
    운영 승인 절차(M4.1 live 14-gate, M3 live 14-gate)가 완료되기 전까지
    `overall_release_ready`를 true로 표시하는 어떤 문서/스크립트 변경도
    생성하지 말 것.
 
-## 8. Hosted CI 기대치
+## 8. 최종 요약
 
-- `python-tests`/`frontend-tests`: 이 세션이 이미 동일 명령을 로컬에서
-  실행해 확인했으므로 hosted에서도 동일하게 PASS해야 한다. 차이가 나면
-  환경 차이(Python/Node 버전, lock drift)를 먼저 의심할 것.
-- `container`: **로컬에서 완주하지 못한 유일한 job.** §2.9의 hash-verified
-  install까지는 아키텍처/디스크와 무관하게 결정론적이므로 hosted
-  ubuntu-latest(native x86_64, 통상 충분한 디스크)에서는 `pip install`
-  단계를 통과할 것으로 예상하지만, 이 세션은 그 이후 단계(`test`/`production`
-  stage build, `scan_image_layers.py`, `container_smoke.py`)를 실제로
-  한 번도 실행하지 못했다 — hosted가 이 로직의 **최초 실제 실행**이다.
-- `m43-deterministic`: 로컬에서 실제로 정확히 같은 명령으로 실행해
-  positive/negative 모두 확인했으므로 hosted에서도 동일 결과가 예상된다.
-- `m4-assemble`: 로컬 4-producer 시뮬레이션(§2.10)이 assembler/checker
-  로직 자체를 실제 스크립트로 검증했다. hosted에서 실제 4개 job 산출물을
-  다운로드해 조립하는 것은 `needs`/artifact 배선의 최초 실제 실행이며,
-  `container` producer가 처음으로 진짜(시뮬레이션이 아닌) payload를 갖게
-  된다.
-- `m3-live-regression-gate`: 이 워크플로 실행 대상이 아니다(별도 트리거,
-  self-hosted, environment 승인). 이 PR의 hosted run에서 트리거되지 않아야
-  정상이다.
-
-## 9. 최종 요약
-
-- **로컬 결정론적 M4.3 사이클: PASS**(Python/Frontend 전체 suite, 정적/생성/링크
-  계약, positive/negative acceptance repeat=10 seed=4303, deploy drill,
-  4-producer 시뮬레이션 전부 재현 확인).
-- **신규 코드 결함: 0건.** 코드 변경 없음.
-- **실제 이미지 build/scan/smoke: 로컬 환경 제약으로 미완주**(정확한 증거
-  기록, hosted CI로 이연).
+- **Code Review Iteration 9: PASS 10.0/10**(`CRITICAL 0/MAJOR 0/MINOR 0/
+  TRIVIAL 0`) — Iteration 6~8이 지적한 certifi Label exact-binding 결함
+  체인이 모두 closed.
+- **로컬 결정론적 M4.3 사이클: PASS(실제 이미지 Gate 포함 전 항목 완주)** —
+  Python/Frontend 전체 suite, 정적/생성/링크 계약, positive/negative
+  acceptance repeat=10 seed=4303, watchdog 16/16, 실제 linux/amd64 이미지
+  build+scan(`forbidden_count: 0`)+smoke(`status: PASS`) 전부 이 세션에서
+  직접 재현·확인.
+- **신규 애플리케이션 코드 결함: 0건.**
+- **환경 delta 1건**: `requirements.lock`이 상류 PyPI 릴리스로 진짜 drift돼
+  있었다 — 코디네이터 지시로 hosted CI와 동일한 컨테이너에서 canonical
+  재컴파일하고 reproducibility+no-drift+clean pip-check를 재확인했다(§2.9).
+  이 변경은 working tree에만 있으며 fresh code review 대상으로 지정됐다.
 - **`M4.1_BLOCKED=true`, protected M3 live `NOT_RUN`,
-  `overall_release_ready=false`를 이 세션이 독립적으로 재확인했다.**
-- Traceability.md/Implementation_Report.md는 기존 claim이 모두 검증되어
-  갱신 없음.
-- Pre-merge Code Quality Gate: **PASS 유지(9.8/10)**. Post-merge
-  Operational Acceptance Gate: 여전히 미충족(설계상 정상, 별도 운영 승인
-  절차 필요).
+  `overall_release_ready=false`를 코드 검토로 재확인했다** — 이 값을
+  변경하는 어떤 코드 경로도 이 세션이 만들거나 발견하지 않았다.
+- Implementation_Report.md §14~15, Traceability.md(상태 header,
+  M4.3-REQ-005/NFR-003 행, Container hosted gate 행), Orchestration_Stop_Report.md
+  (상단 historical 배너)를 이 세션에서 갱신했다.
+- Pre-merge Code Quality Gate: **PASS(10.0/10, Iteration 9 근거)**.
+  `requirements.lock`은 그 PASS 판정 대상에 포함되지 않았던 별도 environment
+  delta이며 §7-2의 fresh review가 필요하다. Post-merge Operational
+  Acceptance Gate: 여전히 미충족(설계상 정상, 별도 운영 승인 절차 필요).
