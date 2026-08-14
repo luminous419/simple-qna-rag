@@ -125,17 +125,74 @@ def _capture_container_logs(container_id: str, *, max_bytes: int = 16000) -> str
     `live=true, ready=false` failure carried no signal distinguishing "still
     cold-starting" from "the app is up and rejecting readiness with a
     concrete reason" (Hosted_Container_Remediation_Iteration_5.md). Tail is
-    truncated to the last `max_bytes` bytes (not the first) since the
-    startup event and the final rejected `/health/ready` response are the
-    most recent lines, not the earliest."""
+    truncated to the last `max_bytes` *UTF-8 bytes* (not `len()` characters,
+    and not the first bytes) since the startup event and the final rejected
+    `/health/ready` response are the most recent lines, not the earliest —
+    CR-HCIR6-MAJ-02 found the previous character-counted version could return
+    up to 3x `max_bytes` worth of encoded bytes for multibyte log content."""
     try:
         proc = _run(["docker", "logs", "--tail", "200", container_id])
     except Exception:
         return ""
     combined = (proc.stdout or "") + (proc.stderr or "")
-    if len(combined) > max_bytes:
-        combined = combined[-max_bytes:]
-    return combined
+
+    # Retain at most the single *latest* "startup" event line before any
+    # budget check runs at all — CR-HCIR7-MAJ-01 found that gating startup
+    # selection behind the over-budget branch let an under-budget log with
+    # >1 startup events (a crash loop that recovers within max_bytes) skip
+    # dedup entirely via the early `len(combined_bytes) <= max_bytes` return.
+    lines = combined.splitlines(keepends=True)
+    startup_indices = [i for i, ln in enumerate(lines) if '"event": "startup"' in ln]
+    startup = lines[startup_indices[-1]] if startup_indices else ""
+    if len(startup_indices) > 1:
+        keep = startup_indices[-1]
+        lines = [ln for i, ln in enumerate(lines) if i not in startup_indices or i == keep]
+        combined = "".join(lines)
+
+    combined_bytes = combined.encode("utf-8")
+    if len(combined_bytes) <= max_bytes:
+        return combined
+    # A full `max_seconds`-budget readiness poll (§ Hosted_Container_
+    # Remediation_Iteration_5.md) logs one request_start/request_end pair
+    # per second — on run 31804369490 that alone was enough real hosted
+    # evidence to fill this entire byte budget with repeated
+    # `"route": "health"` noise and evict the single `"event": "startup"`
+    # line (the one line carrying `reason`/`engine_error_type`) before it
+    # ever reached the tail (Hosted_CI_Remediation_Iteration_6.md). Fill
+    # whatever remains after the retained startup line with the most recent
+    # bytes.
+    startup_bytes = startup.encode("utf-8")
+    if len(startup_bytes) > max_bytes:
+        # Even the single latest startup event alone doesn't fit the budget.
+        # Keep its head: `logging.py::SafeJsonHandler` emits `sort_keys=True`
+        # JSON, so the most diagnostic fields (`engine_error_type`, `event`,
+        # `level`, `reason`) sort before the less useful `request_id`/
+        # `service`/`timestamp`/`version` tail. Decode with `errors="ignore"`
+        # so a cut mid-multibyte-character can never raise or grow past the
+        # byte budget (unlike `errors="replace"`, which can add bytes back).
+        return startup_bytes[:max_bytes].decode("utf-8", errors="ignore")
+    remaining = max_bytes - len(startup_bytes)
+    tail_bytes = combined_bytes[-remaining:] if remaining > 0 else b""
+
+    # Never double-count the startup line against the recomputed tail
+    # window. Two distinct overlap shapes are possible: (a) the whole
+    # startup line already sits somewhere inside the tail window (it
+    # happened recently enough), or (b) CR-HCIR7-MAJ-01's boundary case —
+    # the tail window's start byte lands *inside* the startup line itself,
+    # so only a byte-level suffix-of-startup/prefix-of-tail overlaps rather
+    # than the full line. Both are resolved at the byte level, before any
+    # decode, so a multibyte cut can never mask or shift the overlap.
+    if startup_bytes and startup_bytes in tail_bytes:
+        result_bytes = tail_bytes
+    else:
+        overlap = 0
+        max_check = min(len(startup_bytes), len(tail_bytes))
+        for k in range(max_check, 0, -1):
+            if startup_bytes[-k:] == tail_bytes[:k]:
+                overlap = k
+                break
+        result_bytes = startup_bytes + tail_bytes[overlap:]
+    return result_bytes.decode("utf-8", errors="ignore")
 
 
 def check_static_asset(port: int, *, timeout: float = 5.0) -> bool:

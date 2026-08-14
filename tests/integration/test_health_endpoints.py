@@ -1,7 +1,11 @@
 """M4.1 §3.4/§9.2/§11.2 — health status table + deprecated alias."""
 
+import io
+import json
+
 from fastapi.testclient import TestClient
 
+from simple_qna_rag.observability import logging as obs_logging
 from simple_qna_rag.rag_engine import EngineArtifactError
 from simple_qna_rag.settings import Settings, SettingsError, get_settings
 from simple_qna_rag.web.bootstrap import Bootstrap
@@ -59,6 +63,42 @@ def test_health_ready_engine_init_failed():
         r = client.get("/health/ready")
         assert r.status_code == 503
         assert r.json()["reason"] == "engine_init_failed"
+
+
+def test_health_ready_engine_init_failed_logs_safe_exception_type_not_message():
+    """Hosted_CI_Remediation_Iteration_6.md — the generic `engine_init_failed`
+    branch previously discarded all type information about the underlying
+    exception. The public `/health/ready` body must still carry only the
+    bounded `reason` string (never exception text), while the server's own
+    structured `startup` log gains the bare exception *class name* (never
+    `str(exc)`, which can carry paths/URLs/secrets — M4.1 REPLACE)."""
+
+    def _raise_engine(settings):
+        raise PermissionError("/some/secret/path denied")
+
+    app = _app_with(settings_loader=get_settings, engine_factory=_raise_engine)
+
+    buf = io.StringIO()
+    handler = obs_logging.SafeJsonHandler(stream=buf)
+    original_handlers = obs_logging._logger.handlers
+    obs_logging._logger.handlers = [handler]
+    try:
+        with TestClient(app) as client:
+            r = client.get("/health/ready")
+            assert r.status_code == 503
+            body = r.json()
+            assert body == {"status": "not_ready", "reason": "engine_init_failed"}
+            assert "PermissionError" not in json.dumps(body)
+            assert "/some/secret/path" not in json.dumps(body)
+    finally:
+        obs_logging._logger.handlers = original_handlers
+
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line.strip()]
+    startup_records = [rec for rec in records if rec.get("event") == "startup"]
+    assert len(startup_records) == 1
+    assert startup_records[0]["reason"] == "engine_init_failed"
+    assert startup_records[0]["engine_error_type"] == "PermissionError"
+    assert "/some/secret/path" not in json.dumps(startup_records[0])
 
 
 def test_health_ready_engine_artifact_error_discloses_allowlisted_reason():

@@ -88,6 +88,27 @@ validate_and_normalize_header() {
 
 compile_once() {
   local out="$1"
+  # Durability against unpinned-transitive-dependency drift: seed the `-o`
+  # target with the currently committed lock (when one exists) before
+  # invoking uv. `uv pip compile` treats an already-populated output file
+  # as a version *preference* and keeps every package it can still satisfy
+  # pinned at that version, re-resolving only what `requirements.txt`
+  # itself actually changed (`uv pip compile --help`'s `-U`/`--upgrade`:
+  # "ignoring pinned versions in any existing output file" — the implicit
+  # converse being that an existing output file's versions are honored by
+  # default). Without this seed every compile starts from a blank temp
+  # file, so an unpinned transitive dependency (nothing in requirements.txt
+  # names it directly) always re-resolves to whatever is newest on the
+  # index at that exact moment — "blindly chasing latest" on every single
+  # run. This is exactly how `langsmith` drifted from the committed
+  # 0.10.18 to a newer patch release with zero requirements.txt change
+  # (Hosted_CI_Remediation_Iteration_6.md). A deliberate upgrade of a
+  # pinned transitive package is still possible — remove/edit its line in
+  # the committed `requirements.lock` (or delete the file for a full
+  # from-scratch re-resolution) before running this script again.
+  if [ -f "$LOCK_FILE" ]; then
+    cp "$LOCK_FILE" "$out"
+  fi
   uv pip compile "$REQUIREMENTS_FILE" \
     --extra-index-url "$EXTRA_INDEX_URL" \
     --index-strategy unsafe-best-match \

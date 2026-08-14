@@ -112,6 +112,38 @@ def test_startup_and_readiness_allow_request_id_none(capture):
     assert record["request_id"] is None
 
 
+def test_startup_engine_error_type_accepts_bare_exception_class_name(capture):
+    L.log_event("startup", reason="engine_init_failed", engine_error_type="PermissionError")
+    record = _last_record(capture)
+    assert record["engine_error_type"] == "PermissionError"
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    [
+        "https://user:secret@host/path",  # not a bare identifier
+        "/Users/someone/secret.txt",  # also caught by the abs-path guard
+        "x" * 65,  # over the length bound
+        123,  # wrong type
+    ],
+)
+def test_startup_engine_error_type_out_of_grammar_is_clamped_not_recorded_raw(capture, bad_value):
+    L.log_event("startup", reason="engine_init_failed", engine_error_type=bad_value)
+    record = _last_record(capture)
+    assert record.get("engine_error_type") != bad_value
+
+
+def test_startup_engine_error_type_is_optional(capture):
+    L.log_event("startup", reason="ok")
+    record = _last_record(capture)
+    assert "engine_error_type" not in record
+
+
+def test_log_event_strict_raises_on_malformed_engine_error_type():
+    with pytest.raises(ValueError):
+        L.log_event_strict("startup", reason="engine_init_failed", engine_error_type="not a class name")
+
+
 def test_confidence_is_clamped_to_3_decimals_and_unit_interval(capture):
     L.log_event("routing", decision="document_qa", confidence=1.23456)
     record = _last_record(capture)

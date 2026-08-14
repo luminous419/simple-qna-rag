@@ -92,6 +92,21 @@ case "$scenario" in
   unexpected_third_header)
     { printf '%s\n' "$banner"; printf '%s%s\n' "$prefix" "$out"; printf '%s\n' "# unexpected third header line"; printf '%s' "$body"; } > "$out"
     ;;
+  record_preseed)
+    # Captures a single-line fingerprint (byte count) of whatever content
+    # was already sitting at $out *before* this invocation truncates it
+    # via `> "$out"` — proves (or disproves) whether the caller seeded the
+    # output file with the committed lock ahead of invoking uv, exactly
+    # the way real `uv pip compile` treats a pre-existing `-o` file as a
+    # version preference. A byte count (not the raw multi-line content) so
+    # the recorded line can never itself look like a second `#`-prefixed
+    # header line and trip the unrelated header-shape checks below.
+    preseed_len="EMPTY"
+    if [ -s "$out" ]; then
+      preseed_len="$(wc -c < "$out" | tr -d ' ')"
+    fi
+    { printf '%s\n' "$banner"; printf '%s%s\n' "$prefix" "$out"; printf 'PRESEED_LEN:%s\n' "$preseed_len"; printf '%s' "$body"; } > "$out"
+    ;;
   *)
     echo "fake uv: unknown FAKE_UV_SCENARIO '$scenario'" >&2
     exit 1
@@ -280,3 +295,43 @@ class TestVerifyModeHeaderContract:
         result = _run(fake_repo, fake_uv_bin, "success", mode="--verify")
         assert result.returncode != 0
         assert "header" in result.stderr.lower()
+
+
+class TestSeedingDurabilityAgainstUnpinnedTransitiveDrift:
+    """Hosted_CI_Remediation_Iteration_6.md — `compile_once()` used to
+    always compile into a blank `mktemp` file, so `uv pip compile` had no
+    existing-output-file preference to honor and always re-resolved every
+    unpinned transitive dependency to whatever was newest on the index at
+    that exact moment (how `langsmith` silently drifted from the committed
+    0.10.18 to a newer release with zero requirements.txt change). The
+    fix seeds each compile target with the currently committed
+    `requirements.lock` first, when one already exists."""
+
+    def test_first_ever_compile_has_no_lock_to_seed_from(self, fake_repo: Path, fake_uv_bin: Path):
+        assert not (fake_repo / "requirements.lock").exists()
+        result = _run(fake_repo, fake_uv_bin, "record_preseed")
+        assert result.returncode == 0, result.stderr
+        lock_text = (fake_repo / "requirements.lock").read_text(encoding="utf-8")
+        assert "PRESEED_LEN:EMPTY" in lock_text
+
+    def test_recompile_seeds_uv_invocation_with_committed_lock_content(
+        self, fake_repo: Path, fake_uv_bin: Path
+    ):
+        committed = (
+            f"{CANONICAL_LINE1}\n{_canonical_line2()}\n"
+            "some-transitive-pkg==1.2.3 \\\n"
+            "    --hash=sha256:deadbeef\n"
+        )
+        (fake_repo / "requirements.lock").write_text(committed, encoding="utf-8")
+
+        result = _run(fake_repo, fake_uv_bin, "record_preseed")
+        assert result.returncode == 0, result.stderr
+        lock_text = (fake_repo / "requirements.lock").read_text(encoding="utf-8")
+        assert f"PRESEED_LEN:{len(committed.encode('utf-8'))}" in lock_text
+        # Compile mode's own reproducibility self-check (tmp_a vs tmp_b,
+        # both produced by two separate `compile_once` calls) already
+        # passed (returncode 0 above) — if the two passes had seen
+        # different preseed content, their bodies would disagree and the
+        # script would have failed with "lock is not reproducible"
+        # instead, so this single assertion also proves both passes were
+        # seeded identically.

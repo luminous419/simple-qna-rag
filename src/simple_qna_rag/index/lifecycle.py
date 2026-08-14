@@ -145,6 +145,20 @@ def _publish(index_root: Path, op_dir: Path, manifest: dict) -> Path:
     for name in ("index.faiss", "index.pkl", "manifest.json"):
         os.chmod(dest / name, 0o444)
     os.chmod(dest, 0o555)
+    # `versions_dir.mkdir(parents=True, exist_ok=True)` (`_assert_same_
+    # filesystem`) creates this directory under the *caller's* ambient
+    # umask — unlike every artifact `_publish` itself writes, it was never
+    # given an explicit mode. A stricter-than-0o022 umask on the host that
+    # builds the index (vs. the possibly different UID that later opens it
+    # read-only from inside a container, e.g. `verify_version`'s
+    # `ContainedDir.open_subdir("versions")`) can leave it non-traversable
+    # for that UID, which previously surfaced as an opaque, undiagnosable
+    # `engine_init_failed` rather than a disclosed trust-boundary reason
+    # (Hosted_CI_Remediation_Iteration_6.md). Explicit and idempotent, like
+    # `dest`'s own 0o555 above — never loosens anything beyond world
+    # read+traverse on a directory whose only contents are already
+    # independently 0o555/0o444-protected version directories/files.
+    os.chmod(index_root / "versions", 0o755)
     _fsync_dir(index_root / "versions")
     _fsync_dir(index_root)
     return dest

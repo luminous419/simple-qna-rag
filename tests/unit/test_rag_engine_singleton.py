@@ -19,6 +19,8 @@ failure always gets a fresh `RAGEngine` identity, and only the public
 
 from __future__ import annotations
 
+from unittest import mock
+
 import pytest
 
 from simple_qna_rag import rag_engine
@@ -194,3 +196,35 @@ def test_initialize_resets_stale_artifact_reason_before_each_attempt(monkeypatch
 
     assert engine.initialize() is False
     assert engine._artifact_error_reason is None
+
+
+def test_resolve_current_trust_boundary_error_propagates_through_engine_and_readiness_chain():
+    """CR-HCIR6-MAJ-01 — `resolve_current()`'s own `TrustBoundaryError` (e.g.
+    the new `current_pointer_permission_denied` from a real EACCES on its
+    direct `current` open) was previously uncaught by `_load_vectorstore()`:
+    only `CurrentPointerMissing` was handled there, so any other
+    `TrustBoundaryError` fell straight past it into `initialize()`'s generic
+    `except Exception: return False`, discarding the disclosed reason and
+    reporting the exact same opaque `engine_init_failed` as any unrelated
+    failure — reproducing the identical collapse this iteration already
+    closed for the three `ContainedDir` entry points. This exercises the
+    real (unmocked) `_load_vectorstore()` -> `initialize()` ->
+    `get_rag_engine()` chain with only `resolve_current()` itself replaced,
+    proving the typed reason now survives end-to-end as a disclosed
+    `EngineArtifactError.reason` — the exact input `evaluate_readiness()`'s
+    `artifact_{reason}` 503 branch consumes (already proven generically by
+    `test_health_ready_engine_artifact_error_discloses_allowlisted_reason`
+    in tests/integration/test_health_endpoints.py). Singleton state is reset
+    by the module's autouse `_reset_singleton` fixture, same as every other
+    test in this file."""
+
+    def _fake_resolve_current(index_root):
+        raise index_verification.TrustBoundaryError("current_pointer_permission_denied")
+
+    with mock.patch.object(index_verification, "resolve_current", _fake_resolve_current):
+        with pytest.raises(EngineArtifactError) as excinfo:
+            rag_engine.get_rag_engine()
+    assert excinfo.value.reason == "current_pointer_permission_denied"
+    assert RAGEngine._instance is None
+    assert RAGEngine._initialized is False
+    assert rag_engine._rag_engine is None

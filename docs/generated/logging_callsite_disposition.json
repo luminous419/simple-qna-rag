@@ -549,7 +549,7 @@
       "file": "observability/logging.py",
       "identity": "observability/logging.py::<module>#1",
       "kind": "logging",
-      "line": 157,
+      "line": 171,
       "scope": "<module>"
     },
     {
@@ -557,7 +557,7 @@
       "file": "observability/logging.py",
       "identity": "observability/logging.py::<module>#2",
       "kind": "logging",
-      "line": 160,
+      "line": 174,
       "scope": "<module>"
     },
     {
@@ -565,7 +565,7 @@
       "file": "observability/logging.py",
       "identity": "observability/logging.py::log_event#1",
       "kind": "logging",
-      "line": 230,
+      "line": 244,
       "scope": "log_event"
     },
     {
@@ -573,7 +573,7 @@
       "file": "observability/logging.py",
       "identity": "observability/logging.py::log_event_strict#1",
       "kind": "logging",
-      "line": 242,
+      "line": 256,
       "scope": "log_event_strict"
     }
   ],

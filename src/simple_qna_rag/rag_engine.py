@@ -312,6 +312,17 @@ class RAGEngine:
             version_id = index_verification.resolve_current(index_root)
         except index_verification.CurrentPointerMissing:
             return self._load_vectorstore_legacy(embeddings)
+        except index_verification.TrustBoundaryError as exc:
+            # `resolve_current()`'s own `TrustBoundaryError` (e.g. a symlinked
+            # `current`, or CR-HCIR6-MAJ-01's `current_pointer_permission_
+            # denied`) was previously uncaught here — it fell straight past
+            # this function into `initialize()`'s generic
+            # `except Exception: return False`, losing the disclosed reason
+            # entirely and reporting the same opaque `engine_init_failed` as
+            # any unrelated failure. Route it through the same
+            # `IndexTrustError` channel `load_verified_faiss()` already uses
+            # below.
+            raise IndexTrustError(exc.reason) from None
         try:
             return index_verification.load_verified_faiss(
                 index_root, version_id, embeddings=embeddings,

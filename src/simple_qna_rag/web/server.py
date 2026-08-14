@@ -350,6 +350,7 @@ def _make_lifespan(
                 # here because settings_loader() has already succeeded.
                 from simple_qna_rag.rag_engine import EngineArtifactError
 
+                app.state.engine_error_type = None
                 try:
                     app.state.engine = engine_factory(candidate)
                     app.state.engine_error = None
@@ -377,6 +378,16 @@ def _make_lifespan(
                 except Exception as exc:  # fail-soft engine diagnostic
                     app.state.engine = None
                     app.state.engine_error = str(exc)
+                    # M4.1 REPLACE (Design.md §6.1) forbids logging `str(exc)`
+                    # or a traceback — either can carry paths/URLs/secrets.
+                    # The bare exception *class name* carries none of that
+                    # (it is a fixed Python identifier defined by the raising
+                    # library, never caller-controlled data) and is the
+                    # minimum signal needed to distinguish e.g.
+                    # PermissionError/ConnectionError/TimeoutError the next
+                    # time this generic, otherwise-opaque `engine_init_failed`
+                    # branch fires (Hosted_CI_Remediation_Iteration_6.md).
+                    app.state.engine_error_type = type(exc).__name__
                 _, reason = evaluate_readiness(
                     getattr(app.state, "bootstrap_error", None),
                     app.state.settings_error,
@@ -385,7 +396,10 @@ def _make_lifespan(
                 )
                 registry = app.state.metrics_registry
                 registry.rag_readiness.labels(reason=clamp_readiness_reason(reason)).set(1)
-                log_event("startup", reason=reason, metrics_registry=registry)
+                startup_log_fields: dict[str, Any] = {"reason": reason}
+                if app.state.engine_error_type is not None:
+                    startup_log_fields["engine_error_type"] = app.state.engine_error_type
+                log_event("startup", metrics_registry=registry, **startup_log_fields)
                 yield
         except BaseException as exc:
             primary = exc

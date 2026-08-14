@@ -70,6 +70,9 @@ REASONS = frozenset({
     "activation_history_sequence_invalid",
     "activation_history_current_mismatch",
     "test_embedding_seam_unavailable",
+    "root_permission_denied", "version_dir_permission_denied",
+    "member_permission_denied",
+    "current_pointer_permission_denied",
 })
 
 
@@ -89,6 +92,17 @@ class ContainedDir:
                 raise TrustBoundaryError("version_dir_missing") from None
             if exc.errno == errno.ENOTDIR:
                 raise TrustBoundaryError("version_dir_not_directory") from None
+            # A real permission-denied condition (e.g. a bind-mounted
+            # `INDEX_ROOT` whose intermediate directory permissions don't
+            # grant the container's non-owner UID traversal) must surface as
+            # a disclosed, bounded artifact reason like every other access
+            # failure here — never as a raw OSError that would otherwise
+            # propagate past `_load_vectorstore()`'s narrow
+            # `except TrustBoundaryError` and collapse into the opaque,
+            # undiagnosable generic `engine_init_failed` reason
+            # (Hosted_CI_Remediation_Iteration_6.md).
+            if exc.errno == errno.EACCES:
+                raise TrustBoundaryError("version_dir_permission_denied") from None
             raise
         return ContainedDir(fd)
 
@@ -104,6 +118,8 @@ class ContainedDir:
                 raise TrustBoundaryError("member_is_symlink") from None
             if exc.errno == errno.ENOENT:
                 raise TrustBoundaryError(missing_reason) from None
+            if exc.errno == errno.EACCES:
+                raise TrustBoundaryError("member_permission_denied") from None
             raise
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
@@ -130,6 +146,8 @@ def open_contained_root(root: Path) -> ContainedDir:
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             raise TrustBoundaryError("root_escape") from None
+        if exc.errno == errno.EACCES:
+            raise TrustBoundaryError("root_permission_denied") from None
         raise
     return ContainedDir(fd)
 
@@ -278,6 +296,15 @@ def resolve_current(index_root: Path) -> str:
                 raise CurrentPointerMissing() from None
             if exc.errno == errno.ELOOP:
                 raise TrustBoundaryError("current_pointer_symlink") from None
+            # Same disclosed-reason requirement as `open_contained_root`/
+            # `ContainedDir.open_subdir`/`open_member` (CR-HCIR6-MAJ-01) — a
+            # real EACCES on this direct `current` open must never fall
+            # through as a raw OSError, since `_load_vectorstore()` only
+            # translates `TrustBoundaryError` into the disclosed
+            # `IndexTrustError` channel; anything else collapses into the
+            # opaque, undiagnosable generic `engine_init_failed`.
+            if exc.errno == errno.EACCES:
+                raise TrustBoundaryError("current_pointer_permission_denied") from None
             raise
         try:
             st = os.fstat(fd)

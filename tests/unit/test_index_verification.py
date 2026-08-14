@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ from simple_qna_rag.index.manifest import canonical_json_bytes
 from simple_qna_rag.index.verification import (
     CurrentPointerMissing,
     MAX_MANIFEST_BYTES,
+    REASONS,
     TrustBoundaryError,
     _MAX_CURRENT_BYTES,
     _read_bounded,
@@ -155,6 +157,56 @@ def test_symlink_owner_mode_toctou_matrix(tmp_path):
     os.chmod(version_dir, 0o555)
 
 
+def test_permission_denied_matrix_surfaces_disclosed_reasons_not_raw_oserror(tmp_path):
+    """Hosted_CI_Remediation_Iteration_6.md — a real EACCES anywhere along
+    the contained-open traversal (bind-mounted `INDEX_ROOT` whose
+    intermediate directory permissions don't grant the reading UID
+    traversal) previously propagated as a raw, untranslated `OSError`
+    instead of a disclosed `TrustBoundaryError`, which `_load_vectorstore()`
+    only catches as `TrustBoundaryError` — the raw OSError fell through into
+    `RAGEngine.initialize()`'s generic `except Exception: return False`,
+    producing an opaque, undiagnosable `engine_init_failed` instead of a
+    bounded `artifact_*` reason. Every EACCES entry point must now raise a
+    `TrustBoundaryError` with a specific, allowlisted reason."""
+    version_id = _publish_real_index(tmp_path)
+    version_dir = tmp_path / "versions" / version_id
+    faiss_path = version_dir / "index.faiss"
+
+    # member_permission_denied: index.faiss itself unreadable.
+    os.chmod(version_dir, 0o755)
+    os.chmod(faiss_path, 0o000)
+    try:
+        with pytest.raises(TrustBoundaryError) as excinfo:
+            verify_version(tmp_path, version_id, settings_snapshot=_SNAPSHOT)
+        assert excinfo.value.reason == "member_permission_denied"
+    finally:
+        os.chmod(faiss_path, 0o444)
+
+    # version_dir_permission_denied: versions/<id>/ itself untraversable.
+    os.chmod(version_dir, 0o000)
+    try:
+        with pytest.raises(TrustBoundaryError) as excinfo:
+            verify_version(tmp_path, version_id, settings_snapshot=_SNAPSHOT)
+        assert excinfo.value.reason == "version_dir_permission_denied"
+    finally:
+        os.chmod(version_dir, 0o555)
+
+    # root_permission_denied: INDEX_ROOT itself untraversable.
+    from simple_qna_rag.index.verification import open_contained_root
+
+    os.chmod(tmp_path, 0o000)
+    try:
+        with pytest.raises(TrustBoundaryError) as excinfo:
+            open_contained_root(tmp_path)
+        assert excinfo.value.reason == "root_permission_denied"
+    finally:
+        os.chmod(tmp_path, 0o755)
+
+    assert "root_permission_denied" in REASONS
+    assert "version_dir_permission_denied" in REASONS
+    assert "member_permission_denied" in REASONS
+
+
 def test_verify_version_rejects_extra_member(tmp_path):
     version_id = _publish_real_index(tmp_path)
     version_dir = tmp_path / "versions" / version_id
@@ -234,6 +286,37 @@ def test_current_pointer_trust_matrix(tmp_path):
     with pytest.raises(TrustBoundaryError) as excinfo:
         resolve_current(tmp_path)
     assert excinfo.value.reason == "current_pointer_malformed"
+
+
+def test_resolve_current_direct_open_eacces_translates_to_disclosed_reason(tmp_path):
+    """CR-HCIR6-MAJ-01 — `resolve_current()`'s own direct
+    `os.open("current", ..., dir_fd=root.fd)` previously translated only
+    `ENOENT` (-> `CurrentPointerMissing`, the sole legacy-fallback trigger)
+    and `ELOOP` (-> `current_pointer_symlink`); a real `EACCES` (e.g. a
+    bind-mounted `INDEX_ROOT` whose `current` file the reading UID cannot
+    read) fell through as a raw `PermissionError` — reproducing the exact
+    undiagnosable `engine_init_failed` collapse the three `ContainedDir`
+    entry points were already fixed for in Iteration 6. Patches the exact
+    `current` open call (mutation-strength: reverting just the new `EACCES`
+    branch in `resolve_current` fails this test) rather than relying on a
+    real chmod, since a root-owned CI process can't be reliably denied via
+    chmod the way the on-disk permission_denied matrix above is."""
+    version_id = _publish_real_index(tmp_path)
+    (tmp_path / "current").write_bytes(
+        canonical_json_bytes({"schema_version": 1, "version_id": version_id}) + b"\n")
+
+    real_open = os.open
+
+    def fake_open(path, flags, *args, **kwargs):
+        if path == "current":
+            raise PermissionError(errno.EACCES, "Permission denied")
+        return real_open(path, flags, *args, **kwargs)
+
+    with mock.patch("simple_qna_rag.index.verification.os.open", side_effect=fake_open):
+        with pytest.raises(TrustBoundaryError) as excinfo:
+            resolve_current(tmp_path)
+    assert excinfo.value.reason == "current_pointer_permission_denied"
+    assert "current_pointer_permission_denied" in REASONS
 
 
 def test_root_escape_rejected_for_dotdot_and_slash(tmp_path):

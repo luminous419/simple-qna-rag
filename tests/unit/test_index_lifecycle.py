@@ -76,6 +76,25 @@ def test_build_publishes_immutable_version_dir(tmp_path):
         assert oct((version_dir / name).stat().st_mode)[-3:] == "444"
 
 
+def test_build_chmods_versions_parent_dir_world_traversable(tmp_path):
+    """Hosted_CI_Remediation_Iteration_6.md — `versions_dir.mkdir(parents=
+    True, exist_ok=True)` (`_assert_same_filesystem`) creates `versions/`
+    under the caller's ambient umask, unlike every artifact `_publish`
+    itself writes (`dest` 0o555, files 0o444). A stricter-than-0o022 umask
+    on the host that builds the index left it non-traversable for a
+    different reading UID (e.g. a container's non-owner user bind-mounting
+    `INDEX_ROOT` read-only), producing an unhandled `EACCES` that collapsed
+    into an opaque `engine_init_failed` instead of a disclosed reason.
+    `_publish` must now set this explicitly rather than relying on umask."""
+    old_umask = os.umask(0o077)
+    try:
+        _publish(tmp_path)
+    finally:
+        os.umask(old_umask)
+    versions_dir = tmp_path / "versions"
+    assert oct(versions_dir.stat().st_mode)[-3:] == "755"
+
+
 def test_activate_rollback_100x(tmp_path):
     v1 = _publish(tmp_path, b"a")
     v2 = _publish(tmp_path, b"b")
