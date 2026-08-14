@@ -55,7 +55,7 @@ _EVENT_KEYS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "web_search": (frozenset({"stage", "duration_ms"}), frozenset({"error_code"})),
     "retrieval": (frozenset({"stage", "duration_ms"}), frozenset({"error_code"})),
     "generation": (frozenset({"stage", "duration_ms"}), frozenset({"error_code"})),
-    "startup": (frozenset(), frozenset({"reason"})),
+    "startup": (frozenset(), frozenset({"reason", "engine_error_type"})),
     "readiness": (frozenset(), frozenset({"reason"})),
 }
 
@@ -65,6 +65,14 @@ _FORBIDDEN_KEY_NAMES = frozenset(
     {"question", "answer", "context", "sources_content", "prompt", "exception_text"}
 )
 _ABS_PATH_RE = re.compile(r"^(/Users/|/home/|C:\\)")
+
+# `type(exc).__name__` only — a bare Python identifier, never `str(exc)`
+# (which can carry paths/URLs/secrets, forbidden by M4.1 REPLACE, Design.md
+# §6.1). Bounding it to this shape at the logging boundary means even a
+# hypothetical future call site that accidentally passed a full message
+# instead of a class name gets clamped to a safe default rather than logged
+# verbatim.
+_EXCEPTION_TYPE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,63}$")
 
 
 def _is_forbidden_value(value: Any) -> bool:
@@ -98,6 +106,10 @@ def _is_valid_duration_ms(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
 
 
+def _is_valid_exception_type_name(value: Any) -> bool:
+    return isinstance(value, str) and bool(_EXCEPTION_TYPE_NAME_RE.fullmatch(value))
+
+
 _FIELD_VALIDATORS: dict[str, Callable[[Any], bool]] = {
     "route": lambda v: v in ROUTES,
     "stage": lambda v: v in STAGES,
@@ -105,6 +117,7 @@ _FIELD_VALIDATORS: dict[str, Callable[[Any], bool]] = {
     "level": lambda v: v in _LEVEL_VALUES,
     "status_code": _is_valid_status_code,
     "duration_ms": _is_valid_duration_ms,
+    "engine_error_type": _is_valid_exception_type_name,
 }
 
 _FIELD_SAFE_DEFAULTS: dict[str, Any] = {
@@ -114,6 +127,7 @@ _FIELD_SAFE_DEFAULTS: dict[str, Any] = {
     "level": "info",
     "status_code": 500,
     "duration_ms": 0.0,
+    "engine_error_type": "unknown",
 }
 
 _REQUIRED_FIELD_DEFAULTS: dict[str, Any] = {

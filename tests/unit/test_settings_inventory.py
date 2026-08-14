@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_field_specs_has_exactly_49_fields():
-    assert len(FIELD_SPECS) == 49
+    assert len(FIELD_SPECS) == 52
 
 
 def test_field_names_match_settings_model_fields():
@@ -69,4 +69,26 @@ def test_model_validators_table_has_4_rows_5_columns():
     header = lines[0]
     assert header.count("|") == 6  # 5 columns -> 6 pipe chars
     data_rows = lines[2:]
-    assert len(data_rows) == 4
+    assert len(data_rows) == 5
+
+
+# --- M4.3 §5.1 Layer 1 — accidental-default-activation guard ---------------
+
+
+def test_deterministic_embedding_provider_without_allow_flag_rejected():
+    import pytest
+
+    from simple_qna_rag.settings import Settings, SettingsError
+
+    with pytest.raises(SettingsError):
+        Settings.from_sources(
+            base_environ={"SIMPLE_QNA_RAG_EMBEDDING_PROVIDER": "deterministic_test"}
+        )
+
+
+def test_default_settings_never_activate_test_embedding_provider():
+    from simple_qna_rag.settings import Settings
+
+    settings = Settings.from_sources(base_environ={})
+    assert settings.EMBEDDING_PROVIDER == "huggingface"
+    assert settings.ALLOW_TEST_EMBEDDING is False

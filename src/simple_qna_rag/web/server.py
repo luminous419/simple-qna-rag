@@ -345,6 +345,12 @@ def _make_lifespan(
                 app.state.settings = candidate
                 app.state.settings_error = None
                 grace = candidate.SHUTDOWN_GRACE_SECONDS
+                app.state.engine_artifact_reason = None
+                # Lazy import mirrors _default_engine_factory above — safe
+                # here because settings_loader() has already succeeded.
+                from simple_qna_rag.rag_engine import EngineArtifactError
+
+                app.state.engine_error_type = None
                 try:
                     app.state.engine = engine_factory(candidate)
                     app.state.engine_error = None
@@ -356,18 +362,44 @@ def _make_lifespan(
                     )
                     app.state.query_executor = executor
                     app.state.lifecycle = "READY"
+                except EngineArtifactError as exc:  # fail-soft, disclosed reason
+                    # engine_factory never returns the failed instance on
+                    # failure (get_rag_engine() discards it), so the only
+                    # way to recover a disclosed artifact reason is off
+                    # this dedicated exception type — see
+                    # rag_engine.EngineArtifactError. CR-I5-MAJ-02: this
+                    # branch must classify *only* this specific type, never
+                    # an arbitrary exception that merely happens to define
+                    # a `.reason` attribute (that used to be reclassified
+                    # as an artifact failure via a bare `getattr`).
+                    app.state.engine = None
+                    app.state.engine_error = str(exc)
+                    app.state.engine_artifact_reason = exc.reason
                 except Exception as exc:  # fail-soft engine diagnostic
                     app.state.engine = None
                     app.state.engine_error = str(exc)
-
+                    # M4.1 REPLACE (Design.md §6.1) forbids logging `str(exc)`
+                    # or a traceback — either can carry paths/URLs/secrets.
+                    # The bare exception *class name* carries none of that
+                    # (it is a fixed Python identifier defined by the raising
+                    # library, never caller-controlled data) and is the
+                    # minimum signal needed to distinguish e.g.
+                    # PermissionError/ConnectionError/TimeoutError the next
+                    # time this generic, otherwise-opaque `engine_init_failed`
+                    # branch fires (Hosted_CI_Remediation_Iteration_6.md).
+                    app.state.engine_error_type = type(exc).__name__
                 _, reason = evaluate_readiness(
                     getattr(app.state, "bootstrap_error", None),
                     app.state.settings_error,
                     app.state.engine_error,
+                    artifact_error_reason=app.state.engine_artifact_reason,
                 )
                 registry = app.state.metrics_registry
                 registry.rag_readiness.labels(reason=clamp_readiness_reason(reason)).set(1)
-                log_event("startup", reason=reason, metrics_registry=registry)
+                startup_log_fields: dict[str, Any] = {"reason": reason}
+                if app.state.engine_error_type is not None:
+                    startup_log_fields["engine_error_type"] = app.state.engine_error_type
+                log_event("startup", metrics_registry=registry, **startup_log_fields)
                 yield
         except BaseException as exc:
             primary = exc
@@ -494,6 +526,7 @@ def _register_health_routes(app: FastAPI) -> None:
             saturated=saturated,
             orphaned=snap.orphaned if snap else 0,
             concurrency_limit=snap.concurrency_limit if snap else 0,
+            artifact_error_reason=getattr(request.app.state, "engine_artifact_reason", None),
         )
         return JSONResponse(
             status_code=status_code,

@@ -122,5 +122,5 @@ def test_model_validators_use_default_settings_all_pass():
 
 
 def test_all_49_field_defaults_pass_validators():
-    assert len(FIELD_SPECS) == 49
+    assert len(FIELD_SPECS) == 52
     Settings.from_sources()  # exercises every field's default through validation

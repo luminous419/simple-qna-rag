@@ -55,6 +55,9 @@
 | 47 | `MAX_REQUEST_BODY_BYTES` | int | 16384 | — | SIMPLE_QNA_RAG_MAX_REQUEST_BODY_BYTES | int | — | _check | web/body_limit.py | PASS | None | None |
 | 48 | `MAX_QUESTION_CHARS` | int | 4000 | — | SIMPLE_QNA_RAG_MAX_QUESTION_CHARS | int | — | _check | web/server.py | PASS | None | None |
 | 49 | `UPSTREAM_CONNECT_TIMEOUT_SECONDS` | float | 5.0 | — | SIMPLE_QNA_RAG_UPSTREAM_CONNECT_TIMEOUT_SECONDS | float | — | _check | observability/deadline.py | PASS | None | None |
+| 50 | `INDEX_ROOT` | Path | (factory) | 있음 | SIMPLE_QNA_RAG_INDEX_ROOT | _parse | — | 없음 | rag_engine.py, index/lifecycle.py, index/verification.py, cli/index_lifecycle.py | PASS | str | str |
+| 51 | `EMBEDDING_PROVIDER` | Literal | 'huggingface' | — | SIMPLE_QNA_RAG_EMBEDDING_PROVIDER | _parse | — | model: EMBEDDING_PROVIDER=="deterministic_test" requires ALLOW_TEST_EMBEDDING is True | rag_engine.py, index/lifecycle.py | PASS | str | str |
+| 52 | `ALLOW_TEST_EMBEDDING` | bool | False | — | SIMPLE_QNA_RAG_ALLOW_TEST_EMBEDDING | _parse_bool | — | model: EMBEDDING_PROVIDER=="deterministic_test" requires ALLOW_TEST_EMBEDDING is True | rag_engine.py | PASS | bool | bool |
 
 ## MODEL_VALIDATORS
 
@@ -64,3 +67,4 @@
 | 2 | MMR_K <= MMR_FETCH_K | #16, #15 | 20 <= 100 | PASS |
 | 3 | RERANKER_TOP_K <= RRF_TOP_K | #26, #22 | 10 <= 50 | PASS |
 | 4 | QUERY_QUEUE_TIMEOUT_SECONDS < QUERY_EXECUTION_TIMEOUT_SECONDS | #44, #45 | 5.0 < 90.0 | PASS |
+| 5 | EMBEDDING_PROVIDER=="deterministic_test" requires ALLOW_TEST_EMBEDDING is True | #51, #52 | 'huggingface', False | PASS |
