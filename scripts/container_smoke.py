@@ -179,7 +179,14 @@ def run_smoke(image: str) -> dict:
             probe = _run(build_reachability_probe_argv(container_id, mock_port))
             result["host_gateway_reachable"] = probe.returncode == 0
 
-            ready_ok, _, _ = _poll_ready(host_port, expect_status=200)
+            # The positive path does real work before it can answer 200 (settings
+            # binding, artifact hash verification, a canary FAISS/embeddings query)
+            # on top of the cold `sentence_transformers`/`torch` import chain that
+            # `rag_engine.py` pulls in unconditionally — on a shared hosted-CI vCPU
+            # this reliably exceeds `_poll_ready`'s old 10s default even though the
+            # container is healthy, unlike the negative path below which fails
+            # fast on a missing import before doing any of that work.
+            ready_ok, _, _ = _poll_ready(host_port, expect_status=200, max_seconds=60)
             live_ok = False
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{host_port}/health/live", timeout=5) as resp:
