@@ -530,6 +530,27 @@ def activate(index_root: Path, version_id: str, *, operation: str,
             tmp = index_root / f".current.tmp.{os.getpid()}.{op_id}"
             _write_fsync(tmp, canonical_json_bytes(
                 {"schema_version": 1, "version_id": verified.version_id}) + b"\n")
+            # `_write_fsync`'s default mode is 0o600 (owner-only) — fine for
+            # every other caller, but `current` is read by the *serving*
+            # process, which in the M4.3 least-privilege container runs
+            # under a different, non-owner UID (10001) than whatever
+            # activated the index (an operator/build UID). Widen to
+            # world-readable before the atomic rename so the pointer is
+            # never visible under the `current` name at the stricter mode
+            # (`os.replace` preserves the source file's own permission
+            # bits, it does not require them). Unlike `_publish`'s 0o444 on
+            # immutable version files, `current` stays owner-writable
+            # (0o644, not 0o444): it is a mutable pointer that crash-
+            # recovery paths (and `test_crash_recovery_journal_reconciles_
+            # to_consistent_state`) legitimately overwrite in place to
+            # simulate/reconcile an interrupted transition. Without the
+            # world-read bit, the non-owner read surfaces as the same
+            # disclosed `current_pointer_permission_denied` reason
+            # (resolve_current()/_load_vectorstore()) that Hosted CI
+            # Remediation Iteration 6/7 taught the readiness path to report
+            # — but for a real EACCES this fix removes, not a diagnostic
+            # gap.
+            os.chmod(tmp, 0o644)
             os.replace(tmp, index_root / "current")
             _fsync_dir(index_root)
             _write_transition_journal(index_root, phase="pointer_committed", op_id=op_id,

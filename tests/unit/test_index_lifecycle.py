@@ -95,6 +95,34 @@ def test_build_chmods_versions_parent_dir_world_traversable(tmp_path):
     assert oct(versions_dir.stat().st_mode)[-3:] == "755"
 
 
+def test_activate_writes_current_world_readable_regardless_of_umask(tmp_path):
+    """Real hosted-CI regression (Iteration 8 push, PR #18 run 31822051073):
+    `_write_fsync`'s default mode is 0o600 (owner-only) and `activate()`
+    passed no explicit mode for the `current` pointer, unlike every other
+    published artifact (`_publish`'s 0o444 files / 0o555 dir, and this same
+    Iteration 6 fix one test above for `versions/`). On a real Linux runner
+    (unlike a macOS Docker Desktop bind mount, which does not enforce this),
+    that left `current` unreadable by the container's non-owner UID 10001,
+    surfacing as a genuine `current_pointer_permission_denied` 503 rather
+    than the diagnostic-only gap Iteration 6/7 fixed. Uses a restrictive
+    umask (mirroring the `versions/` test above) so a lenient host umask
+    cannot mask a regression of the explicit `os.chmod` fix. Asserts 0o644,
+    not `_publish`'s 0o444: `current` is a mutable pointer (crash-recovery
+    reconciliation writes it in place — see
+    `test_crash_recovery_journal_reconciles_to_consistent_state`), so it
+    must stay owner-writable while gaining the world-read bit."""
+    old_umask = os.umask(0o077)
+    try:
+        v1 = _publish(tmp_path)
+        lifecycle.activate(tmp_path, v1, operation="activate", settings_snapshot=_SNAPSHOT)
+    finally:
+        os.umask(old_umask)
+    current_path = tmp_path / "current"
+    assert oct(current_path.stat().st_mode)[-3:] == "644"
+    assert os.access(current_path, os.R_OK)
+    assert os.access(current_path, os.W_OK)
+
+
 def test_activate_rollback_100x(tmp_path):
     v1 = _publish(tmp_path, b"a")
     v2 = _publish(tmp_path, b"b")
