@@ -116,6 +116,28 @@ def _poll_ready(port: int, *, expect_status: int, expect_reason: str | None = No
     return False, last_status, (last_body or {}).get("reason") if last_body else None
 
 
+def _capture_container_logs(container_id: str, *, max_bytes: int = 16000) -> str:
+    """Best-effort `docker logs` tail for post-mortem diagnosis when readiness
+    never converges — never raises, so a logging failure can never turn a
+    result-producing run into a crash. `container_smoke.py`'s previous
+    behaviour discarded `_poll_ready`'s exact last HTTP status/reason and
+    never captured the container's own structured startup log, so a hosted
+    `live=true, ready=false` failure carried no signal distinguishing "still
+    cold-starting" from "the app is up and rejecting readiness with a
+    concrete reason" (Hosted_Container_Remediation_Iteration_5.md). Tail is
+    truncated to the last `max_bytes` bytes (not the first) since the
+    startup event and the final rejected `/health/ready` response are the
+    most recent lines, not the earliest."""
+    try:
+        proc = _run(["docker", "logs", "--tail", "200", container_id])
+    except Exception:
+        return ""
+    combined = (proc.stdout or "") + (proc.stderr or "")
+    if len(combined) > max_bytes:
+        combined = combined[-max_bytes:]
+    return combined
+
+
 def check_static_asset(port: int, *, timeout: float = 5.0) -> bool:
     """`GET STATIC_ASSET_PATH` must be 200 with a JS content-type and a
     non-empty body — a 404 (missing `COPY web/static/`), a wrong
@@ -183,17 +205,37 @@ def run_smoke(image: str) -> dict:
             # binding, artifact hash verification, a canary FAISS/embeddings query)
             # on top of the cold `sentence_transformers`/`torch` import chain that
             # `rag_engine.py` pulls in unconditionally — on a shared hosted-CI vCPU
-            # this reliably exceeds `_poll_ready`'s old 10s default even though the
+            # this can approach `_poll_ready`'s 60s budget even though the
             # container is healthy, unlike the negative path below which fails
-            # fast on a missing import before doing any of that work.
-            ready_ok, _, _ = _poll_ready(host_port, expect_status=200, max_seconds=60)
+            # fast on a missing import before doing any of that work. The lifespan
+            # startup that runs this work blocks the ASGI app synchronously
+            # (server.py's `_make_lifespan`), so `/health/live` and `/health/ready`
+            # are both unreachable — not merely slow — until it finishes; a hosted
+            # `live=true, ready=false` result is therefore ambiguous between "still
+            # cold-starting past the 60s budget" and "the app came up and
+            # `/health/ready` is repeatedly, deterministically rejecting with a
+            # concrete reason" unless the poll's own last observed status/reason
+            # and the container's own log are captured (they previously were not —
+            # see Hosted_Container_Remediation_Iteration_5.md).
+            t_ready_poll = time.monotonic()
+            ready_ok, ready_last_status, ready_last_reason = _poll_ready(
+                host_port, expect_status=200, max_seconds=60)
+            ready_poll_elapsed_seconds = round(time.monotonic() - t_ready_poll, 2)
             live_ok = False
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{host_port}/health/live", timeout=5) as resp:
                     live_ok = resp.status == 200
             except Exception:
                 live_ok = False
-            result["readiness_sequence"] = {"live": live_ok, "ready": ready_ok}
+            result["readiness_sequence"] = {
+                "live": live_ok,
+                "ready": ready_ok,
+                "ready_last_http_status": ready_last_status,
+                "ready_last_reason": ready_last_reason,
+                "ready_poll_elapsed_seconds": ready_poll_elapsed_seconds,
+            }
+            if not ready_ok:
+                result["container_log_tail"] = _capture_container_logs(container_id)
 
             root_ok = False
             try:
@@ -228,15 +270,21 @@ def run_smoke(image: str) -> dict:
             neg_argv = build_negative_activation_argv(image, neg_host_port=neg_port)
             neg_proc = _run(neg_argv)
             sealed = False
+            neg_last_status: int | None = None
+            neg_last_reason: str | None = None
             if neg_proc.returncode == 0:
                 neg_container = neg_proc.stdout.strip()
                 containers.append(neg_container)
-                ok, status, reason = _poll_ready(
+                ok, neg_last_status, neg_last_reason = _poll_ready(
                     neg_port, expect_status=503,
                     expect_reason="artifact_test_embedding_seam_unavailable")
                 sealed = ok
+                if not sealed:
+                    result["negative_control_log_tail"] = _capture_container_logs(neg_container)
                 _run(["docker", "stop", "-t", "5", neg_container])
             result["production_test_seam_sealed"] = sealed
+            result["production_test_seam_seal_last_http_status"] = neg_last_status
+            result["production_test_seam_seal_last_reason"] = neg_last_reason
 
             result["status"] = "PASS" if compute_all_ok(result) else "FAIL"
             return result
@@ -343,6 +391,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.output:
         args.output.write_text(text + "\n", encoding="utf-8")
     print(text)
+    # Printed directly to the hosted job's own console (not just the uploaded
+    # JSON artifact) so a readiness failure's root cause is visible without a
+    # separate artifact-download step (Hosted_Container_Remediation_Iteration_5.md).
+    if result.get("container_log_tail"):
+        print("--- positive-path container stdout/stderr tail (readiness diagnosis) ---",
+              file=sys.stderr)
+        print(result["container_log_tail"], file=sys.stderr)
+    if result.get("negative_control_log_tail"):
+        print("--- negative-control container stdout/stderr tail ---", file=sys.stderr)
+        print(result["negative_control_log_tail"], file=sys.stderr)
     if result.get("status") == "SKIPPED":
         return 0
     return 0 if result.get("status") == "PASS" else 1
