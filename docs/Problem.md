@@ -125,6 +125,51 @@ wrapper의 fingerprint 호출 경로가 실제 API로 실행되지 않는 동일
 [M4.1 설계 중단 보고서](milestones/m4.1-configuration-observability/Stop_Report.md)에
 기록했습니다. 별도 재개 결정 전 M4.1 구현과 M4.2/M4.3 착수를 금지합니다.
 
+2026-08-15 정책 업데이트: M4.2와 M4.3 deterministic acceptance와 M4.3 PASS는
+보존한다. `origin/master` `adda1759754b56b514b3ab6252c2dc1032e03d28`의 Actions
+run `31825950604`는 ordinary hosted jobs만 PASS했고 protected live job은 pending인
+역사적 receipt다. runner 수가 0이고 authorized native host owner가 없어 승인,
+runner 등록, live/Ollama 실행은 한 적이 없다.
+
+사용자는 unavailable native Linux/self-hosted/Ollama validation을 영구적으로
+채택하지 않고 verified hosted Python/frontend/OCI scope만 ship하기로 결정했다.
+따라서 해당 capability는 `NOT_ADOPTED`이며 PASS나 WAIVED가 아니다.
+
+2026-08-15 terminal-stop 기록 (역사적, 이후 재승인으로 대체됨): 이 정책 변경
+설계는 최초 리뷰 사이클의 기본 리뷰 Iteration 4를 소진했고 당시 최종
+**8.9 / 10.0, CRITICAL 0 / MAJOR 2 / MINOR 1**로 Gate를 통과하지 못했다.
+점수가 Iteration 3의 9.1에서 회귀했고 9.0 미만이므로 조건부 연장도
+불가능했다. 남은 문제는 DR-I4-MAJ-01의 모든 Python top-level rebinding form을
+포괄하는 binding 분석, DR-I4-MAJ-02의 exact whole-file allowed-delta oracle,
+DR-I4-MIN-01의 canonical stub과 양립 불가능한 broad `self-hosted` grep이었다.
+이 기록 시점까지 구현, 코드, workflow, test, Git, release 작업은 시작하지
+않았고 live, self-hosted, Ollama 또는 protected acceptance 실행도 하지
+않았다. M4.3 deterministic PASS와 기존 M4.1 미완료/protected-live pending
+blocker는 그대로 보존됐으며 새 PASS로 해석되지 않았다. 이 시점의 규정상
+사용자가 새 설계 iteration cycle 또는 변경된 scope를 명시적으로 재승인해야만
+재개할 수 있었다. 사용자는 이후 새 설계 iteration cycle(Recovery Cycle 1)을
+명시적으로 재승인했고, 그 결과는 아래 2026-08-15 구현 업데이트에 기록한다.
+
+2026-08-15 구현 업데이트 (위 terminal-stop 기록 이후 재승인·재개됨, 현재
+상태): v2 baseline/workflow 구현을 완료했다(pre-merge).
+`hosted_release_ready`는 네 deterministic producer의 same-run evidence로만
+true가 되며 checker가 candidate 자기-보고를 신뢰하지 않고 독립 재계산한다.
+`native_linux_release_ready`, `full_production_release_ready`, compatibility
+`overall_release_ready`는 항상 false다. 과거(v1) artifact는
+`--allow-legacy-v1` compatibility mode에서만 읽히며 `M4.1_BLOCKED=true`,
+`overall_release_ready=false`라는 원래 의미를 그대로 유지한다(마이그레이션하지
+않음). 설계 Gate는 Recovery Cycle 1 Iteration 3에서 PASS(9.8/10.0)했고 남은
+MINOR는 구현 단계에서 닫았다. 정확한 schema, migration, workflow와 support
+boundary는
+[정책 변경 요구사항](milestones/m4-operational-acceptance-recovery/Requirement.md),
+[설계](milestones/m4-operational-acceptance-recovery/Design.md),
+[추적표](milestones/m4-operational-acceptance-recovery/Traceability.md)와
+[결정 보고서](milestones/m4-operational-acceptance-recovery/Stop_Report.md)를 따른다.
+현재 상태는 **구현 완료(pre-merge)**이며 Git commit/push/PR/merge와
+post-merge hosted CI 검증(hosted `python-tests`, `container`)이 남아 있다.
+Native Linux/Ollama capability는 여전히 `NOT_ADOPTED`이고
+native/full-production/overall readiness는 여전히 false다.
+
 관련 마일스톤: `M4 — Production Readiness`
 
 ## P2 — 규칙 기반 Answer 평가의 false negative

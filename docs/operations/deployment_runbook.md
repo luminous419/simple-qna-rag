@@ -3,7 +3,10 @@
 Applies to the `deploy/Dockerfile` `production` stage image and the
 `INDEX_ROOT` canonical version layout introduced by M4.3 ([Design.md](../milestones/m4.3-artifact-deployment-safety/Design.md)
 §7). Native Linux/Ollama execution is an operator's manual responsibility —
-this cycle does not run it and does not certify it.
+this cycle does not run it and does not certify it. Native Linux/Ollama use
+is unsupported/best-effort with no release SLA; the certified deployment
+target is the hosted Python/frontend service plus the OCI container image
+described here (see [M4 Operational Acceptance Recovery Requirement.md](../milestones/m4-operational-acceptance-recovery/Requirement.md)).
 
 ## 1. Preflight
 
@@ -77,6 +80,49 @@ confirm both snapshots describe the same release identity:
 A deployment that changes any of these fields unexpectedly (i.e. not the
 field you intended to change) should be treated as a deployment defect and
 rolled back per [recovery_runbook.md](recovery_runbook.md).
+
+## 6.1 Hosted/OCI baseline verification (pre-deployment)
+
+**This is the only current, normative pre-deployment verification
+procedure.** The historical M4.1 self-hosted/native-Ollama runbook
+(`docs/milestones/m4.1-configuration-observability/CI_Acceptance_Runbook.md`)
+is superseded and non-executable (see the banner at its top) — do not use it
+to provision a runner, approve an environment, or gate a release.
+
+Before trusting an `image_digest` for deployment, download the `m4-baseline`
+artifact from the exact merge-SHA workflow run and verify it independently,
+binding the check to that exact run's identity so a baseline copied from a
+different run or SHA cannot pass:
+
+```bash
+gh run download <RUN_ID> -n m4-baseline -D <fresh-dir>
+python scripts/check_m4_baseline.py --candidate <fresh-dir>/m4-baseline.json \
+  --expect-hosted-release-ready --require-identity-binding \
+  --expect-sha <MERGE_SHA> \
+  --expect-run-id <RUN_ID> \
+  --expect-run-attempt <RUN_ATTEMPT> \
+  --expect-workflow-path .github/workflows/ci.yml \
+  --expect-event push
+```
+
+`--require-identity-binding` makes all five `--expect-*` flags mandatory
+(the CLI exits 2 if any is missing) — this is what turns "download from the
+exact merge-SHA workflow run" from a human convention into a fail-closed
+CLI contract. `<MERGE_SHA>` is the commit the branch-protected merge
+produced (`git rev-parse origin/master` after the merge). `<RUN_ATTEMPT>` is
+normally `1`; use the actual attempt number from
+`gh run view <RUN_ID> --json runAttempt` if the run was manually re-run. A
+non-zero exit means either the four deterministic producers did not all
+pass on that run, the artifact's schema/algebra/provenance aliases are
+inconsistent, or the artifact's declared identity does not match the run
+being verified — do not deploy the associated `image_digest` in any of
+these cases. This check reports only the narrow "hosted/OCI release ready"
+claim, bound to the exact requested run; it never certifies native
+Linux/Ollama operation (`native_linux_release_ready` and
+`full_production_release_ready` are always `false` under the current
+policy) and it does not re-verify original payload bytes — that
+verification already happened inside the assembler at CI time, before this
+artifact was uploaded.
 
 ## 7. Standard container run flags
 

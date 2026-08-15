@@ -81,6 +81,16 @@ M43_TOP_KEYS = frozenset({"schema", "profile", "seed", "repeat", "command",
                           "negative_control", "status"})
 M43_NODE_KEYS = frozenset({"repeat", "success_count", "status"})
 M43_NEGATIVE_KEYS = frozenset({"executed", "expected_to_fail", "actual_exit_code", "result"})
+BASELINE_SCHEMA_V2 = "m4-baseline-v2"
+BASELINE_SCHEMA_VERSION_V2 = "2.0.0"
+SUPPORT_POLICY_SCHEMA = "m4-support-policy-v1"
+SUPPORT_POLICY_DECISION_DATE = "2026-08-15"
+SUPPORT_POLICY_FIXED = {
+    "schema": SUPPORT_POLICY_SCHEMA,
+    "adopted_scope": "HOSTED_OCI",
+    "native_linux_ollama": "NOT_ADOPTED",
+    "decision_date": SUPPORT_POLICY_DECISION_DATE,
+}
 
 
 def _payload_manifest_sha256(payload_hashes: dict[str, str]) -> str:
@@ -280,8 +290,8 @@ def _build_baseline(producers: dict, deterministic_status: str, args) -> dict:
         "container": "container", "m43-deterministic": "m43_deterministic",
     }.items():
         gates[gate_key] = "PASS" if producers[job]["status"] == "OK" else "FAIL"
-    gates["m3_live_regression"] = "NOT_RUN"
-    gates["m41_operational"] = "BLOCKED"
+    gates["m3_live_regression"] = "NOT_ADOPTED"
+    gates["m41_operational"] = "NOT_ADOPTED"
 
     m43_receipt_sha = None
     if producers["m43-deterministic"]["status"] == "OK":
@@ -290,8 +300,11 @@ def _build_baseline(producers: dict, deterministic_status: str, args) -> dict:
     if producers["container"]["status"] == "OK":
         image_digest = producers["container"]["payload_hashes"].get("container_smoke.json")
 
+    hosted_release_ready = deterministic_status == "PASS"
+    full_production_release_ready = False
+
     return {
-        "schema": "m4-baseline-v1", "schema_version": "1.0.0",
+        "schema": BASELINE_SCHEMA_V2, "schema_version": BASELINE_SCHEMA_VERSION_V2,
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "git_sha": args.expected_sha,
         "workflow_run": {
@@ -306,9 +319,13 @@ def _build_baseline(producers: dict, deterministic_status: str, args) -> dict:
         "producers": producers,
         "gates": gates,
         "deterministic_status": deterministic_status,
-        "operational_status": "BLOCKED",
-        "M4.1_BLOCKED": True,
-        "overall_release_ready": False,
+        "support_policy": dict(SUPPORT_POLICY_FIXED),
+        "operational_status": "NOT_ADOPTED",
+        "M4.1_BLOCKED": False,
+        "hosted_release_ready": hosted_release_ready,
+        "native_linux_release_ready": False,
+        "full_production_release_ready": full_production_release_ready,
+        "overall_release_ready": full_production_release_ready,
     }
 
 
@@ -359,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(text + "\n", encoding="utf-8")
     print(text)
-    return 0 if baseline["deterministic_status"] == "PASS" else 1
+    return 0 if baseline["hosted_release_ready"] else 1
 
 
 if __name__ == "__main__":
