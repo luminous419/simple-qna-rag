@@ -25,6 +25,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # M4-OAR audit_exact_allowed_delta (tests/unit/test_assemble_m4_evidence.py)
+          # shells out to `git show <base_revision>:path` for a historical
+          # ancestor commit. actions/checkout@v4's default shallow clone
+          # (fetch-depth: 1) only fetches the current tip, so that ancestor
+          # object is absent and `git show` fails with exit 128. Full
+          # history makes the base revision resolvable.
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
