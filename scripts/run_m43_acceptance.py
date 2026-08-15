@@ -78,7 +78,7 @@ PROFILE_NODE_IDS = MappingProxyType({
         "tests/unit/test_assemble_m4_evidence.py::test_negative_control_matrix",
     ),
     "baseline_strict_schema": (
-        "tests/unit/test_check_m4_baseline.py::test_strict_schema_and_algebra_matrix",),
+        "tests/unit/test_check_m4_baseline.py::test_v1_legacy_strict_schema_and_algebra_matrix",),
 })
 
 M43_SCHEMA = "m43-acceptance-receipt-v1"

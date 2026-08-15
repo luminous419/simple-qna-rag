@@ -1,3 +1,16 @@
+> **SUPERSEDED / NON-EXECUTABLE HISTORICAL RECORD (as of 2026-08-15):**
+> This runbook documents the M4.1 self-hosted/native-Ollama live
+> regression path, which is `NOT_ADOPTED` under the M4 Operational
+> Acceptance Recovery policy
+> ([Requirement.md](../m4-operational-acceptance-recovery/Requirement.md)).
+> The commands, checklists, and provisioning steps below are a historical
+> record of what M4.1 built and verified at the time; they are **not** a
+> current or executable release procedure. Do not provision a self-hosted
+> runner, approve the `m3-live-regression` environment, or run the live
+> job using this document. The only current, normative release-readiness
+> procedure is
+> [`docs/operations/deployment_runbook.md` §6.1](../../operations/deployment_runbook.md#61-hostedoci-baseline-verification-pre-deployment).
+
 # CR-I3-MAJ-01 — CI 운영 증거 조사와 실행 가능한 계약
 
 조사일: 2026-08-09 (UTC 2026-08-08T16:xx경 `gh` 조회 시각 기준)

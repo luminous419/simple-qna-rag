@@ -2,6 +2,10 @@
 
 Diagnosis and rollback/backup-restore procedures for the M4.3 canonical
 index lifecycle ([Design.md](../milestones/m4.3-artifact-deployment-safety/Design.md) §7.6).
+The certified deployment surface is hosted Python/frontend plus the OCI
+container; the "Ollama outage" row below is a development/operator
+diagnostic aid and does not imply Ollama is part of the release-readiness
+claim (native Linux/Ollama remain `NOT_ADOPTED`).
 
 ## 1. Diagnostic table
 

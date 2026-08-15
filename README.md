@@ -104,6 +104,13 @@ npm ci
 npm run sync-vendor
 ```
 
+> **참고 (development-only):** 아래 Ollama 안내는 로컬 개발 전용이다.
+> 이 프로젝트가 채택한 hosted/OCI 지원 범위(`support_policy.adopted_scope
+> = "HOSTED_OCI"`)에는 포함되지 않으며, native Linux/Ollama 사용은
+> unsupported/best-effort이고 release SLA가 없다. 자세한 내용은
+> [M4 운영 acceptance recovery 요구사항](docs/milestones/m4-operational-acceptance-recovery/Requirement.md)
+> 참고.
+
 ### 3. Ollama
 
 Ollama를 설치한 다음 모델을 준비합니다.

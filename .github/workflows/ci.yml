@@ -5,6 +5,16 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      enable_m3_live_regression:
+        description: >-
+          NOT_ADOPTED under the current hosted/OCI policy (M4-OAR-REQ-004).
+          This input exists only as a documented reactivation marker for a
+          future, separately reviewed milestone. Setting it true today still
+          resolves as a no-op informational job — it does not run live code,
+          checkout the repository, or contact Ollama.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -271,7 +281,7 @@ jobs:
           --output assemble/m4-baseline.json
 
       - name: Check M4 baseline state algebra
-        run: python scripts/check_m4_baseline.py --candidate assemble/m4-baseline.json --expect-operational-blocked
+        run: python scripts/check_m4_baseline.py --candidate assemble/m4-baseline.json
 
       - name: Upload M4 baseline
         if: always()
@@ -282,83 +292,26 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # CR-I1-MAJ-04 / CR-I2-MAJ-01 closure — M4.1 §10 authoritative M3 live
-  # 14-gate regression.
-  #
-  # Trust boundary (CR-I2-MAJ-01 #2): this job never runs for `pull_request`
-  # (fork or same-repo) — the `if:` below is an allow-list of exactly two
-  # trusted entry points: a push to the protected `master` branch, or a
-  # manually approved `workflow_dispatch` (only collaborators with write
-  # access can dispatch). `environment: m3-live-regression` additionally
-  # requires the repository owner to configure required reviewers on that
-  # GitHub Environment, so both entry points gate on human approval before
-  # any checkout or code execution happens on the self-hosted runner —
-  # untrusted PR head code is never installed or executed here.
-  #
-  # Runner-local data (CR-I2-MAJ-01 #1): the vectorstore/documents directories
-  # live at `SIMPLE_QNA_RAG_VECTORSTORE_DIR`/`SIMPLE_QNA_RAG_DOCUMENTS_DIR`,
-  # fixed runner-local paths *outside* `$GITHUB_WORKSPACE` that the repository
-  # owner provisions once (indexed, then made read-only for the runner's
-  # service account) when registering the `ollama-m3` runner. Because these
-  # paths are outside the checkout directory, `actions/checkout@v4`'s default
-  # clean step never touches them — the previous "committed runtime/
-  # vectorstore" assumption was false (`runtime/` is gitignored) and this
-  # replaces it with an explicit external-artifact contract instead of
-  # depending on checkout contents.
-  #
-  # Preflight (CR-I2-MAJ-01 #3): before the ~24+ minute live run starts,
-  # `preflight_vectorstore.py` fails fast if either canonical file
-  # (`index.faiss`/`index.pkl`) is missing and logs their sha256, and
-  # `preflight_ollama.py` fails fast if the Ollama endpoint is unreachable or
-  # the required model isn't registered. `timeout-minutes` bounds a hung run
-  # and `concurrency` prevents overlapping live runs (push and a manual
-  # dispatch racing) from corrupting the shared runner-local vectorstore.
+  # M4-OAR-REQ-004.2 — NOT_ADOPTED reactivation stub (Requirement.md,
+  # Stop_Report.md §3/§5). This job never checks out the repository, never
+  # requires a secret/environment approval, and never references a
+  # self-hosted label. On ordinary push/pull_request its `if:` is always
+  # false, so it is never scheduled (the run reaches a terminal conclusion
+  # immediately — it does not sit queued). On workflow_dispatch it only runs
+  # when the `enable_m3_live_regression` input is explicitly true, and even
+  # then the single step below only prints the policy pointer and exits 0.
+  # Reactivation requires a new policy decision, requirements/design review,
+  # threat model, an owned native runner, and a separate implementation
+  # (Stop_Report.md §4) — toggling this workflow_dispatch input alone
+  # reactivates nothing.
   m3-live-regression-gate:
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
-    runs-on: [self-hosted, ollama-m3]
-    environment: m3-live-regression
-    timeout-minutes: 45
-    concurrency:
-      group: m3-live-regression-gate
-      cancel-in-progress: false
-    env:
-      SIMPLE_QNA_RAG_VECTORSTORE_DIR: /opt/simple-qna-rag-data/vectorstore
-      SIMPLE_QNA_RAG_DOCUMENTS_DIR: /opt/simple-qna-rag-data/documents
-      OLLAMA_BASE_URL: http://localhost:11434
-      SIMPLE_QNA_RAG_OLLAMA_MODEL: gpt-oss:20b
-      RUN_LIVE_LLM_TESTS: "1"
+    if: github.event_name == 'workflow_dispatch' && inputs.enable_m3_live_regression == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: requirements.lock
-
-      - name: Install Python dependencies (locked, hash-verified)
-        run: python -m pip install --require-hashes -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu
-
-      - name: Install project package
-        run: python -m pip install -e . --no-deps
-
-      - name: Preflight — canonical vectorstore files (existence + sha256)
-        run: python scripts/preflight_vectorstore.py "${SIMPLE_QNA_RAG_VECTORSTORE_DIR}"
-
-      - name: Preflight — Ollama endpoint/model/version health
-        run: python scripts/preflight_ollama.py "${OLLAMA_BASE_URL}" "${SIMPLE_QNA_RAG_OLLAMA_MODEL}"
-
-      - name: Run M3 live 14-gate regression (RUN_LIVE_LLM_TESTS=1)
-        run: python scripts/run_m4_regression_gate.py
-
-      - name: Upload M4 regression report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: m4-regression-report
-          path: evaluation/reports/m4_regression/
-          retention-days: 90
+      - name: NOT_ADOPTED — informational reactivation stub, no live execution
+        run: |
+          echo "::notice::m3-live-regression-gate is NOT_ADOPTED under the current hosted/OCI release policy."
+          echo "This run performed no checkout, no secrets, no environment approval, and no self-hosted runner."
+          echo "See docs/milestones/m4-operational-acceptance-recovery/Requirement.md and Stop_Report.md for the reactivation path."
+          exit 0

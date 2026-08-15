@@ -35,9 +35,11 @@ M3 Retrieval Quality  완료
         |
 M4.1 Config & Observe 운영 acceptance 미완료
         |
-M4.2 Safe Serving     예외 승인, 착수 가능          <-- 현재 위치
+M4.2 Safe Serving     예외 승인
         |
-M4.3 Artifact/Deploy  예정
+M4.3 Artifact/Deploy  deterministic PASS
+        |
+M4 OAR policy change  구현 완료(pre-merge), post-merge 검증 대기 <-- 현재 위치
         |
 M5 Scale & Advanced   조건부
 ```
@@ -188,7 +190,13 @@ Production Readiness입니다.
 
 ### M4 — Production Readiness
 
-**상태: 분할 진행 중** — M4.1 운영 acceptance 부채를 보존하고 M4.2 착수 예외 승인
+**상태: hosted/OCI scope 정책 변경 구현 완료(pre-merge), post-merge hosted CI
+검증 대기** — 설계 Gate는 최초 Iteration 4에서 8.9(CRITICAL 0 / MAJOR 2 /
+MINOR 1)로 중단됐으나 이후 Recovery Cycle 1 Iteration 3에서
+PASS(9.8/10.0)로 재승인·재개해 마감했다(역사적 중단 기록:
+[Problem.md](Problem.md), [Stop_Report.md](milestones/m4-operational-acceptance-recovery/Stop_Report.md));
+M4.3 deterministic PASS 보존; native Linux/Ollama는 `NOT_ADOPTED`이며
+native/full-production/overall readiness는 여전히 false
 
 목표: 단일 사용자 로컬 데모를 넘어 반복 가능하고 관측 가능한 내부 서비스 운영
 
@@ -235,6 +243,10 @@ Production Readiness입니다.
 - [M4.1 개발 계획](milestones/m4.1-configuration-observability/Plan.md)
 - [M4.1 설계 중단 보고서](milestones/m4.1-configuration-observability/Stop_Report.md)
 - [M4.1 운영 acceptance 예외 결정](milestones/m4.1-configuration-observability/Operational_Acceptance_Exception.md)
+- [M4 운영 acceptance recovery 요구사항](milestones/m4-operational-acceptance-recovery/Requirement.md)
+- [M4 운영 acceptance recovery 계획](milestones/m4-operational-acceptance-recovery/Plan.md)
+- [M4 운영 acceptance recovery 추적성](milestones/m4-operational-acceptance-recovery/Traceability.md)
+- [M4 운영 acceptance recovery 중단 보고서](milestones/m4-operational-acceptance-recovery/Stop_Report.md)
 
 분할 실행:
 
@@ -248,8 +260,27 @@ Production Readiness입니다.
   M4.1 운영 acceptance 미완료 위험을 수용하고 정상 선행조건의 한정 예외를
   승인했다. blocking offload, bounded queue,
   timeout/cancel/orphan, graceful drain, 입력·네트워크 경계와 부하 검증
-- **M4.3 Artifact & Deployment Safety — 예정**: versioned index, provenance,
-  atomic activation/rollback, production container, 단일-workflow 전체 Gate
+- **M4.3 Artifact & Deployment Safety — deterministic PASS 보존**: versioned index,
+  provenance, atomic activation/rollback, production container와 단일-workflow
+  deterministic Gate를 통과했다. 이 PASS는 live/Ollama 운영 acceptance를 대신하지 않는다.
+- **M4 Operational Acceptance Recovery — 정책 변경 구현 완료(pre-merge)**:
+  `origin/master` `adda1759754b56b514b3ab6252c2dc1032e03d28`의 run
+  `31825950604`는 ordinary hosted jobs가 PASS했고 protected live job은 pending인
+  역사적 receipt로 보존한다. 사용자는 unavailable native Linux/self-hosted/Ollama
+  validation을 영구적으로 채택하지 않고 검증된 hosted Python/frontend/OCI 범위만
+  ship하기로 결정했다. baseline schema v2 구현 결과 `hosted_release_ready`는 네
+  deterministic producer의 same-run evidence로만 true가 되고 checker가 독립적으로
+  재계산한다. `native_linux_release_ready`, `full_production_release_ready`, legacy
+  `overall_release_ready`는 항상 false이며 live/M4.1 gate는 `NOT_ADOPTED`이지
+  PASS가 아니다. `m3-live-regression-gate`는 ordinary push/PR에서 절대 스케줄되지
+  않는 `workflow_dispatch` opt-in 전용 무실행 stub으로 재정의했다. 설계 리뷰는
+  Iteration 4 FAIL(8.9) 이후 Recovery Cycle 1을 거쳐 Iteration 3에서
+  **PASS(9.8/10.0, CRITICAL 0/MAJOR 0/MINOR 1)** 로 마감했고, 남은 MINOR
+  (DR-RC1-I3-MIN-01, comment-first 2번째 줄 PEP 263 cookie 모델링)는 구현
+  단계에서 닫았다([Design.md §19](milestones/m4-operational-acceptance-recovery/Design.md)).
+  구현·로컬 pre-merge 테스트는 완료했으며 Git commit/push/PR/merge와 post-merge
+  hosted CI 검증([Traceability.md](milestones/m4-operational-acceptance-recovery/Traceability.md))이
+  남아 있다.
 
 ### M5 — Scale & Advanced Capabilities
 
