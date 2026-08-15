@@ -165,10 +165,24 @@ boundary는
 [설계](milestones/m4-operational-acceptance-recovery/Design.md),
 [추적표](milestones/m4-operational-acceptance-recovery/Traceability.md)와
 [결정 보고서](milestones/m4-operational-acceptance-recovery/Stop_Report.md)를 따른다.
-현재 상태는 **구현 완료(pre-merge)**이며 Git commit/push/PR/merge와
-post-merge hosted CI 검증(hosted `python-tests`, `container`)이 남아 있다.
-Native Linux/Ollama capability는 여전히 `NOT_ADOPTED`이고
-native/full-production/overall readiness는 여전히 false다.
+2026-08-15 릴리스 업데이트: PR
+[#19](https://github.com/luminous419/simple-qna-rag/pull/19)를 merge SHA
+`8e203abe5ed6e17e6e8b6e292975121749374a52`로 병합했다. 그 정확한 SHA의
+post-merge hosted CI run
+[`31890598812`](https://github.com/luminous419/simple-qna-rag/actions/runs/31890598812)에서
+`python-tests`/`frontend-tests`/`container`/`m43-deterministic`/`m4-assemble`
+다섯 job 전부 success였고, `m3-live-regression-gate`는 ordinary push에서
+절대 스케줄되지 않아 skipped였다. 그 run에서 내려받은 `m4-baseline`
+artifact를 `check_m4_baseline.py --require-identity-binding`으로 해당 run의
+SHA/run-ID/attempt/workflow-path/event에 정확히 묶어 검증한 결과
+`{"ok": true, "issues": []}`, `hosted_release_ready=true`를 확인했다.
+**현재 상태는 hosted/OCI release ready다** — "production ready"나 "overall
+release ready"가 아니다. `native_linux_release_ready`,
+`full_production_release_ready`, `overall_release_ready`는 여전히 모두
+false이고, Native Linux/Ollama capability는 여전히 `NOT_ADOPTED`다. 전체
+근거는
+[추적표 §0](milestones/m4-operational-acceptance-recovery/Traceability.md#0-release-evidence-exact-identity-binding)을
+따른다.
 
 관련 마일스톤: `M4 — Production Readiness`
 

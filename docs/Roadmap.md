@@ -39,7 +39,7 @@ M4.2 Safe Serving     예외 승인
         |
 M4.3 Artifact/Deploy  deterministic PASS
         |
-M4 OAR policy change  구현 완료(pre-merge), post-merge 검증 대기 <-- 현재 위치
+M4 OAR policy change  hosted/OCI 릴리스 완료(PR #19, merge 8e203ab) <-- 현재 위치
         |
 M5 Scale & Advanced   조건부
 ```
@@ -190,11 +190,20 @@ Production Readiness입니다.
 
 ### M4 — Production Readiness
 
-**상태: hosted/OCI scope 정책 변경 구현 완료(pre-merge), post-merge hosted CI
-검증 대기** — 설계 Gate는 최초 Iteration 4에서 8.9(CRITICAL 0 / MAJOR 2 /
-MINOR 1)로 중단됐으나 이후 Recovery Cycle 1 Iteration 3에서
-PASS(9.8/10.0)로 재승인·재개해 마감했다(역사적 중단 기록:
-[Problem.md](Problem.md), [Stop_Report.md](milestones/m4-operational-acceptance-recovery/Stop_Report.md));
+**상태: hosted/OCI scope 정책 변경 릴리스 완료** — PR
+[#19](https://github.com/luminous419/simple-qna-rag/pull/19)를 merge SHA
+`8e203abe5ed6e17e6e8b6e292975121749374a52`로 병합했고, 그 정확한 SHA의
+post-merge hosted CI run
+[`31890598812`](https://github.com/luminous419/simple-qna-rag/actions/runs/31890598812)에서
+`python-tests`/`frontend-tests`/`container`/`m43-deterministic`/`m4-assemble`
+전부 success, `m3-live-regression-gate`는 skipped(무실행)를 확인했다.
+그 run에서 내려받은 `m4-baseline` artifact를 identity-bound checker로
+검증해 `hosted_release_ready=true`를 확인했다(전체 근거:
+[Traceability.md §0](milestones/m4-operational-acceptance-recovery/Traceability.md#0-release-evidence-exact-identity-binding)).
+설계 Gate는 최초 Iteration 4에서 8.9(CRITICAL 0 / MAJOR 2 / MINOR 1)로
+중단됐으나 이후 Recovery Cycle 1 Iteration 3에서 PASS(9.8/10.0)로
+재승인·재개해 마감했다(역사적 중단 기록: [Problem.md](Problem.md),
+[Stop_Report.md](milestones/m4-operational-acceptance-recovery/Stop_Report.md));
 M4.3 deterministic PASS 보존; native Linux/Ollama는 `NOT_ADOPTED`이며
 native/full-production/overall readiness는 여전히 false
 
@@ -263,7 +272,7 @@ native/full-production/overall readiness는 여전히 false
 - **M4.3 Artifact & Deployment Safety — deterministic PASS 보존**: versioned index,
   provenance, atomic activation/rollback, production container와 단일-workflow
   deterministic Gate를 통과했다. 이 PASS는 live/Ollama 운영 acceptance를 대신하지 않는다.
-- **M4 Operational Acceptance Recovery — 정책 변경 구현 완료(pre-merge)**:
+- **M4 Operational Acceptance Recovery — hosted/OCI 릴리스 완료**:
   `origin/master` `adda1759754b56b514b3ab6252c2dc1032e03d28`의 run
   `31825950604`는 ordinary hosted jobs가 PASS했고 protected live job은 pending인
   역사적 receipt로 보존한다. 사용자는 unavailable native Linux/self-hosted/Ollama
@@ -278,9 +287,17 @@ native/full-production/overall readiness는 여전히 false
   **PASS(9.8/10.0, CRITICAL 0/MAJOR 0/MINOR 1)** 로 마감했고, 남은 MINOR
   (DR-RC1-I3-MIN-01, comment-first 2번째 줄 PEP 263 cookie 모델링)는 구현
   단계에서 닫았다([Design.md §19](milestones/m4-operational-acceptance-recovery/Design.md)).
-  구현·로컬 pre-merge 테스트는 완료했으며 Git commit/push/PR/merge와 post-merge
-  hosted CI 검증([Traceability.md](milestones/m4-operational-acceptance-recovery/Traceability.md))이
-  남아 있다.
+  PR [#19](https://github.com/luminous419/simple-qna-rag/pull/19)를 merge SHA
+  `8e203abe5ed6e17e6e8b6e292975121749374a52`로 병합했고, 그 정확한 SHA의
+  post-merge hosted CI run
+  [`31890598812`](https://github.com/luminous419/simple-qna-rag/actions/runs/31890598812)에서
+  다섯 job(`python-tests`/`frontend-tests`/`container`/`m43-deterministic`/`m4-assemble`)
+  전부 success, `m3-live-regression-gate`는 skipped를 확인했다. 그 run에서
+  내려받은 `m4-baseline` artifact를 identity-bound checker(`--require-identity-binding`)로
+  검증해 `hosted_release_ready=true`,
+  `native_linux_release_ready`/`full_production_release_ready`/`overall_release_ready`
+  전부 `false`임을 확인했다(전체 근거:
+  [Traceability.md §0](milestones/m4-operational-acceptance-recovery/Traceability.md#0-release-evidence-exact-identity-binding)).
 
 ### M5 — Scale & Advanced Capabilities
 
