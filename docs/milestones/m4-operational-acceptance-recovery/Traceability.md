@@ -1,9 +1,27 @@
 # M4 Operational Acceptance Recovery policy traceability
 
-Status: **POLICY APPROVED / IMPLEMENTATION COMPLETE (PRE-MERGE)**  
-Claim boundary: **hosted/OCI may become ready; native/full/overall remain false**
+Status: **RELEASED — hosted/OCI baseline verified on exact merge SHA**
+Claim boundary: **hosted/OCI is ready; native/full/overall remain false**
 Design Gate: **PASS — Recovery Cycle 1, Iteration 3, 9.8/10.0** ([review](Design_Review_Recovery_Cycle_1_Iteration_3.md));
 DR-RC1-I3-MIN-01 closed by implementation ([Design.md §19](Design.md)).
+
+## 0. Release evidence (exact identity binding)
+
+| Item | Value |
+|---|---|
+| PR | [#19](https://github.com/luminous419/simple-qna-rag/pull/19) `agent/m4-operational-acceptance-recovery` → `master` |
+| Implementation commit | `f6ff86cd920f97e732973a6141c0d17cd16c3a1c` |
+| Hosted-CI fix commit | `24dfc8b49ddcebbd766202be3e1934e524c56e18` — `fetch-depth: 0` added to the `python-tests` job's checkout after the first PR-head hosted run (`31889309407`) failed `python-tests`: `audit_exact_allowed_delta`'s `git show <base_revision>:...` calls require the pinned base commit `adda1759754b56b514b3ab6252c2dc1032e03d28` to exist locally, which `actions/checkout@v4`'s default shallow clone (depth 1) does not provide. No test/product logic changed. |
+| PR-head hosted CI (post-fix) | run [`31889748729`](https://github.com/luminous419/simple-qna-rag/actions/runs/31889748729), commit `24dfc8b49ddcebbd766202be3e1934e524c56e18` — `python-tests`/`frontend-tests`/`container`/`m43-deterministic`/`m4-assemble` all `success`; `m3-live-regression-gate` `skipped` (never scheduled on `pull_request`) |
+| Merge SHA | `8e203abe5ed6e17e6e8b6e292975121749374a52` (merge commit, `gh pr merge --merge`) |
+| Post-merge hosted CI (exact merge SHA) | run [`31890598812`](https://github.com/luminous419/simple-qna-rag/actions/runs/31890598812), event `push`, `head_sha=8e203abe5ed6e17e6e8b6e292975121749374a52`, `run_attempt=1` — `python-tests`/`frontend-tests`/`container`/`m43-deterministic`/`m4-assemble` all `success`; `m3-live-regression-gate` `skipped` (never scheduled on ordinary `push`) |
+| Downloaded artifact | `m4-baseline` from run `31890598812`, `git_sha=8e203abe5ed6e17e6e8b6e292975121749374a52` in the artifact body matches the run's own `head_sha` |
+| Checker verdict | `python scripts/check_m4_baseline.py --candidate m4-baseline.json --expect-hosted-release-ready --require-identity-binding --expect-sha 8e203abe5ed6e17e6e8b6e292975121749374a52 --expect-run-id 31890598812 --expect-run-attempt 1 --expect-workflow-path .github/workflows/ci.yml --expect-event push` → `{"ok": true, "issues": []}`, exit 0. Adversarial sanity check (wrong `--expect-sha`) → `{"ok": false, "issues": ["identity_sha_mismatch:..."]}`, exit 1, confirming fail-closed behavior at the exact artifact used for this release. |
+| Artifact literals | `deterministic_status=PASS`, `operational_status=NOT_ADOPTED`, `gates.m3_live_regression=NOT_ADOPTED`, `gates.m41_operational=NOT_ADOPTED`, `M4.1_BLOCKED=false`, `hosted_release_ready=true`, `native_linux_release_ready=false`, `full_production_release_ready=false`, `overall_release_ready=false` — exact match to Plan.md §6's required literal block |
+| Branch protection | `gh api repos/luminous419/simple-qna-rag/branches/master/protection` → `404 Branch not protected` (informational; Requirement M4-OAR-REQ-004.3 is phrased "SHOULD", not "MUST") |
+| Release claim | **hosted/OCI release ready.** Not "production ready." Not "overall release ready." `native_linux_release_ready`, `full_production_release_ready`, and `overall_release_ready` are `false`; native Linux/Ollama remains `NOT_ADOPTED`. |
+
+No live, native Linux, Ollama, self-hosted runner, or protected-environment execution occurred at any point in this release.
 
 ## 1. Requirement-to-change matrix
 
@@ -16,11 +34,12 @@ DR-RC1-I3-MIN-01 closed by implementation ([Design.md §19](Design.md)).
 | M4-OAR-REQ-005 support boundary | Roadmap, Problem, release/deployment/user docs | Markdown links; terminology search; no UI certification claim | Implemented; README/deployment_runbook/recovery_runbook updated, CI_Acceptance_Runbook.md superseded banner added, doc-audit test passes |
 | M4-OAR-REQ-006 evidence/history | No live commands; historical docs/artifacts untouched | Diff audit; M4.3 tests/hashes; no receipt fabrication | Preserved; no live/native/self-hosted command executed during implementation |
 
-Pending: Codex code review, `git commit`/push/PR/merge, and the post-merge
-exact-SHA baseline verification in §6.1 of
+Complete: Codex code review (PASS, [Code_Review_Iteration_2.md](Code_Review_Iteration_2.md)),
+pre-merge acceptance (PASS, [Acceptance_Report.md](Acceptance_Report.md)),
+`git commit`/push/PR #19/merge, and the post-merge exact-SHA baseline
+verification in §6.1 of
 [deployment_runbook.md](../../operations/deployment_runbook.md#61-hostedoci-baseline-verification-pre-deployment)
-(none of these can occur before this dispatch's `commit`/`push` boundary,
-per this worker's scope).
+— see §0 above for the exact PR/commit/merge-SHA/run-ID evidence.
 
 ## 2. State transition
 

@@ -4,7 +4,8 @@ Date: **2026-08-15**
 Former recovery outcome: **STOPPED — dependency unavailable**  
 Current decision: **APPROVED SCOPE CHANGE — native Linux/Ollama NOT_ADOPTED**  
 Terminal outcome (superseded — see §6): ~~STOPPED — design Gate exhausted at Iteration 4~~  
-Current outcome: **RESUMED — design Gate PASS at Recovery Cycle 1, Iteration 3 (9.8/10.0); implementation complete (pre-merge)**
+Terminal outcome (superseded — see §7): ~~RESUMED — design Gate PASS at Recovery Cycle 1, Iteration 3 (9.8/10.0); implementation complete (pre-merge)~~
+Final outcome: **RELEASED — hosted/OCI release ready, verified on merge SHA `8e203abe5ed6e17e6e8b6e292975121749374a52` (PR [#19](https://github.com/luminous419/simple-qna-rag/pull/19))**
 
 ## 1. What stopped
 
@@ -139,3 +140,40 @@ no checkout/secrets/environment/self-hosted label, and no live/native/
 Ollama/self-hosted command executed at any point. See
 [Traceability.md](Traceability.md) for the requirement-to-implementation
 matrix and current pre-merge state.
+
+## 7. Release record (2026-08-15) — post-merge Operational Acceptance Gate PASSED
+
+§1-§6 above are preserved unchanged as the historical decision record; they
+are not rewritten. This section records the outcome after implementation
+completed.
+
+The reviewed diff was committed, pushed, and opened as
+[PR #19](https://github.com/luminous419/simple-qna-rag/pull/19). Hosted CI on
+the PR head initially failed `python-tests` (run `31889309407`) for a reason
+outside the reviewed diff's scope: `audit_exact_allowed_delta`'s tests need
+`git show adda1759...` for the pinned base commit, and
+`actions/checkout@v4`'s default shallow clone does not fetch it. This was
+fixed with a one-line `fetch-depth: 0` addition to the `python-tests` job's
+checkout (commit `24dfc8b`); no test or product logic changed. The
+corrected PR-head run (`31889748729`) passed all four hosted deterministic
+producers plus `m4-assemble`, with `m3-live-regression-gate` `skipped`
+(never scheduled on `pull_request`).
+
+PR #19 merged to `master` at SHA `8e203abe5ed6e17e6e8b6e292975121749374a52`.
+The post-merge `push` CI run for that exact SHA (`31890598812`) passed all
+five jobs identically, with `m3-live-regression-gate` again `skipped` —
+confirming ordinary hosted `push` never depends on self-hosted capacity, the
+original defect this recovery exists to fix (§3 above). The downloaded
+`m4-baseline` artifact from that exact run, checked with
+`check_m4_baseline.py --require-identity-binding` bound to that run's own
+SHA/run-ID/attempt/workflow-path/event, returned `{"ok": true, "issues":
+[]}` with `hosted_release_ready=true` and
+`native_linux_release_ready`/`full_production_release_ready`/
+`overall_release_ready` all `false`, and
+`m3_live_regression`/`m41_operational` both `NOT_ADOPTED` — never `PASS`.
+
+**Post-merge Operational Acceptance Gate: PASS.** The milestone's release
+claim is narrowly "hosted/OCI release ready." No live, native Linux,
+self-hosted runner, Ollama, or protected-environment execution occurred at
+any point in implementation or release. Full exact-identity evidence is in
+[Traceability.md §0](Traceability.md#0-release-evidence-exact-identity-binding).

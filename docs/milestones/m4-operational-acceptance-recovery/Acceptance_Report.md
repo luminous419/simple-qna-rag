@@ -12,13 +12,19 @@ Inputs read: [Requirement.md](Requirement.md), [Plan.md](Plan.md),
 
 ## Gate decision
 
-**PASS — all pre-merge deterministic acceptance commands pass; remaining
-hosted-CI/post-merge verification is correctly deferred to release, matching
-Traceability.md §1 "Pending" and Code_Review_Iteration_2.md "Remaining
-acceptance work".**
+**PASS (pre-merge), then PASS (post-merge) — see §11 below.** All pre-merge
+deterministic acceptance commands passed; hosted-CI and the post-merge
+exact-merge-SHA baseline verification (§11) subsequently also passed,
+confirming `hosted_release_ready=true` with
+`native_linux_release_ready`/`full_production_release_ready`/
+`overall_release_ready` all `false`, per
+Traceability.md §0 and Code_Review_Iteration_2.md "Remaining acceptance
+work".
 
 No live, native Linux, Ollama, self-hosted runner, or protected-environment
-execution was performed at any point. No commit, push, PR, or merge was
+execution was performed at any point. This original §1-§10 pre-merge record
+predates the commit/push/PR/merge described in §11 below and is preserved
+unchanged; no commit, push, PR, or merge was
 performed (out of this worker's authorized scope).
 
 ## 1. Plan §5 hosted pre-merge gate — command-by-command evidence
@@ -268,3 +274,61 @@ cleanly elsewhere — not a regression. Remaining hosted-CI and post-merge
 baseline verification (Plan.md §6) is correctly deferred to after
 commit/push/merge, consistent with Traceability.md and
 Code_Review_Iteration_2.md, and is out of this worker's authorized scope.
+
+## 11. Post-merge addendum (release worker, 2026-08-15)
+
+The diff above was committed (`f6ff86cd920f97e732973a6141c0d17cd16c3a1c`),
+pushed, and opened as [PR #19](https://github.com/luminous419/simple-qna-rag/pull/19).
+
+The first PR-head hosted CI run (`31889309407`, commit `f6ff86c`) failed
+`python-tests`: `audit_exact_allowed_delta`'s tests in
+`tests/unit/test_assemble_m4_evidence.py` shell out to
+`git show adda1759754b56b514b3ab6252c2dc1032e03d28:...`, and
+`actions/checkout@v4`'s default shallow clone (`fetch-depth: 1`) does not
+fetch that ancestor commit object, so every such call failed with exit 128.
+This is a new finding not caught by §2 above — this verifier's own clean
+hosted-equivalent container had the full repository history mounted (not a
+shallow clone), which masked the case. It is not a defect in the reviewed
+diff's logic; it is a workflow-checkout configuration gap the reviewed diff
+did not touch. Fixed in commit `24dfc8b49ddcebbd766202be3e1934e524c56e18` by
+adding `fetch-depth: 0` to the `python-tests` job's checkout step only — no
+test or product logic changed. The corrected PR-head run
+(`31889748729`, commit `24dfc8b`) passed `python-tests`, `frontend-tests`,
+`container`, `m43-deterministic`, and `m4-assemble`, with
+`m3-live-regression-gate` `skipped` (never scheduled on `pull_request`).
+
+PR #19 was merged (`--merge`, merge commit) to `master` at SHA
+`8e203abe5ed6e17e6e8b6e292975121749374a52`. The post-merge `push` CI run for
+that exact SHA (`31890598812`, `run_attempt=1`) completed with all five
+jobs (`python-tests`, `frontend-tests`, `container`, `m43-deterministic`,
+`m4-assemble`) `success` and `m3-live-regression-gate` `skipped`. The
+`m4-baseline` artifact was downloaded from that exact run and verified with
+the identity-bound checker:
+
+```
+python scripts/check_m4_baseline.py --candidate m4-baseline.json \
+  --expect-hosted-release-ready --require-identity-binding \
+  --expect-sha 8e203abe5ed6e17e6e8b6e292975121749374a52 \
+  --expect-run-id 31890598812 --expect-run-attempt 1 \
+  --expect-workflow-path .github/workflows/ci.yml --expect-event push
+-> {"ok": true, "issues": []}   exit=0
+```
+
+An adversarial sanity check with a wrong `--expect-sha` on the same
+artifact returned `{"ok": false, "issues": ["identity_sha_mismatch:..."]}`
+with exit 1, confirming fail-closed behavior held at the exact artifact
+used for this release, not only in unit tests.
+
+The artifact's literals exactly match Plan.md §6's required block:
+`deterministic_status=PASS`, `operational_status=NOT_ADOPTED`,
+`gates.m3_live_regression=NOT_ADOPTED`, `gates.m41_operational=NOT_ADOPTED`,
+`M4.1_BLOCKED=false`, `hosted_release_ready=true`,
+`native_linux_release_ready=false`, `full_production_release_ready=false`,
+`overall_release_ready=false`.
+
+**Post-merge Operational Acceptance Gate: PASS.** The release claim is
+narrowly "hosted/OCI release ready" — never "production ready" or "overall
+release ready." `native_linux_release_ready`,
+`full_production_release_ready`, and `overall_release_ready` remain
+`false`; native Linux/Ollama remains `NOT_ADOPTED`. Full exact-identity
+evidence is recorded in [Traceability.md §0](Traceability.md#0-release-evidence-exact-identity-binding).
