@@ -1,0 +1,62 @@
+{
+  "schema": "m4-hosted-oci-operating-baseline-v1",
+  "schema_version": "1.0.0",
+  "captured_at": "2026-08-16T00:00:00+09:00",
+  "scope": "HOSTED_CI_OCI_PRE_DEPLOYMENT",
+  "status": "PASS",
+  "source": {
+    "git_sha": "07ebf2cb673a788d5e4338535dbfb22cdee4c0b9",
+    "workflow_run_id": "31892502554",
+    "workflow_run_attempt": 1,
+    "workflow_event": "push",
+    "workflow_path": ".github/workflows/ci.yml",
+    "workflow_url": "https://github.com/luminous419/simple-qna-rag/actions/runs/31892502554",
+    "created_at": "2026-08-15T15:21:52Z",
+    "completed_at": "2026-08-15T15:39:11Z",
+    "conclusion": "success"
+  },
+  "identity_verification": {
+    "command_contract": "check_m4_baseline.py --expect-hosted-release-ready --require-identity-binding",
+    "result": "PASS",
+    "m4_baseline_sha256": "1a1f8c49d7374fe13f266b1ed8ad3a48fdf6ed58b3899d576f546840db66ec28",
+    "container_smoke_sha256": "ca6be00ecf11109594db401bc018ee46a3125eb7714d10e7e507656555d7a2d1",
+    "layer_scan_sha256": "a5a1453be8e2b3c74c8971f98b7b39d14e4eda1b9e67eb83b6e1717be3b5ebb3"
+  },
+  "release_readiness": {
+    "deterministic_status": "PASS",
+    "hosted_release_ready": true,
+    "native_linux_release_ready": false,
+    "full_production_release_ready": false,
+    "overall_release_ready": false,
+    "m3_live_regression": "NOT_ADOPTED",
+    "m41_operational": "NOT_ADOPTED"
+  },
+  "hosted_jobs": {
+    "workflow_elapsed_seconds": 1039,
+    "python_tests_seconds": 503,
+    "frontend_tests_seconds": 12,
+    "container_seconds": 212,
+    "m43_deterministic_seconds": 962,
+    "m4_assemble_seconds": 72
+  },
+  "oci_smoke": {
+    "runtime_image_id": "sha256:4d521c5060bdca3b74e45a7dfc2d091ccbd7572b7864caebc21fd20a5087ce29",
+    "assembler_container_payload_sha256": "ca6be00ecf11109594db401bc018ee46a3125eb7714d10e7e507656555d7a2d1",
+    "status": "PASS",
+    "ready": true,
+    "ready_last_http_status": 200,
+    "ready_poll_elapsed_seconds": 5.01,
+    "mock_query_ok": true,
+    "root_page_ok": true,
+    "static_asset_ok": true,
+    "graceful_stop_seconds": 1.51,
+    "production_test_seam_sealed": true,
+    "forbidden_layer_member_count": 0
+  },
+  "real_traffic_window": {
+    "status": "NOT_COLLECTED",
+    "reason": "No internal deployment traffic window has run yet; CI smoke is not a user-traffic baseline.",
+    "minimum_calendar_days": 7,
+    "minimum_accepted_queries": 100
+  }
+}
