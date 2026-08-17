@@ -124,6 +124,10 @@ policy) and it does not re-verify original payload bytes — that
 verification already happened inside the assembler at CI time, before this
 artifact was uploaded.
 
+For the initial exact-SHA evidence and the post-deployment metric collection
+contract, see the [M4 hosted/OCI initial baseline](../../evaluation/baselines/m4_hosted_oci_initial.md)
+and [internal deployment and observability plan](internal_deployment_observability_plan.md).
+
 ## 7. Standard container run flags
 
 ```bash
